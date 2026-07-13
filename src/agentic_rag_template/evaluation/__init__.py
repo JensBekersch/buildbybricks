@@ -1,6 +1,6 @@
 """Evaluation helpers and fixtures."""
 
-from agentic_rag_template.evaluation.fixtures import default_evaluation_cases
+from agentic_rag_template.evaluation.fixtures import default_evaluation_cases, load_evaluation_cases
 from agentic_rag_template.evaluation.models import (
     EvaluationCase,
     EvaluationCheck,
@@ -16,4 +16,5 @@ __all__ = [
     "EvaluationResult",
     "EvaluationRunner",
     "default_evaluation_cases",
+    "load_evaluation_cases",
 ]

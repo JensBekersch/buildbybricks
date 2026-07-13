@@ -147,6 +147,9 @@ Diese Punkte sind bewusst vorlaeufig und sollen im Verlauf der Studie validiert 
 │       ├── agent/
 │       ├── tools/
 │       └── evaluation/
+├── template/
+│   ├── app_profile.json
+│   └── evaluation_cases.json
 ├── frontend/
 │   ├── index.html
 │   ├── styles.css
@@ -173,7 +176,16 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollte das Template abstrahiert werden: Anwendungsspezifische Daten, Prompts, Tool-Definitionen, Evaluationsfragen und Runtime-Konfiguration sollen leichter austauschbar werden.
+Als naechstes kann eine konkrete Anwendung auf dieses Template gelegt werden: eigene Collection unter `data/`, angepasstes `template/app_profile.json`, eigene `template/evaluation_cases.json` und danach optional ein echter Embedding-Provider wie Ollama.
+
+## Template-Konfiguration
+
+Anwendungsspezifische Einstellungen liegen unter `template/`:
+
+- `template/app_profile.json`: Name, Beschreibung, Default-Collection, Default-Top-k, Antwort-Policy und aktivierte Tools
+- `template/evaluation_cases.json`: wiederholbare Evaluationsfragen und erwartete Quellen/Tool-Nutzung
+
+Damit kann dieselbe technische Basis fuer verschiedene Anwendungen genutzt werden, ohne Agent-, Retrieval- oder API-Code umzuschreiben.
 
 ## Evaluation
 
@@ -236,3 +248,4 @@ Nuetzliche lokale Endpunkte:
 - `GET /vector-store/preview?collection=sample&q=agentic` baut lokal einen In-Memory-Index und zeigt Suchtreffer mit Scores
 - `GET /retrieval/search?collection=sample&q=agentic&top_k=3` nutzt den Retriever und liefert agentenfreundliche Suchergebnisse mit Trace
 - `GET /evaluation/run` fuehrt die Default-Evaluation aus
+- `GET /template/profile` zeigt das aktive Anwendungsprofil

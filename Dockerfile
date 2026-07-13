@@ -11,6 +11,7 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY frontend ./frontend
 COPY data ./data
+COPY template ./template
 
 EXPOSE 8000
 

@@ -1,0 +1,12 @@
+{
+  "name": "Agentic RAG Study Template",
+  "description": "A reusable local template for studying agentic RAG applications.",
+  "default_collection": "sample",
+  "default_top_k": 3,
+  "answer_policy": "Answer only from retrieved local sources, include citations, and state uncertainty clearly.",
+  "enabled_tools": [
+    "search_knowledge_base",
+    "read_source",
+    "answer_with_citations"
+  ]
+}
