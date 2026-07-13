@@ -158,4 +158,14 @@ Diese Punkte sind bewusst vorlaeufig und sollen im Verlauf der Studie validiert 
 
 ## Naechster Schritt
 
-Als naechstes sollte das Projekt-Skeleton entstehen: minimale Python-API, statisches HTML-Chat-Frontend, Dockerfile, lokaler Startbefehl und ein erster Smoke Test. Danach koennen wir die Ingestion fuer lokale Dateien bauen.
+Als naechstes sollte die Ingestion fuer lokale Dateien entstehen: Dateien aus `data/sample/` einlesen, einfache Chunks bilden und Metadaten fuer spaetere Retrieval-Schritte vorbereiten.
+
+## Lokal Starten
+
+Der aktuelle Stand startet eine minimale HTTP API und das statische Chat-Frontend aus einem Container:
+
+```bash
+docker compose up --build
+```
+
+Danach ist das Frontend unter `http://localhost:8000` erreichbar. Der Health-Check liegt unter `http://localhost:8000/health`; der Chat sendet Nachrichten an `POST /chat`.

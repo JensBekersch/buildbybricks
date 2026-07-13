@@ -1,0 +1,13 @@
+services:
+  agentic-rag:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      AGENTIC_RAG_HOST: "0.0.0.0"
+      AGENTIC_RAG_PORT: "8000"
+      AGENTIC_RAG_FRONTEND_DIR: "frontend"
+      AGENTIC_RAG_DATA_DIR: "data"
+    volumes:
+      - ./data:/app/data:ro
