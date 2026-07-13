@@ -22,5 +22,6 @@ class AgentResponse:
 
     answer: str
     sources: List[SourceReference] = field(default_factory=list)
+    uncertainty: str = ""
     trace: List[str] = field(default_factory=list)
     tool_calls: List[ToolCall] = field(default_factory=list)

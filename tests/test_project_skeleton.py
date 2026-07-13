@@ -78,6 +78,8 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             "formatted_retrieval_results",
         ]
         assert "keine passende Quelle gefunden" in chat_payload["answer"]
+        assert chat_payload["sources"] == []
+        assert "Keine lokalen Treffer" in chat_payload["uncertainty"]
         assert chat_payload["trace"] == [
             "validated_message",
             "searched_knowledge_base",

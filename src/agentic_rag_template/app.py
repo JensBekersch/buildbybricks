@@ -81,9 +81,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             {
                 "answer": response.answer,
                 "sources": [
-                    {"title": source.title, "location": source.location}
+                    {
+                        "title": source.title,
+                        "location": source.location,
+                        "excerpt": source.excerpt,
+                        "score": source.score,
+                    }
                     for source in response.sources
                 ],
+                "uncertainty": response.uncertainty,
                 "trace": response.trace,
                 "tool_calls": getattr(response, "tool_calls", []),
             }
@@ -102,6 +108,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         chat_response = ChatResponse(
             answer=response.answer,
             sources=response.sources,
+            uncertainty=response.uncertainty,
             trace=response.trace,
             tool_calls=[tool_call.to_dict() for tool_call in response.tool_calls],
         )

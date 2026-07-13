@@ -40,8 +40,11 @@ def test_study_agent_uses_tools_and_returns_sources(tmp_path: Path) -> None:
     agent = StudyAgent(tmp_path, HashEmbeddingProvider(dimension=32))
     response = agent.answer(AgentRequest(message="How does agentic RAG answer?", collection="sample"))
 
+    assert "Kurzantwort:" in response.answer
     assert "Quellen:" in response.answer
+    assert response.uncertainty
     assert response.sources[0].location == "sample/agent.md"
+    assert response.sources[0].excerpt
     assert [tool_call.name for tool_call in response.tool_calls] == [
         "search_knowledge_base",
         "read_source",

@@ -2,12 +2,39 @@ const chatForm = document.querySelector("#chat-form");
 const chatLog = document.querySelector("#chat-log");
 const messageInput = document.querySelector("#message-input");
 
-function appendMessage(author, text, details = []) {
+function appendMessage(author, text, details = [], sources = [], uncertainty = "") {
   const message = document.createElement("article");
   const content = document.createElement("p");
   content.textContent = `${author}: ${text}`;
-  message.style.padding = "12px 16px";
+  message.className = "chat-message";
   message.append(content);
+
+  if (uncertainty) {
+    const uncertaintyNote = document.createElement("p");
+    uncertaintyNote.className = "uncertainty";
+    uncertaintyNote.textContent = `Unsicherheit: ${uncertainty}`;
+    message.append(uncertaintyNote);
+  }
+
+  if (sources.length > 0) {
+    const sourceList = document.createElement("ol");
+    sourceList.className = "source-list";
+
+    sources.forEach((source) => {
+      const sourceItem = document.createElement("li");
+      sourceItem.textContent = `${source.title} (${source.location})`;
+
+      if (source.excerpt) {
+        const excerpt = document.createElement("small");
+        excerpt.textContent = source.excerpt;
+        sourceItem.append(excerpt);
+      }
+
+      sourceList.append(sourceItem);
+    });
+
+    message.append(sourceList);
+  }
 
   if (details.length > 0) {
     const trace = document.createElement("small");
@@ -50,7 +77,7 @@ chatForm.addEventListener("submit", async (event) => {
     if (payload.tool_calls && payload.tool_calls.length > 0) {
       details.push(...payload.tool_calls.map((toolCall) => toolCall.name));
     }
-    appendMessage("Agent", payload.answer, details);
+    appendMessage("Agent", payload.answer, details, payload.sources || [], payload.uncertainty || "");
   } catch (error) {
     appendMessage("System", "Die API ist nicht erreichbar.");
   }

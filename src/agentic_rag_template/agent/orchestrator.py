@@ -67,7 +67,7 @@ class StudyAgent:
             trace.append("skipped_source_read")
 
         answer = answer_with_citations(query, results)
-        sources = build_source_references(results)
+        sources = answer.sources or build_source_references(results)
         tool_calls.append(
             ToolCall(
                 name="answer_with_citations",
@@ -78,8 +78,9 @@ class StudyAgent:
         trace.append("composed_answer")
 
         return AgentResponse(
-            answer=answer,
+            answer=answer.answer,
             sources=sources,
+            uncertainty=answer.uncertainty,
             trace=trace,
             tool_calls=tool_calls,
         )

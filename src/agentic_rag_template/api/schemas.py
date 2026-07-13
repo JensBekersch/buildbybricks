@@ -20,6 +20,8 @@ class SourceReference:
 
     title: str
     location: str
+    excerpt: str = ""
+    score: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -28,5 +30,6 @@ class ChatResponse:
 
     answer: str
     sources: List[SourceReference] = field(default_factory=list)
+    uncertainty: str = ""
     trace: List[str] = field(default_factory=list)
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)

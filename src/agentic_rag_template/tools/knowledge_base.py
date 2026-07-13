@@ -6,6 +6,7 @@ from typing import List, Optional
 from agentic_rag_template.api.schemas import SourceReference
 from agentic_rag_template.embeddings.models import EmbeddingProvider
 from agentic_rag_template.retrieval import RetrievedChunk, RetrievalQuery, Retriever
+from agentic_rag_template.tools.answering import AnswerDraft, compose_grounded_answer
 
 
 def search_knowledge_base(
@@ -35,23 +36,9 @@ def read_source(data_dir: Path, source_path: str) -> str:
     return source.read_text(encoding="utf-8")
 
 
-def answer_with_citations(query: str, results: List[RetrievedChunk]) -> str:
-    """Build a simple answer grounded in retrieved chunks."""
-    if not results:
-        return (
-            "Ich habe in den lokalen Wissensdaten keine passende Quelle gefunden. "
-            "Bitte fuege passende Dokumente unter data/<collection>/ hinzu oder praezisiere die Frage."
-        )
-
-    lead = (
-        "Auf Basis der lokalen Wissensdaten sieht die vorlaeufige Antwort so aus: "
-        f"Die Frage '{query}' passt am besten zu den folgenden Quellen."
-    )
-    evidence_lines = [
-        f"[{index}] {result.title} ({result.source_path})"
-        for index, result in enumerate(results, start=1)
-    ]
-    return "\n".join([lead, "", "Quellen:", *evidence_lines])
+def answer_with_citations(query: str, results: List[RetrievedChunk]) -> AnswerDraft:
+    """Build an answer draft grounded in retrieved chunks."""
+    return compose_grounded_answer(query, results)
 
 
 def build_source_references(results: List[RetrievedChunk]) -> List[SourceReference]:
@@ -65,6 +52,13 @@ def build_source_references(results: List[RetrievedChunk]) -> List[SourceReferen
             continue
 
         seen.add(key)
-        sources.append(SourceReference(title=result.title, location=result.source_path))
+        sources.append(
+            SourceReference(
+                title=result.title,
+                location=result.source_path,
+                excerpt=result.text,
+                score=round(result.score, 6),
+            )
+        )
 
     return sources

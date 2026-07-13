@@ -108,7 +108,7 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 9. **Antworten mit Quellen erzeugen**
 
-   Ausgabeformat fuer API und Frontend festlegen: Antwort, Quellen, Unsicherheiten und optional Debug Trace.
+   Ausgabeformat fuer API und Frontend festlegen: Antwort, Quellen, Unsicherheiten und optional Debug Trace. Quellen enthalten Titel, Pfad, Ausschnitt und Score; die Antwort nennt Unsicherheiten explizit.
 
 10. **Evaluation hinzufuegen**
 
@@ -173,7 +173,7 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollte die Antwort mit Quellen weiter ausgearbeitet werden: besseres Antwortformat, sichtbarere Quellen im Frontend und klarere Unsicherheitsregeln, bevor spaeter ein LLM-Orchestrator hinzukommt.
+Als naechstes sollte eine kleine Evaluation entstehen: feste Testfragen, erwartete Quellenabdeckung und pruefbare Kriterien fuer Antwortformat, Unsicherheit und Halluzinationsvermeidung.
 
 ## Agent Tools
 
@@ -183,7 +183,7 @@ Der aktuelle Agent nutzt bewusst wenige, explizite Tools:
 - `read_source`: liest ein konkretes Quelldokument aus `data/`
 - `answer_with_citations`: formuliert eine einfache Antwort mit Quellenliste
 
-Der Chat-Endpunkt `POST /chat` ruft diesen deterministischen Agenten auf und gibt `answer`, `sources`, `trace` und `tool_calls` zurueck. Damit ist der Ablauf sichtbar, bevor spaeter ein LLM selbst ueber Tool-Nutzung entscheidet.
+Der Chat-Endpunkt `POST /chat` ruft diesen deterministischen Agenten auf und gibt `answer`, `sources`, `uncertainty`, `trace` und `tool_calls` zurueck. Damit ist der Ablauf sichtbar, bevor spaeter ein LLM selbst ueber Tool-Nutzung entscheidet.
 
 ## Embedding-Konfiguration
 
