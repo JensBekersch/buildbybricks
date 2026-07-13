@@ -1,6 +1,11 @@
 from agentic_rag_template import __version__
+from agentic_rag_template.app import create_server
 from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
 from agentic_rag_template.config import Settings
+import json
+from pathlib import Path
+import threading
+from urllib import request
 
 
 def test_package_exposes_version() -> None:
@@ -21,3 +26,33 @@ def test_chat_schema_defaults_are_empty_collections() -> None:
     assert request.conversation_id is None
     assert response.sources == []
     assert response.trace == []
+
+
+def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<h1>Chat</h1>", encoding="utf-8")
+    settings = Settings(frontend_dir=tmp_path, host="127.0.0.1", port=0)
+    server = create_server(settings)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        health_response = request.urlopen(f"http://{host}:{port}/health", timeout=2)
+        health_payload = json.loads(health_response.read().decode("utf-8"))
+
+        chat_request = request.Request(
+            f"http://{host}:{port}/chat",
+            data=json.dumps({"message": "Hallo"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        chat_response = request.urlopen(chat_request, timeout=2)
+        chat_payload = json.loads(chat_response.read().decode("utf-8"))
+
+        assert health_payload["status"] == "ok"
+        assert "Endpoint laeuft" in chat_payload["answer"]
+        assert chat_payload["trace"] == ["received_message", "returned_stub_response"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
