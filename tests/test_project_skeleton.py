@@ -45,6 +45,11 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         health_payload = json.loads(health_response.read().decode("utf-8"))
         collections_response = request.urlopen(f"http://{host}:{port}/collections", timeout=2)
         collections_payload = json.loads(collections_response.read().decode("utf-8"))
+        search_response = request.urlopen(
+            f"http://{host}:{port}/vector-store/preview?q=agentic",
+            timeout=2,
+        )
+        search_payload = json.loads(search_response.read().decode("utf-8"))
 
         chat_request = request.Request(
             f"http://{host}:{port}/chat",
@@ -57,6 +62,8 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
 
         assert health_payload["status"] == "ok"
         assert collections_payload == {"collections": []}
+        assert search_payload["provider"] == "hash"
+        assert search_payload["indexed_chunk_count"] == 0
         assert "Endpoint laeuft" in chat_payload["answer"]
         assert chat_payload["trace"] == ["received_message", "returned_stub_response"]
     finally:

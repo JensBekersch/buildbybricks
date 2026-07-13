@@ -9,5 +9,9 @@ services:
       AGENTIC_RAG_PORT: "8000"
       AGENTIC_RAG_FRONTEND_DIR: "frontend"
       AGENTIC_RAG_DATA_DIR: "data"
+      AGENTIC_RAG_EMBEDDING_PROVIDER: "hash"
+      AGENTIC_RAG_EMBEDDING_MODEL: "local-hash-v1"
+      AGENTIC_RAG_EMBEDDING_DIMENSION: "64"
+      AGENTIC_RAG_EMBEDDING_API_BASE_URL: "http://host.docker.internal:11434"
     volumes:
       - ./data:/app/data:ro

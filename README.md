@@ -96,7 +96,7 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 6. **Embedding und lokalen Vector Store anbinden**
 
-   Erst die Schnittstellen stabilisieren, dann einen konkreten lokalen Store einsetzen.
+   Erst die Schnittstellen stabilisieren, dann einen konkreten lokalen Store einsetzen. Die Default-Implementierung ist ein deterministischer Hash-Embedder, damit Tests und Docker ohne externe Dienste laufen. Spaeter koennen Provider wie Ollama oder OpenAI ueber dieselbe Schnittstelle angebunden werden.
 
 7. **Retriever implementieren**
 
@@ -173,7 +173,29 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollten Embedding-Schnittstelle und lokaler Vector Store entstehen. Die vorbereiteten Chunks aus der Ingestion bilden dafuer den Input.
+Als naechstes sollte der Retriever entstehen: Er kapselt Vector-Store-Aufbau, Suche, Collection-Filter und Ergebnisformat, damit der Agent spaeter nur noch ein klar begrenztes Such-Tool verwenden muss.
+
+## Embedding-Konfiguration
+
+Der aktuelle Stand nutzt standardmaessig einen lokalen Dummy-Provider:
+
+```text
+AGENTIC_RAG_EMBEDDING_PROVIDER=hash
+AGENTIC_RAG_EMBEDDING_MODEL=local-hash-v1
+AGENTIC_RAG_EMBEDDING_DIMENSION=64
+```
+
+Der Hash-Provider ist deterministisch und braucht keine API-Keys oder Modell-Downloads. Er ist nicht als semantisch guter Embedder gedacht, sondern als stabile lokale Implementierung fuer Tests, Docker und die Architekturstudie.
+
+Die Konfiguration ist bereits fuer spaetere Provider vorbereitet:
+
+```text
+AGENTIC_RAG_EMBEDDING_PROVIDER=ollama
+AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
+AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
+```
+
+`ollama`, `openai` und andere Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
 
 ## Lokal Starten
 
@@ -189,3 +211,4 @@ Nuetzliche lokale Endpunkte:
 
 - `GET /collections` zeigt die erkannten Collections unter `data/`
 - `GET /ingestion/preview?collection=sample` zeigt die ersten ingestierten Chunks einer Collection
+- `GET /vector-store/preview?collection=sample&q=agentic` baut lokal einen In-Memory-Index und zeigt Suchtreffer mit Scores
