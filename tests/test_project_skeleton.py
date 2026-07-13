@@ -60,6 +60,11 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             timeout=2,
         )
         evaluation_payload = json.loads(evaluation_response.read().decode("utf-8"))
+        profile_response = request.urlopen(
+            f"http://{host}:{port}/template/profile",
+            timeout=2,
+        )
+        profile_payload = json.loads(profile_response.read().decode("utf-8"))
 
         chat_request = request.Request(
             f"http://{host}:{port}/chat",
@@ -84,6 +89,7 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         ]
         assert evaluation_payload["total_cases"] >= 2
         assert evaluation_payload["provider"] == "hash"
+        assert profile_payload["default_collection"] == "sample"
         assert "keine passende Quelle gefunden" in chat_payload["answer"]
         assert chat_payload["sources"] == []
         assert "Keine lokalen Treffer" in chat_payload["uncertainty"]

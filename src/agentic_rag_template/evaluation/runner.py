@@ -1,5 +1,6 @@
 """Evaluation runner for the deterministic study agent."""
 
+from pathlib import Path
 from typing import Iterable, List
 
 from agentic_rag_template.agent import AgentRequest, StudyAgent
@@ -32,6 +33,9 @@ class EvaluationRunner:
 
     def run_default(self) -> EvaluationReport:
         return self.run(default_evaluation_cases())
+
+    def run_template(self, template_dir: Path) -> EvaluationReport:
+        return self.run(default_evaluation_cases(template_dir))
 
     def run_case(self, case: EvaluationCase) -> EvaluationResult:
         response = self.agent.answer(

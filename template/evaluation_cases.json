@@ -1,0 +1,26 @@
+[
+  {
+    "id": "sample-agentic-rag-source",
+    "question": "Was ist Agentic RAG?",
+    "collection": "sample",
+    "expected_source_locations": ["sample/agentic_rag_basics.md"],
+    "required_answer_terms": ["Kurzantwort", "Quellen"],
+    "required_tool_calls": [
+      "search_knowledge_base",
+      "read_source",
+      "answer_with_citations"
+    ]
+  },
+  {
+    "id": "sample-collection-structure",
+    "question": "Wie werden lokale Collections organisiert?",
+    "collection": "sample",
+    "expected_source_locations": ["sample/agentic_rag_basics.md"],
+    "required_answer_terms": ["Quellen"],
+    "required_tool_calls": [
+      "search_knowledge_base",
+      "read_source",
+      "answer_with_citations"
+    ]
+  }
+]

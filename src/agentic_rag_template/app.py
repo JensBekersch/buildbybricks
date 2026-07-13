@@ -15,6 +15,7 @@ from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.evaluation import EvaluationRunner
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
+from agentic_rag_template.template_config import load_application_profile
 
 
 def create_app_settings() -> Settings:
@@ -58,6 +59,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_json(self._run_evaluation())
             return
 
+        if parsed_url.path == "/template/profile":
+            self._send_json(load_application_profile(self.settings.template_dir).to_dict())
+            return
+
         if parsed_url.path == "/":
             self.path = "/index.html"
 
@@ -70,6 +75,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         payload = self._read_json_body()
         message = str(payload.get("message", "")).strip()
+        profile = load_application_profile(self.settings.template_dir)
 
         if not message:
             self._send_json({"error": "message is required"}, status=HTTPStatus.BAD_REQUEST)
@@ -78,8 +84,8 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         request = ChatRequest(
             message=message,
             conversation_id=payload.get("conversation_id"),
-            collection=payload.get("collection"),
-            top_k=int(payload.get("top_k", 3)),
+            collection=payload.get("collection") or profile.default_collection,
+            top_k=int(payload.get("top_k", profile.default_top_k)),
         )
         response = self._handle_chat(request)
         self._send_json(
@@ -224,7 +230,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
     def _run_evaluation(self) -> Dict[str, Any]:
         embedding_provider = create_embedding_provider(self.settings)
         agent = StudyAgent(self.settings.data_dir, embedding_provider)
-        report = EvaluationRunner(agent).run_default()
+        report = EvaluationRunner(agent).run_template(self.settings.template_dir)
         payload = report.to_dict()
         payload["provider"] = embedding_provider.name
         payload["model"] = embedding_provider.model
