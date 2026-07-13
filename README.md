@@ -112,7 +112,7 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 10. **Evaluation hinzufuegen**
 
-   Kleine Testkollektion mit wiederholbarem Lauf, damit Aenderungen am System vergleichbar bleiben.
+   Kleine Testkollektion mit wiederholbarem Lauf, damit Aenderungen am System vergleichbar bleiben. Die Evaluation prueft beobachtbare Kriterien wie Quellenabdeckung, Antwortformat, Unsicherheit und Tool-Nutzung.
 
 11. **Template abstrahieren**
 
@@ -173,7 +173,19 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollte eine kleine Evaluation entstehen: feste Testfragen, erwartete Quellenabdeckung und pruefbare Kriterien fuer Antwortformat, Unsicherheit und Halluzinationsvermeidung.
+Als naechstes sollte das Template abstrahiert werden: Anwendungsspezifische Daten, Prompts, Tool-Definitionen, Evaluationsfragen und Runtime-Konfiguration sollen leichter austauschbar werden.
+
+## Evaluation
+
+Die Evaluation nutzt feste Testfragen gegen den aktuellen deterministischen Agenten. Sie prueft keine perfekte Musterantwort, sondern beobachtbare Eigenschaften:
+
+- Antwort ist nicht leer
+- erwartete Quellen werden gefunden
+- erforderliche Begriffe im Antwortformat sind vorhanden
+- Unsicherheit wird ausgewiesen
+- erwartete Tools wurden genutzt
+
+Der lokale Endpunkt `GET /evaluation/run` fuehrt die Default-Evaluation gegen `data/sample/` aus und liefert eine Zusammenfassung mit einzelnen Checks.
 
 ## Agent Tools
 
@@ -223,3 +235,4 @@ Nuetzliche lokale Endpunkte:
 - `GET /ingestion/preview?collection=sample` zeigt die ersten ingestierten Chunks einer Collection
 - `GET /vector-store/preview?collection=sample&q=agentic` baut lokal einen In-Memory-Index und zeigt Suchtreffer mit Scores
 - `GET /retrieval/search?collection=sample&q=agentic&top_k=3` nutzt den Retriever und liefert agentenfreundliche Suchergebnisse mit Trace
+- `GET /evaluation/run` fuehrt die Default-Evaluation aus
