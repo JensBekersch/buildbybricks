@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, urlparse
 
 from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
 from agentic_rag_template.config import Settings
+from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
+from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 
 
 def create_app_settings() -> Settings:
@@ -40,6 +42,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if parsed_url.path == "/ingestion/preview":
             self._send_json(self._preview_ingestion(parsed_url.query))
+            return
+
+        if parsed_url.path == "/vector-store/preview":
+            self._send_json(self._preview_vector_search(parsed_url.query))
+            return
+
+        if parsed_url.path == "/retrieval/search":
+            self._send_json(self._search_retriever(parsed_url.query))
             return
 
         if parsed_url.path == "/":
@@ -123,6 +133,71 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 for chunk in chunks[:10]
             ],
         }
+
+    def _preview_vector_search(self, query: str) -> Dict[str, Any]:
+        params = parse_qs(query)
+        search_query = params.get("q", [""])[0].strip()
+        collection = params.get("collection", [None])[0]
+        top_k = int(params.get("top_k", ["5"])[0])
+
+        if not search_query:
+            return {
+                "error": "q is required",
+                "provider": self.settings.embedding_provider,
+                "model": self.settings.embedding_model,
+            }
+
+        chunks = ingest_data(self.settings.data_dir, collection=collection)
+        embedding_provider = create_embedding_provider(self.settings)
+        vector_store = InMemoryVectorStore(embedding_provider)
+        vector_store.add_chunks(chunks)
+        results = vector_store.search(search_query, top_k=top_k, collection=collection)
+
+        return {
+            "query": search_query,
+            "provider": embedding_provider.name,
+            "model": embedding_provider.model,
+            "dimension": embedding_provider.dimension,
+            "indexed_chunk_count": vector_store.size,
+            "results": [
+                {
+                    "score": round(result.score, 6),
+                    "id": result.chunk.id,
+                    "collection": result.chunk.collection,
+                    "source_path": result.chunk.source_path,
+                    "title": result.chunk.title,
+                    "chunk_index": result.chunk.chunk_index,
+                    "text": result.chunk.text,
+                    "metadata": result.chunk.metadata,
+                }
+                for result in results
+            ],
+        }
+
+    def _search_retriever(self, query: str) -> Dict[str, Any]:
+        params = parse_qs(query)
+        search_query = params.get("q", [""])[0].strip()
+        collection = params.get("collection", [None])[0]
+        top_k = int(params.get("top_k", ["5"])[0])
+
+        try:
+            embedding_provider = create_embedding_provider(self.settings)
+            retriever = Retriever(self.settings.data_dir, embedding_provider)
+            response = retriever.retrieve(
+                RetrievalQuery(
+                    text=search_query,
+                    collection=collection,
+                    top_k=top_k,
+                )
+            )
+        except ValueError as error:
+            return {"error": str(error)}
+
+        payload = response.to_dict()
+        payload["provider"] = embedding_provider.name
+        payload["model"] = embedding_provider.model
+        payload["dimension"] = embedding_provider.dimension
+        return payload
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))

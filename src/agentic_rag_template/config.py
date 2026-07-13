@@ -15,6 +15,11 @@ class Settings:
     frontend_dir: Path = Path("frontend")
     host: str = "0.0.0.0"
     port: int = 8000
+    embedding_provider: str = "hash"
+    embedding_model: str = "local-hash-v1"
+    embedding_dimension: int = 64
+    embedding_api_base_url: str = "http://localhost:11434"
+    embedding_api_key: str = ""
     debug: bool = True
 
     @classmethod
@@ -26,5 +31,13 @@ class Settings:
             frontend_dir=Path(os.getenv("AGENTIC_RAG_FRONTEND_DIR", "frontend")),
             host=os.getenv("AGENTIC_RAG_HOST", "0.0.0.0"),
             port=int(os.getenv("AGENTIC_RAG_PORT", "8000")),
+            embedding_provider=os.getenv("AGENTIC_RAG_EMBEDDING_PROVIDER", "hash"),
+            embedding_model=os.getenv("AGENTIC_RAG_EMBEDDING_MODEL", "local-hash-v1"),
+            embedding_dimension=int(os.getenv("AGENTIC_RAG_EMBEDDING_DIMENSION", "64")),
+            embedding_api_base_url=os.getenv(
+                "AGENTIC_RAG_EMBEDDING_API_BASE_URL",
+                "http://localhost:11434",
+            ),
+            embedding_api_key=os.getenv("AGENTIC_RAG_EMBEDDING_API_KEY", ""),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )
