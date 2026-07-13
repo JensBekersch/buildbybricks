@@ -12,7 +12,7 @@ from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
 from agentic_rag_template.config import Settings
 from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
-from agentic_rag_template.retrieval import InMemoryVectorStore
+from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 
 
 def create_app_settings() -> Settings:
@@ -46,6 +46,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if parsed_url.path == "/vector-store/preview":
             self._send_json(self._preview_vector_search(parsed_url.query))
+            return
+
+        if parsed_url.path == "/retrieval/search":
+            self._send_json(self._search_retriever(parsed_url.query))
             return
 
         if parsed_url.path == "/":
@@ -169,6 +173,31 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 for result in results
             ],
         }
+
+    def _search_retriever(self, query: str) -> Dict[str, Any]:
+        params = parse_qs(query)
+        search_query = params.get("q", [""])[0].strip()
+        collection = params.get("collection", [None])[0]
+        top_k = int(params.get("top_k", ["5"])[0])
+
+        try:
+            embedding_provider = create_embedding_provider(self.settings)
+            retriever = Retriever(self.settings.data_dir, embedding_provider)
+            response = retriever.retrieve(
+                RetrievalQuery(
+                    text=search_query,
+                    collection=collection,
+                    top_k=top_k,
+                )
+            )
+        except ValueError as error:
+            return {"error": str(error)}
+
+        payload = response.to_dict()
+        payload["provider"] = embedding_provider.name
+        payload["model"] = embedding_provider.model
+        payload["dimension"] = embedding_provider.dimension
+        return payload
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))

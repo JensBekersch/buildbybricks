@@ -100,7 +100,7 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 7. **Retriever implementieren**
 
-   Top-k-Suche, einfache Filter, Quellenmetadaten und ein nachvollziehbares Retrieval-Ergebnis.
+   Top-k-Suche, einfache Collection-Filter, Quellenmetadaten, Trace-Informationen und ein nachvollziehbares Ergebnisformat. Der Retriever ist die Fassade, die der Agent spaeter als Such-Tool verwenden soll.
 
 8. **Agentischen Ablauf einfuehren**
 
@@ -173,7 +173,7 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollte der Retriever entstehen: Er kapselt Vector-Store-Aufbau, Suche, Collection-Filter und Ergebnisformat, damit der Agent spaeter nur noch ein klar begrenztes Such-Tool verwenden muss.
+Als naechstes sollte der agentische Ablauf entstehen: Der Agent bekommt ein erstes Such-Tool, entscheidet wann Retrieval noetig ist und formuliert daraus eine einfache Antwort mit Quellen.
 
 ## Embedding-Konfiguration
 
@@ -212,3 +212,4 @@ Nuetzliche lokale Endpunkte:
 - `GET /collections` zeigt die erkannten Collections unter `data/`
 - `GET /ingestion/preview?collection=sample` zeigt die ersten ingestierten Chunks einer Collection
 - `GET /vector-store/preview?collection=sample&q=agentic` baut lokal einen In-Memory-Index und zeigt Suchtreffer mit Scores
+- `GET /retrieval/search?collection=sample&q=agentic&top_k=3` nutzt den Retriever und liefert agentenfreundliche Suchergebnisse mit Trace
