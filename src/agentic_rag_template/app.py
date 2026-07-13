@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+from agentic_rag_template.agent import AgentRequest, StudyAgent
 from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
 from agentic_rag_template.config import Settings
 from agentic_rag_template.embeddings import create_embedding_provider
@@ -72,6 +73,8 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         request = ChatRequest(
             message=message,
             conversation_id=payload.get("conversation_id"),
+            collection=payload.get("collection"),
+            top_k=int(payload.get("top_k", 3)),
         )
         response = self._handle_chat(request)
         self._send_json(
@@ -82,20 +85,27 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                     for source in response.sources
                 ],
                 "trace": response.trace,
+                "tool_calls": getattr(response, "tool_calls", []),
             }
         )
 
     def _handle_chat(self, request: ChatRequest) -> ChatResponse:
-        return ChatResponse(
-            answer=(
-                "Der lokale Chat-Endpoint laeuft. "
-                "Retrieval und Agentenlogik werden in den naechsten Schritten angebunden."
-            ),
-            trace=[
-                "received_message",
-                "returned_stub_response",
-            ],
+        embedding_provider = create_embedding_provider(self.settings)
+        agent = StudyAgent(self.settings.data_dir, embedding_provider)
+        response = agent.answer(
+            AgentRequest(
+                message=request.message,
+                collection=request.collection,
+                top_k=request.top_k,
+            )
         )
+        chat_response = ChatResponse(
+            answer=response.answer,
+            sources=response.sources,
+            trace=response.trace,
+            tool_calls=[tool_call.to_dict() for tool_call in response.tool_calls],
+        )
+        return chat_response
 
     def _list_collections(self) -> Dict[str, Any]:
         collections = []

@@ -104,7 +104,7 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 8. **Agentischen Ablauf einfuehren**
 
-   Der Agent bekommt Tools und entscheidet selbst, wann Retrieval noetig ist. Zunaechst mit wenigen, gut sichtbaren Schritten.
+   Der Agent bekommt Tools und entscheidet selbst, wann Retrieval noetig ist. Zunaechst mit wenigen, gut sichtbaren Schritten. Der erste deterministische Agent nutzt `search_knowledge_base`, `read_source` und `answer_with_citations`.
 
 9. **Antworten mit Quellen erzeugen**
 
@@ -173,7 +173,17 @@ Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collect
 
 ## Naechster Schritt
 
-Als naechstes sollte der agentische Ablauf entstehen: Der Agent bekommt ein erstes Such-Tool, entscheidet wann Retrieval noetig ist und formuliert daraus eine einfache Antwort mit Quellen.
+Als naechstes sollte die Antwort mit Quellen weiter ausgearbeitet werden: besseres Antwortformat, sichtbarere Quellen im Frontend und klarere Unsicherheitsregeln, bevor spaeter ein LLM-Orchestrator hinzukommt.
+
+## Agent Tools
+
+Der aktuelle Agent nutzt bewusst wenige, explizite Tools:
+
+- `search_knowledge_base`: durchsucht lokale Collections ueber den Retriever
+- `read_source`: liest ein konkretes Quelldokument aus `data/`
+- `answer_with_citations`: formuliert eine einfache Antwort mit Quellenliste
+
+Der Chat-Endpunkt `POST /chat` ruft diesen deterministischen Agenten auf und gibt `answer`, `sources`, `trace` und `tool_calls` zurueck. Damit ist der Ablauf sichtbar, bevor spaeter ein LLM selbst ueber Tool-Nutzung entscheidet.
 
 ## Embedding-Konfiguration
 

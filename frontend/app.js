@@ -46,7 +46,11 @@ chatForm.addEventListener("submit", async (event) => {
       return;
     }
 
-    appendMessage("Agent", payload.answer, payload.trace || []);
+    const details = [...(payload.trace || [])];
+    if (payload.tool_calls && payload.tool_calls.length > 0) {
+      details.push(...payload.tool_calls.map((toolCall) => toolCall.name));
+    }
+    appendMessage("Agent", payload.answer, details);
   } catch (error) {
     appendMessage("System", "Die API ist nicht erreichbar.");
   }
