@@ -153,12 +153,27 @@ Diese Punkte sind bewusst vorlaeufig und sollen im Verlauf der Studie validiert 
 │   └── app.js
 ├── data/
 │   └── sample/
+│       └── agentic_rag_basics.md
 └── tests/
 ```
 
+## Datenstruktur
+
+`data/` ist der lokale Wissensbereich. Jede direkte Unterstruktur ist eine Collection, die spaeter getrennt ingestiert, gefiltert oder fuer unterschiedliche Anwendungen verwendet werden kann.
+
+```text
+data/
+├── sample/
+├── product-docs/
+├── policies/
+└── customer-a/
+```
+
+Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collection-Ordnern. Jeder Chunk erhaelt Metadaten fuer Collection, relativen Dateipfad, Dateiname, Dateityp, Chunk-Index und Zeichenposition.
+
 ## Naechster Schritt
 
-Als naechstes sollte die Ingestion fuer lokale Dateien entstehen: Dateien aus `data/sample/` einlesen, einfache Chunks bilden und Metadaten fuer spaetere Retrieval-Schritte vorbereiten.
+Als naechstes sollten Embedding-Schnittstelle und lokaler Vector Store entstehen. Die vorbereiteten Chunks aus der Ingestion bilden dafuer den Input.
 
 ## Lokal Starten
 
@@ -169,3 +184,8 @@ docker compose up --build
 ```
 
 Danach ist das Frontend unter `http://localhost:8000` erreichbar. Der Health-Check liegt unter `http://localhost:8000/health`; der Chat sendet Nachrichten an `POST /chat`.
+
+Nuetzliche lokale Endpunkte:
+
+- `GET /collections` zeigt die erkannten Collections unter `data/`
+- `GET /ingestion/preview?collection=sample` zeigt die ersten ingestierten Chunks einer Collection
