@@ -77,8 +77,19 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             "searched_vector_store",
             "formatted_retrieval_results",
         ]
-        assert "Endpoint laeuft" in chat_payload["answer"]
-        assert chat_payload["trace"] == ["received_message", "returned_stub_response"]
+        assert "keine passende Quelle gefunden" in chat_payload["answer"]
+        assert chat_payload["sources"] == []
+        assert "Keine lokalen Treffer" in chat_payload["uncertainty"]
+        assert chat_payload["trace"] == [
+            "validated_message",
+            "searched_knowledge_base",
+            "skipped_source_read",
+            "composed_answer",
+        ]
+        assert [tool_call["name"] for tool_call in chat_payload["tool_calls"]] == [
+            "search_knowledge_base",
+            "answer_with_citations",
+        ]
     finally:
         server.shutdown()
         server.server_close()

@@ -1,7 +1,7 @@
 """Shared request and response shapes for the future chat API."""
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -10,6 +10,8 @@ class ChatRequest:
 
     message: str
     conversation_id: Optional[str] = None
+    collection: Optional[str] = None
+    top_k: int = 3
 
 
 @dataclass(frozen=True)
@@ -18,6 +20,8 @@ class SourceReference:
 
     title: str
     location: str
+    excerpt: str = ""
+    score: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -26,4 +30,6 @@ class ChatResponse:
 
     answer: str
     sources: List[SourceReference] = field(default_factory=list)
+    uncertainty: str = ""
     trace: List[str] = field(default_factory=list)
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
