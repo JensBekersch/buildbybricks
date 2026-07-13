@@ -29,8 +29,12 @@ def test_chat_schema_defaults_are_empty_collections() -> None:
 
 
 def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
-    (tmp_path / "index.html").write_text("<h1>Chat</h1>", encoding="utf-8")
-    settings = Settings(frontend_dir=tmp_path, host="127.0.0.1", port=0)
+    frontend_dir = tmp_path / "frontend"
+    data_dir = tmp_path / "data"
+    frontend_dir.mkdir()
+    data_dir.mkdir()
+    (frontend_dir / "index.html").write_text("<h1>Chat</h1>", encoding="utf-8")
+    settings = Settings(frontend_dir=frontend_dir, data_dir=data_dir, host="127.0.0.1", port=0)
     server = create_server(settings)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -39,6 +43,8 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         host, port = server.server_address
         health_response = request.urlopen(f"http://{host}:{port}/health", timeout=2)
         health_payload = json.loads(health_response.read().decode("utf-8"))
+        collections_response = request.urlopen(f"http://{host}:{port}/collections", timeout=2)
+        collections_payload = json.loads(collections_response.read().decode("utf-8"))
 
         chat_request = request.Request(
             f"http://{host}:{port}/chat",
@@ -50,6 +56,7 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         chat_payload = json.loads(chat_response.read().decode("utf-8"))
 
         assert health_payload["status"] == "ok"
+        assert collections_payload == {"collections": []}
         assert "Endpoint laeuft" in chat_payload["answer"]
         assert chat_payload["trace"] == ["received_message", "returned_stub_response"]
     finally:

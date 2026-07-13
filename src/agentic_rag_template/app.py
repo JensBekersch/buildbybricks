@@ -6,9 +6,11 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlparse
 
 from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
 from agentic_rag_template.config import Settings
+from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
 
 
 def create_app_settings() -> Settings:
@@ -26,11 +28,21 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(settings.frontend_dir), **kwargs)
 
     def do_GET(self) -> None:
-        if self.path == "/health":
+        parsed_url = urlparse(self.path)
+
+        if parsed_url.path == "/health":
             self._send_json({"status": "ok", "app": self.settings.app_name})
             return
 
-        if self.path == "/":
+        if parsed_url.path == "/collections":
+            self._send_json(self._list_collections())
+            return
+
+        if parsed_url.path == "/ingestion/preview":
+            self._send_json(self._preview_ingestion(parsed_url.query))
+            return
+
+        if parsed_url.path == "/":
             self.path = "/index.html"
 
         super().do_GET()
@@ -74,6 +86,43 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 "returned_stub_response",
             ],
         )
+
+    def _list_collections(self) -> Dict[str, Any]:
+        collections = []
+
+        for collection in discover_collections(self.settings.data_dir):
+            documents = load_documents(self.settings.data_dir, collection=collection)
+            collections.append(
+                {
+                    "name": collection,
+                    "document_count": len(documents),
+                }
+            )
+
+        return {"collections": collections}
+
+    def _preview_ingestion(self, query: str) -> Dict[str, Any]:
+        params = parse_qs(query)
+        collection = params.get("collection", [None])[0]
+        chunks = ingest_data(self.settings.data_dir, collection=collection)
+
+        return {
+            "chunk_count": len(chunks),
+            "chunks": [
+                {
+                    "id": chunk.id,
+                    "collection": chunk.collection,
+                    "source_path": chunk.source_path,
+                    "title": chunk.title,
+                    "chunk_index": chunk.chunk_index,
+                    "char_start": chunk.char_start,
+                    "char_end": chunk.char_end,
+                    "text": chunk.text,
+                    "metadata": chunk.metadata,
+                }
+                for chunk in chunks[:10]
+            ],
+        }
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
