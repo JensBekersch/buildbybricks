@@ -1,0 +1,20 @@
+[project]
+name = "agentic-rag-template"
+version = "0.1.0"
+description = "A study template for an agentic RAG application with an API and HTML chat frontend."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agentic RAG Study Chat</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="chat-header">
+        <h1>Agentic RAG Study Chat</h1>
+        <p>Frontend shell for the upcoming API-backed chat flow.</p>
+      </header>
+      <section id="chat-log" class="chat-log" aria-label="Chat Verlauf"></section>
+      <form id="chat-form" class="chat-form">
+        <label class="sr-only" for="message-input">Nachricht</label>
+        <input id="message-input" name="message" type="text" placeholder="Frage eingeben" autocomplete="off">
+        <button type="submit">Senden</button>
+      </form>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,78 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  color: #202124;
+  background: #f6f7f9;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 40px 0;
+}
+
+.chat-header {
+  margin-bottom: 24px;
+}
+
+.chat-header h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.chat-header p {
+  margin: 0;
+  color: #5f6368;
+}
+
+.chat-log {
+  min-height: 360px;
+  border: 1px solid #d7dbe2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.chat-form input,
+.chat-form button {
+  min-height: 44px;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.chat-form input {
+  border: 1px solid #c8cdd5;
+  padding: 0 12px;
+}
+
+.chat-form button {
+  border: 0;
+  padding: 0 18px;
+  color: #ffffff;
+  background: #2357c6;
+  cursor: pointer;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
