@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "A study template for an agentic RAG application with an API and HTML chat frontend."
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.1",
+]
 
 [project.optional-dependencies]
 dev = [

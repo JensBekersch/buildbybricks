@@ -14,6 +14,8 @@ COPY data ./data
 COPY template ./template
 COPY apps ./apps
 
+RUN pip install --no-cache-dir .
+
 EXPOSE 8000
 
 CMD ["python", "-m", "agentic_rag_template.app"]

@@ -28,6 +28,7 @@ class Settings:
     llm_api_key: str = ""
     llm_timeout_seconds: int = 1200
     llm_max_tokens: int = 4096
+    database_url: str = "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag"
     debug: bool = True
 
     @classmethod
@@ -58,5 +59,9 @@ class Settings:
             llm_api_key=os.getenv("AGENTIC_RAG_LLM_API_KEY", ""),
             llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "1200")),
             llm_max_tokens=int(os.getenv("AGENTIC_RAG_LLM_MAX_TOKENS", "4096")),
+            database_url=os.getenv(
+                "AGENTIC_RAG_DATABASE_URL",
+                "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag",
+            ),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )
