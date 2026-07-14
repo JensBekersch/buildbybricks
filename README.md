@@ -62,6 +62,7 @@ Langlauf-Agenten nicht hinter einem blockierenden HTTP-Request versteckt werden.
 POST /apps/software-factory/architecture-sheet/jobs
 GET  /apps/software-factory/architecture-sheet/jobs
 GET  /apps/software-factory/architecture-sheet/jobs/{job_id}
+GET  /apps/software-factory/architecture-sheet/jobs/{job_id}/events
 ```
 
 Create-Beispiel:
@@ -75,8 +76,9 @@ Create-Beispiel:
 
 Die Antwort enthaelt zunaechst einen persistenten Job mit `id`, `status`,
 `steps`, `logs`, Modellinformationen und spaeter `result`. Die eigentliche
-Ausfuehrung wird im Worker-Ausbauschritt an diese Jobs angebunden. Die
-Architecture-Sheet-Pipeline emittiert bereits echte Events wie
+Ausfuehrung laeuft im separaten Worker-Service. Das Frontend kann Job-Updates
+per Server-Sent Events ueber den `/events`-Endpunkt live verfolgen und bei
+Stream-Problemen auf REST-Polling zurueckfallen. Die Architecture-Sheet-Pipeline emittiert echte Events wie
 `step_started`, `step_completed`, `step_failed` und `step_skipped`; diese Events
 koennen direkt auf den persistenten Job angewendet werden. Der Generator
 unterstuetzt zwei sichtbare Modi:
@@ -411,6 +413,7 @@ Logs, Fehler und Ergebnis zurueck:
 ```text
 AGENTIC_RAG_DATABASE_URL=postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag
 AGENTIC_RAG_WORKER_POLL_SECONDS=2
+AGENTIC_RAG_JOB_STREAM_POLL_SECONDS=1
 POSTGRES_DB=agentic_rag
 POSTGRES_USER=agentic_rag
 POSTGRES_PASSWORD=agentic_rag

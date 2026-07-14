@@ -6,6 +6,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import re
+import time
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -22,6 +23,9 @@ from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, 
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
     ArchitectureGenerationJobStoreError,
+    JOB_STATUS_CANCELED,
+    JOB_STATUS_COMPLETED,
+    JOB_STATUS_FAILED,
     PostgresArchitectureGenerationJobStore,
 )
 from agentic_rag_template.template_config import load_application_profile
@@ -96,6 +100,11 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/architecture-sheet/jobs":
                 self._send_json(self._list_architecture_jobs(application))
+                return
+
+            architecture_events_job_id = self._parse_architecture_job_events_route(app_route["remainder"])
+            if architecture_events_job_id is not None:
+                self._send_architecture_job_events_response(application, architecture_events_job_id)
                 return
 
             architecture_job_id = self._parse_architecture_job_route(app_route["remainder"])
@@ -249,6 +258,61 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             return
 
         self._send_json({"job": job.to_dict()})
+
+    def _send_architecture_job_events_response(self, application: ApplicationInstance, job_id: str) -> None:
+        if application.id != "software-factory":
+            self._send_json(
+                {"error": "architecture-sheet jobs are only available for the software-factory app"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        try:
+            initial_job = self._architecture_job_store().get(job_id)
+        except ArchitectureGenerationJobStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        if initial_job is None or initial_job.app_id != application.id:
+            self._send_json({"error": "architecture generation job not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        last_updated_at = ""
+        job = initial_job
+
+        while True:
+            if job.updated_at.isoformat() != last_updated_at:
+                last_updated_at = job.updated_at.isoformat()
+                if not self._write_sse_event("job", {"job": job.to_dict()}):
+                    self.close_connection = True
+                    return
+
+            if job.status in {JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED}:
+                self.close_connection = True
+                return
+
+            time.sleep(self.settings.job_stream_poll_seconds)
+
+            try:
+                next_job = self._architecture_job_store().get(job_id)
+            except ArchitectureGenerationJobStoreError as error:
+                self._write_sse_event("error", {"error": str(error)})
+                self.close_connection = True
+                return
+
+            if next_job is None or next_job.app_id != application.id:
+                self._write_sse_event("error", {"error": "architecture generation job not found"})
+                self.close_connection = True
+                return
+
+            job = next_job
 
     def _send_chat_response(self, application: ApplicationInstance) -> None:
         payload = self._read_json_body()
@@ -536,6 +600,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         return None
 
+    def _parse_architecture_job_events_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if (
+            len(parts) == 4
+            and parts[0] == "architecture-sheet"
+            and parts[1] == "jobs"
+            and parts[2]
+            and parts[3] == "events"
+        ):
+            return parts[2]
+
+        return None
+
     def _architecture_job_store(self) -> Any:
         if self.architecture_job_store is not None:
             return self.architecture_job_store
@@ -577,6 +655,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _write_sse_event(self, event_name: str, payload: Dict[str, Any]) -> bool:
+        body = f"event: {event_name}\ndata: {json.dumps(payload)}\n\n".encode("utf-8")
+        try:
+            self.wfile.write(body)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return False
+        return True
 
 
 def create_server(settings: Optional[Settings] = None, architecture_job_store: Any = None) -> ThreadingHTTPServer:
