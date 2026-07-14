@@ -197,6 +197,40 @@ class TodoArchitectureLLMProvider:
         raise AssertionError(system_prompt)
 
 
+class HallucinatingScopeLLMProvider(TodoArchitectureLLMProvider):
+    name = "hallucinating-scope-llm"
+    model = "hallucinating-json-v1"
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Architecture Synthesizer" in system_prompt:
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Eine einfache gemeinsame Aufgabenliste fuer Teammitglieder.",
+                "building_blocks": [
+                    {
+                        "name": "Projektmanagement-Integration",
+                        "responsibility": "Synchronisiert Aufgaben in Cloud-Projektmanagement-Tools.",
+                        "django_mapping": "Nicht belegt.",
+                    }
+                ],
+                "runtime_scenarios": [
+                    {
+                        "name": "Ersteller zuweisen",
+                        "steps": ["Ersteller und Zustaendiger werden gespeichert."],
+                    }
+                ],
+                "architecture_decisions": [
+                    {
+                        "id": "ADR-999",
+                        "decision": "Cloud-Synchronisation einbauen.",
+                        "rationale": "Nicht belegt.",
+                        "status": "proposed",
+                    }
+                ],
+            }
+        return super().generate_json(system_prompt, user_prompt)
+
+
 class FailingRequirementsLLMProvider:
     name = "failing-requirements-llm"
     model = "failing-json-v1"
@@ -330,6 +364,8 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     assert payload["generation"]["mode"] == "agentic_with_review"
     assert payload["generation"]["architecture_review"]["passes"] is True
     assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
+    assert payload["generation"]["requirement_analysis"]["in_scope"]
+    assert payload["generation"]["requirement_analysis"]["not_evidenced"]
     assert provider.calls == [
         "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
         "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
@@ -339,6 +375,23 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     assert "Zeiteintrag" in block_names
     assert "Monatsabschluss" in block_names
     assert "rest-api" not in interface_types
+    assert set(sheet["arc42"]) == {
+        "introduction_and_goals",
+        "constraints",
+        "context_and_scope",
+        "solution_strategy",
+        "building_block_view",
+        "runtime_view",
+        "deployment_view",
+        "crosscutting_concepts",
+        "architecture_decisions",
+        "quality_requirements",
+        "risks_and_technical_debt",
+        "glossary",
+    }
+    assert sheet["arc42"]["runtime_view"]["scenarios"]
+    assert sheet["arc42"]["crosscutting_concepts"]["concepts"]
+    assert sheet["arc42"]["quality_requirements"]["quality_scenarios"]
     assert payload["trace"][-4:] == [
         "analyzed_requirements",
         "synthesized_architecture_sheet",
@@ -548,6 +601,58 @@ def test_generate_architecture_sheet_preserves_explicit_no_login_requirement() -
     assert "kein login" in all_text
     assert "accounts-app" in all_text
     assert "98 Prozent Coverage".lower() in all_text
+    architecture_payload = json.dumps(
+        {
+            "drivers": sheet["architecture_drivers"],
+            "quality_goals": sheet["quality_goals"],
+            "decisions": sheet["architecture_decisions"],
+            "blocks": sheet["building_blocks"],
+            "runtime": sheet["runtime_scenarios"],
+            "open_questions": sheet["open_questions"],
+            "assumptions": sheet["assumptions"],
+        },
+        ensure_ascii=False,
+    ).lower()
+    assert "projektmanagement" not in architecture_payload
+    assert "cloud" not in architecture_payload
+    assert "team-zuordnung" not in architecture_payload
+    assert "zuständiger" not in architecture_payload
+    assert "loeschen" not in architecture_payload
+    assert "löschen" not in architecture_payload
+
+
+def test_generate_architecture_sheet_removes_not_evidenced_features_from_architecture() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    result = generate_architecture_sheet(
+        "Einfache Todo Liste fuer Teammitglieder ohne Login.",
+        application,
+        llm_provider=HallucinatingScopeLLMProvider(),
+        generation_mode="agentic_with_review",
+    )
+    sheet = result.to_dict()["architecture_sheet"]
+    architecture_payload = json.dumps(
+        {
+            "decisions": sheet["architecture_decisions"],
+            "blocks": sheet["building_blocks"],
+            "runtime": sheet["runtime_scenarios"],
+            "arc42_blocks": sheet["arc42"]["building_block_view"],
+            "arc42_runtime": sheet["arc42"]["runtime_view"],
+        },
+        ensure_ascii=False,
+    ).lower()
+
+    assert "projektmanagement" not in architecture_payload
+    assert "cloud" not in architecture_payload
+    assert "ersteller" not in architecture_payload
+    assert "zustaendiger" not in architecture_payload
+    assert "zuständiger" not in architecture_payload
+    assert "Aufgabe" in {block["name"] for block in sheet["building_blocks"]}
 
 
 def test_generate_architecture_sheet_corrects_failed_review_once() -> None:

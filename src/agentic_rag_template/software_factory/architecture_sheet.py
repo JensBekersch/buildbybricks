@@ -21,6 +21,24 @@ from agentic_rag_template.software_factory.jobs import (
 
 ArchitectureGenerationEventHandler = Callable[[ArchitectureGenerationEvent], None]
 MAX_REVIEW_CORRECTION_ATTEMPTS = 2
+SCOPE_SENSITIVE_TERMS = (
+    "projektmanagement",
+    "cloud",
+    "team-zuordnung",
+    "teamzuordnung",
+    "team zuordnung",
+    "loeschen",
+    "löschen",
+    "ersteller",
+    "erstellt hat",
+    "zustaendig",
+    "zuständig",
+    "zustaendiger",
+    "zuständiger",
+    "zugewiesen",
+    "zuweisung",
+    "periodisierung",
+)
 
 
 @dataclass(frozen=True)
@@ -158,7 +176,12 @@ def generate_architecture_sheet(
         warning = agentic_sheet["warning"] or "Agentic architecture generation did not return a sheet."
         raise ArchitectureSheetGenerationError(warning)
 
-    sheet = _merge_known_schema_fields(agentic_sheet["base_sheet"], agentic_sheet["sheet"], schema)
+    sheet = _merge_known_schema_fields(
+        agentic_sheet["base_sheet"],
+        agentic_sheet["sheet"],
+        schema,
+        analysis=agentic_sheet["analysis"],
+    )
     generation["pipeline"] = (
         "requirement_analyst -> architecture_synthesizer -> architecture_reviewer"
         if mode == "agentic_with_review"
@@ -301,7 +324,7 @@ def _try_generate_agentic_architecture_sheet(
                 "warning": "Architecture synthesizer did not return a JSON object.",
             }
 
-        reviewed_sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema)
+        reviewed_sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema, analysis=analysis)
         _emit_completed(event_handler, "synthesize_architecture", "Architecture Sheet wurde synthetisiert.")
         review = {}
         warning = ""
@@ -419,7 +442,12 @@ def _review_and_correct_architecture_sheet(
         candidate_sheet = raw_correction.get("architecture_sheet", raw_correction)
         if not isinstance(candidate_sheet, dict):
             raise ArchitectureSheetGenerationError("Architecture correction did not return a JSON object.")
-        sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema)
+        sheet = _merge_known_schema_fields(
+            base_sheet,
+            candidate_sheet,
+            schema,
+            analysis=requirement_analysis,
+        )
 
     return {
         "passes": False,
@@ -532,6 +560,8 @@ def _build_requirements_analyst_system_prompt() -> str:
             "Analysiere die Beschreibung, ohne Architektur zu erfinden.",
             "Trenne aktuellen Scope strikt von spaeteren, optionalen oder unklaren Erweiterungen.",
             "Extrahiere konkrete Rollen, Kernobjekte, Workflows, Schnittstellen, Qualitaetsziele, Risiken, Annahmen und offene Fragen.",
+            "Erzeuge explizit in_scope, out_of_scope, not_evidenced, explicitly_excluded_terms und core_facts.",
+            "Wenn die Beschreibung etwas ausschliesst, muss es in out_of_scope und explicitly_excluded_terms auftauchen.",
             "Verwende die Begriffe aus der Nutzerbeschreibung, keine generischen Platzhalter.",
             "Formuliere Beschreibungen so konkret, dass ein Architektur-Agent daraus Bausteine und Tests ableiten kann.",
         ]
@@ -549,7 +579,8 @@ def _build_requirements_analyst_user_prompt(
             (
                 "Gib JSON mit diesen Feldern zurueck: artifact_name, business_goal, roles, "
                 "core_entities, workflows, current_interfaces, future_interfaces, quality_goals, "
-                "constraints, explicitly_not_needed, risks, assumptions, open_questions. "
+                "constraints, explicitly_not_needed, in_scope, out_of_scope, not_evidenced, "
+                "explicitly_excluded_terms, core_facts, risks, assumptions, open_questions. "
                 "Array-Eintraege sollen konkrete Strings oder Objekte mit name/description sein. "
                 "Alle Werte muessen in deutscher Sprache formuliert sein."
             ),
@@ -566,10 +597,13 @@ def _build_architecture_synthesizer_system_prompt() -> str:
             "Verwende keine englischen Platzhalter wie Team Members, High, Medium, Core Functionality oder Project Shell.",
             "Erzeuge ein vollstaendiges Architecture Sheet nach Schema.",
             "Nutze die Requirement-Analyse als fuehrende Quelle.",
+            "Verwende als Architektur nur Inhalte aus in_scope und core_facts.",
+            "Inhalte aus out_of_scope, explicitly_excluded_terms oder not_evidenced duerfen nicht als Baustein, Szenario, Qualitaetsziel, Risiko oder Entscheidung erscheinen.",
             "Alle Bausteine, Szenarien, Datenmodelle und Tests muessen zur beschriebenen Anwendung passen.",
             "Beschreibungen duerfen nicht duenn sein: business_goal, solution_strategy, data_view, security_view, test_strategy und deployment_view sollen jeweils mehrere konkrete Saetze enthalten.",
             "Array-Eintraege sollen spezifisch und verwertbar sein, nicht nur Buzzwords oder Prioritaetswoerter.",
             "Zukuenftige oder optionale Schnittstellen gehoeren nur in assumptions/open_questions oder external_systems, nicht in current_interfaces.",
+            "Erzeuge zusaetzlich ein vollstaendiges arc42-Objekt mit allen 12 Kapiteln.",
         ]
     )
 
@@ -604,6 +638,9 @@ def _build_architecture_reviewer_system_prompt() -> str:
             "Erzeuge ausschliesslich valides JSON.",
             "Pruefe, ob das Architecture Sheet fachlich zur Beschreibung und Requirement-Analyse passt.",
             "Markiere generische Platzhalter, englische fachliche Inhalte, erfundene Features, Scope-Verletzungen, fehlende Kernobjekte und zu duenne Beschreibungen.",
+            "Pruefe jedes Feature gegen input_summary, in_scope, out_of_scope, not_evidenced und explicitly_excluded_terms.",
+            "Begriffe wie Projektmanagement, Cloud, Team-Zuordnung, Loeschen, Ersteller oder Zustaendiger muessen fehlschlagen, wenn sie nicht belegt oder ausgeschlossen sind.",
+            "Pruefe, ob das arc42-Objekt alle 12 Kapitel enthaelt und Kapitel 8, 10 und 12 nicht leer sind.",
             "Ein Sheet besteht den Review nur, wenn es konsequent deutsch, konkret und fuer Folgeagenten verwendbar ist.",
             "Gib passes, findings und required_corrections zurueck.",
         ]
@@ -636,6 +673,8 @@ def _build_architecture_correction_system_prompt() -> str:
             "Korrigiere ein Architecture Sheet anhand der Review-Hinweise.",
             "Schreibe alle beschreibenden Texte konsequent auf Deutsch.",
             "Erhalte fachlich richtige Inhalte, entferne Scope-fremde Features und ergaenze fehlende oder zu duenne Abschnitte.",
+            "Entferne alle Inhalte, die in out_of_scope, explicitly_excluded_terms oder not_evidenced enthalten sind.",
+            "Stelle sicher, dass das arc42-Objekt alle 12 Kapitel enthaelt.",
             "Gib ein vollstaendiges Architecture-Sheet-JSON nach Schema zurueck.",
         ]
     )
@@ -685,6 +724,13 @@ def _normalize_requirements_analysis(
         "quality_goals": _list_of_named_items(raw_analysis.get("quality_goals")),
         "constraints": _list_of_text_items(raw_analysis.get("constraints")),
         "explicitly_not_needed": _list_of_text_items(raw_analysis.get("explicitly_not_needed")),
+        "in_scope": _list_of_text_items(raw_analysis.get("in_scope")),
+        "out_of_scope": _list_of_text_items(raw_analysis.get("out_of_scope")),
+        "not_evidenced": _list_of_text_items(raw_analysis.get("not_evidenced")),
+        "explicitly_excluded_terms": [
+            item["description"] for item in _list_of_text_items(raw_analysis.get("explicitly_excluded_terms"))
+        ],
+        "core_facts": _list_of_text_items(raw_analysis.get("core_facts")),
         "risks": _list_of_risk_items(raw_analysis.get("risks")),
         "assumptions": _list_of_text_items(raw_analysis.get("assumptions")),
         "open_questions": _list_of_text_items(raw_analysis.get("open_questions")),
@@ -709,6 +755,25 @@ def _normalize_requirements_analysis(
                 "description": "Admin-Oberflaeche fuer Stammdaten und Betrieb.",
             },
         ]
+    analysis["explicitly_excluded_terms"] = _dedupe_strings(
+        analysis["explicitly_excluded_terms"] + _derive_excluded_terms(description)
+    )
+    if analysis["explicitly_not_needed"]:
+        analysis["out_of_scope"].extend(analysis["explicitly_not_needed"])
+    if not analysis["in_scope"]:
+        analysis["in_scope"] = _derive_in_scope_items(analysis)
+    if not analysis["core_facts"]:
+        analysis["core_facts"] = _derive_core_facts(description, analysis)
+    if not analysis["not_evidenced"]:
+        analysis["not_evidenced"] = [
+            {"description": term}
+            for term in SCOPE_SENSITIVE_TERMS
+            if term not in _scope_text(analysis)
+        ]
+    analysis["out_of_scope"] = _dedupe_text_items(analysis["out_of_scope"])
+    analysis["not_evidenced"] = _dedupe_text_items(analysis["not_evidenced"])
+    analysis["in_scope"] = _dedupe_text_items(analysis["in_scope"])
+    analysis["core_facts"] = _dedupe_text_items(analysis["core_facts"])
 
     return analysis
 
@@ -724,6 +789,76 @@ def _normalize_architecture_review(raw_review: Dict[str, Any]) -> Dict[str, Any]
             item["description"] for item in _list_of_text_items(raw_review.get("required_corrections"))
         ],
     }
+
+
+def _derive_excluded_terms(description: str) -> List[str]:
+    lowered = description.lower()
+    terms: List[str] = []
+    patterns = [
+        ("login", ("kein login", "keinen login", "ohne login", "braucht also keinen login")),
+        ("authentifizierung", ("keine authentifizierung", "ohne authentifizierung")),
+        ("team-zuordnung", ("keinen teams zugeordnet", "keine team-zuordnung", "keinen teams")),
+        ("periodisierung", ("keine periodisierung", "periodisierung findet nicht statt")),
+        ("ersteller", ("nicht gespeichert, wer eine aufgabe erstellt", "wer eine aufgabe erstellt hat")),
+        ("zuständiger", ("wer fuer die ausfuehrung zustaendig ist", "wer für die ausführung zuständig ist")),
+        ("löschen", ("nicht geloescht", "nicht gelöscht")),
+    ]
+
+    for term, needles in patterns:
+        if any(needle in lowered for needle in needles):
+            terms.append(term)
+
+    return terms
+
+
+def _derive_in_scope_items(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+    for collection in ("roles", "core_entities", "workflows", "current_interfaces", "quality_goals"):
+        for entry in analysis.get(collection, []):
+            description = entry.get("description") or entry.get("name")
+            if description:
+                items.append({"description": description})
+    return items
+
+
+def _derive_core_facts(description: str, analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    facts = [{"description": description}]
+    for entity in analysis.get("core_entities", []):
+        facts.append({"description": f"Kernobjekt: {entity['name']} - {entity['description']}"})
+    for workflow in analysis.get("workflows", []):
+        facts.append({"description": f"Workflow: {workflow['name']} - {workflow['description']}"})
+    return facts
+
+
+def _dedupe_text_items(items: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    seen = set()
+    result = []
+    for item in items:
+        description = _string_value(item.get("description"))
+        key = description.lower()
+        if description and key not in seen:
+            seen.add(key)
+            result.append({"description": description})
+    return result
+
+
+def _dedupe_strings(items: List[str]) -> List[str]:
+    seen = set()
+    result = []
+    for item in items:
+        normalized = _string_value(item)
+        key = normalized.lower()
+        if normalized and key not in seen:
+            seen.add(key)
+            result.append(normalized)
+    return result
+
+
+def _scope_text(analysis: Dict[str, Any]) -> str:
+    values = []
+    for key in ("in_scope", "core_facts", "roles", "core_entities", "workflows", "current_interfaces"):
+        values.append(json.dumps(analysis.get(key, []), ensure_ascii=False).lower())
+    return " ".join(values)
 
 
 def _build_sheet_from_requirements_analysis(
@@ -772,7 +907,7 @@ def _build_sheet_from_requirements_analysis(
             {
                 "id": "ADR-001",
                 "decision": "Das Artefakt wird als Django-Applikation umgesetzt.",
-                "rationale": "Django liefert Auth, ORM, Admin, Templates, Migrationen und Testunterstuetzung als produktive Basis.",
+                "rationale": "Django liefert ORM, Admin, Templates, Migrationen und Testunterstuetzung als produktive Basis.",
                 "status": "proposed",
             },
             {
@@ -824,10 +959,12 @@ def _merge_known_schema_fields(
     base_sheet: Dict[str, Any],
     candidate_sheet: Dict[str, Any],
     schema: Dict[str, Any],
+    analysis: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     known_fields = set(schema.get("properties", {}).keys())
     merged = dict(base_sheet)
     normalized_candidate = _normalize_candidate_sheet(candidate_sheet)
+    normalized_analysis = analysis or {}
 
     for field in known_fields:
         value = normalized_candidate.get(field)
@@ -836,6 +973,19 @@ def _merge_known_schema_fields(
             merged[field] = value
 
     merged["schema_version"] = "1.0.0"
+    merged = _filter_sheet_against_scope(merged, normalized_analysis)
+    for field in (
+        "architecture_drivers",
+        "quality_goals",
+        "architecture_decisions",
+        "building_blocks",
+        "runtime_scenarios",
+        "acceptance_criteria",
+        "risks",
+    ):
+        if merged.get(field) in (None, "", [], {}):
+            merged[field] = base_sheet.get(field)
+    merged["arc42"] = _build_arc42_document(merged, normalized_analysis)
     return merged
 
 
@@ -865,6 +1015,209 @@ def _normalize_candidate_sheet(candidate_sheet: Dict[str, Any]) -> Dict[str, Any
         "assumptions": _list_of_text_items(candidate_sheet.get("assumptions")),
         "readiness": _normalize_readiness(candidate_sheet.get("readiness")),
     }
+
+
+def _filter_sheet_against_scope(sheet: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
+    forbidden_terms = _scope_forbidden_terms(analysis)
+    if not forbidden_terms:
+        return sheet
+
+    filtered = dict(sheet)
+    for field in (
+        "architecture_drivers",
+        "quality_goals",
+        "architecture_decisions",
+        "building_blocks",
+        "runtime_scenarios",
+        "acceptance_criteria",
+        "risks",
+        "open_questions",
+        "assumptions",
+    ):
+        value = filtered.get(field)
+        if isinstance(value, list):
+            kept = [
+                item
+                for item in value
+                if not _contains_scope_forbidden_term(item, forbidden_terms)
+            ]
+            filtered[field] = kept
+
+    context = filtered.get("context")
+    if isinstance(context, dict):
+        filtered["context"] = {
+            key: [
+                item
+                for item in value
+                if not _contains_scope_forbidden_term(item, forbidden_terms)
+            ]
+            if isinstance(value, list)
+            else value
+            for key, value in context.items()
+        }
+
+    for field in ("solution_strategy", "deployment_view", "data_view", "test_strategy"):
+        if _contains_scope_forbidden_term(filtered.get(field), forbidden_terms):
+            filtered[field] = (
+                "Dieser Abschnitt wurde auf den belegten Scope reduziert. "
+                "Nicht belegte oder ausgeschlossene Funktionen werden nicht als Architekturinhalt verwendet."
+            )
+
+    return filtered
+
+
+def _scope_forbidden_terms(analysis: Dict[str, Any]) -> List[str]:
+    scope_text = _scope_text(analysis)
+    explicit_terms = list(analysis.get("explicitly_excluded_terms", []))
+    not_evidenced_terms = [
+        item["description"]
+        for item in _list_of_text_items(analysis.get("not_evidenced"))
+    ]
+    out_of_scope_terms = [
+        item["description"]
+        for item in _list_of_text_items(analysis.get("out_of_scope"))
+    ]
+    terms = []
+
+    for term in explicit_terms + not_evidenced_terms + out_of_scope_terms:
+        normalized = _string_value(term).lower()
+        if not normalized:
+            continue
+        if normalized in {"login", "authentifizierung"}:
+            continue
+        if normalized in scope_text and normalized not in json.dumps(
+            analysis.get("out_of_scope", []), ensure_ascii=False
+        ).lower():
+            continue
+        terms.append(normalized)
+
+    return _dedupe_strings(terms)
+
+
+def _contains_scope_forbidden_term(value: Any, forbidden_terms: List[str]) -> bool:
+    text = json.dumps(value, ensure_ascii=False).lower() if isinstance(value, (dict, list)) else _string_value(value).lower()
+    if not text:
+        return False
+    return any(term and term in text for term in forbidden_terms)
+
+
+def _build_arc42_document(sheet: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
+    non_goals = _list_of_text_items(analysis.get("out_of_scope")) + [
+        {"description": f"Nicht belegt und daher nicht Teil der Architektur: {item['description']}"}
+        for item in _list_of_text_items(analysis.get("not_evidenced"))
+    ]
+    if not non_goals:
+        non_goals = [{"description": "Nicht explizit beschriebene Funktionen bleiben ausserhalb des aktuellen Scopes."}]
+
+    crosscutting_concepts = [
+        {
+            "name": "Validierung und fachliche Regeln",
+            "description": (
+                "Eingaben und Statuswechsel werden an den Django-Formularen, Models oder Services validiert. "
+                "Nicht belegte Funktionen werden nicht als implizite Erweiterung modelliert."
+            ),
+        },
+        {
+            "name": "Testbarkeit",
+            "description": (
+                "Kernlogik, Validierung und zentrale Workflows werden in Unit- und Medium-Tests abgesichert. "
+                "Die Teststrategie folgt den explizit genannten Qualitaetszielen."
+            ),
+        },
+    ]
+    if sheet.get("security_view"):
+        crosscutting_concepts.append(
+            {
+                "name": "Sicherheit und Betrieb",
+                "description": sheet["security_view"],
+            }
+        )
+
+    return {
+        "introduction_and_goals": {
+            "summary": sheet.get("business_goal") or sheet.get("input_summary") or "Ziel der Anwendung ist noch zu konkretisieren.",
+            "goals": _list_of_text_items(sheet.get("business_goal")) or _list_of_text_items(analysis.get("core_facts")),
+            "stakeholders": sheet.get("stakeholders") or [{"name": "Stakeholder", "description": "Noch zu konkretisieren."}],
+            "quality_goals": sheet.get("quality_goals") or _analysis_quality_goals(analysis),
+            "non_goals": non_goals,
+        },
+        "constraints": {
+            "constraints": sheet.get("constraints") or [{"description": "Erster Fokus ist eine Django-Applikation."}],
+            "assumptions": sheet.get("assumptions") or [],
+            "open_questions": sheet.get("open_questions") or [],
+        },
+        "context_and_scope": {
+            "business_context": sheet.get("context") or {
+                "users": sheet.get("stakeholders") or [],
+                "external_systems": [],
+                "interfaces": [],
+            },
+            "technical_context": (sheet.get("context") or {}).get("interfaces", []),
+            "in_scope": _list_of_text_items(analysis.get("in_scope")) or _list_of_text_items(sheet.get("business_goal")),
+            "out_of_scope": _list_of_text_items(analysis.get("out_of_scope")),
+            "not_evidenced": _list_of_text_items(analysis.get("not_evidenced")),
+        },
+        "solution_strategy": {
+            "summary": sheet.get("solution_strategy") or "Die Loesungsstrategie wird aus den fachlichen Kernobjekten abgeleitet.",
+            "key_ideas": _list_of_text_items(sheet.get("solution_strategy"))
+            + [
+                {"description": f"{block['name']}: {block['responsibility']}"}
+                for block in sheet.get("building_blocks", [])
+            ],
+        },
+        "building_block_view": {
+            "summary": "Die Bausteinsicht beschreibt die fachlichen Django-Komponenten und ihre Verantwortlichkeiten.",
+            "building_blocks": sheet.get("building_blocks") or _analysis_building_blocks(analysis),
+        },
+        "runtime_view": {
+            "summary": (
+                "Die Laufzeitsicht dokumentiert nur architekturrelevante Szenarien aus den beschriebenen "
+                "Kernworkflows, nicht jeden moeglichen Bedienpfad."
+            ),
+            "scenarios": sheet.get("runtime_scenarios") or _analysis_runtime_scenarios(analysis),
+        },
+        "deployment_view": {
+            "summary": sheet.get("deployment_view") or "Deployment wird fuer lokale Tests und spaetere Produktion containerisierbar gehalten.",
+            "nodes": [
+                {
+                    "name": "Django Webprozess",
+                    "description": "Fuehrt Views, Templates, Forms, Services und ORM-Zugriffe aus.",
+                },
+                {
+                    "name": "Relationale Datenbank",
+                    "description": "Persistiert die fachlichen Kernobjekte der Anwendung.",
+                },
+            ],
+            "assumptions": sheet.get("assumptions") or [],
+        },
+        "crosscutting_concepts": {
+            "concepts": crosscutting_concepts,
+        },
+        "architecture_decisions": sheet.get("architecture_decisions") or [],
+        "quality_requirements": {
+            "quality_goals": sheet.get("quality_goals") or _analysis_quality_goals(analysis),
+            "quality_scenarios": sheet.get("acceptance_criteria") or _analysis_acceptance_criteria(analysis),
+        },
+        "risks_and_technical_debt": {
+            "risks": sheet.get("risks") or _list_of_risk_items(analysis.get("risks")),
+            "technical_debt": [
+                {"description": "Offene Fragen muessen vor Workorder-Erzeugung geklaert oder explizit als Annahme akzeptiert werden."}
+            ]
+            if sheet.get("open_questions")
+            else [],
+        },
+        "glossary": _build_arc42_glossary(sheet, analysis),
+    }
+
+
+def _build_arc42_glossary(sheet: Dict[str, Any], analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    glossary = []
+    for entity in _list_of_named_items(analysis.get("core_entities")):
+        glossary.append({"term": entity["name"], "definition": entity["description"]})
+    for block in sheet.get("building_blocks", []):
+        if not any(item["term"].lower() == block["name"].lower() for item in glossary):
+            glossary.append({"term": block["name"], "definition": block["responsibility"]})
+    return glossary or [{"term": sheet.get("artifact_name", "Anwendung"), "definition": sheet.get("business_goal", "Django-Anwendung im aktuellen Scope.")}]
 
 
 def _normalize_artifact_type(value: Any) -> str:
@@ -1300,9 +1653,9 @@ def _analysis_runtime_scenarios(analysis: Dict[str, Any]) -> List[Dict[str, List
             {
                 "name": workflow["name"],
                 "steps": [
-                    "Ein berechtigter Nutzer startet den Workflow in der Django-Weboberflaeche.",
+                    "Ein Nutzer startet den Workflow in der Django-Weboberflaeche.",
                     workflow["description"],
-                    "Das System validiert Eingaben, Berechtigungen und fachliche Regeln.",
+                    "Das System validiert Eingaben und fachliche Regeln.",
                     "Die Anwendung speichert den neuen Zustand und zeigt das Ergebnis nachvollziehbar an.",
                 ],
             }

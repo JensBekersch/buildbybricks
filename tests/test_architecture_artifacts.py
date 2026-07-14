@@ -23,6 +23,20 @@ def test_file_architecture_artifact_store_writes_json_and_markdown(tmp_path: Pat
             "artifact_name": "Team Todo",
             "business_goal": "Aufgaben im Team sichtbar machen.",
             "building_blocks": [{"name": "Aufgabe", "responsibility": "Speichert Aufgaben."}],
+            "arc42": {
+                "introduction_and_goals": {"summary": "Aufgaben im Team sichtbar machen."},
+                "constraints": {"constraints": [{"description": "Django."}]},
+                "context_and_scope": {"in_scope": [{"description": "Aufgabenliste."}]},
+                "solution_strategy": {"summary": "Serverseitige Django-App."},
+                "building_block_view": {"building_blocks": [{"name": "Aufgabe", "responsibility": "Speichert Aufgaben."}]},
+                "runtime_view": {"scenarios": [{"name": "Aufgabe erfassen", "steps": ["Eingeben.", "Speichern."]}]},
+                "deployment_view": {"summary": "Containerisiertes Deployment."},
+                "crosscutting_concepts": {"concepts": [{"name": "Validierung", "description": "Status pruefen."}]},
+                "architecture_decisions": [{"id": "ADR-001", "decision": "Django.", "rationale": "Passt.", "status": "proposed"}],
+                "quality_requirements": {"quality_goals": [{"name": "Tests", "scenario": "Coverage.", "priority": "high"}]},
+                "risks_and_technical_debt": {"risks": [{"description": "Scope unklar.", "mitigation": "Review."}]},
+                "glossary": [{"term": "Aufgabe", "definition": "Ein zu erledigender Eintrag."}],
+            },
         },
         "schema_id": "software-factory.architecture-sheet.v1",
         "validation": {"valid": True},
@@ -42,7 +56,8 @@ def test_file_architecture_artifact_store_writes_json_and_markdown(tmp_path: Pat
     assert payload["artifact"]["job_id"] == "job-1"
     assert payload["result"]["architecture_sheet"]["artifact_name"] == "Team Todo"
     assert "# Team Todo" in markdown
-    assert "## Bausteine" in markdown
+    assert "## 5. Bausteinsicht" in markdown
+    assert "## 12. Glossar" in markdown
 
 
 def test_file_architecture_artifact_store_lists_and_loads_payload(tmp_path: Path) -> None:

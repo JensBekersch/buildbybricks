@@ -166,6 +166,10 @@ def _render_markdown(
         "",
     ]
 
+    if isinstance(sheet.get("arc42"), dict):
+        lines.extend(_render_arc42_markdown(sheet["arc42"]))
+        return "\n".join(lines).rstrip() + "\n"
+
     sections = [
         ("Architecture Drivers", sheet.get("architecture_drivers") or sheet.get("drivers") or []),
         ("Qualitaetsziele", sheet.get("quality_goals") or []),
@@ -186,6 +190,31 @@ def _render_markdown(
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_arc42_markdown(arc42: Dict[str, Any]) -> List[str]:
+    lines: List[str] = []
+    sections = [
+        ("1. Einfuehrung & Ziele", arc42.get("introduction_and_goals")),
+        ("2. Randbedingungen", arc42.get("constraints")),
+        ("3. Kontext & Abgrenzung", arc42.get("context_and_scope")),
+        ("4. Loesungsstrategie", arc42.get("solution_strategy")),
+        ("5. Bausteinsicht", arc42.get("building_block_view")),
+        ("6. Laufzeitsicht", arc42.get("runtime_view")),
+        ("7. Verteilungssicht", arc42.get("deployment_view")),
+        ("8. Querschnittliche Konzepte", arc42.get("crosscutting_concepts")),
+        ("9. Architekturentscheidungen", arc42.get("architecture_decisions")),
+        ("10. Qualitaetsanforderungen", arc42.get("quality_requirements")),
+        ("11. Risiken & Technische Schulden", arc42.get("risks_and_technical_debt")),
+        ("12. Glossar", arc42.get("glossary")),
+    ]
+
+    for heading, value in sections:
+        lines.extend([f"## {heading}", ""])
+        lines.extend(_markdown_lines(value))
+        lines.append("")
+
+    return lines
 
 
 def _markdown_lines(value: Any) -> List[str]:

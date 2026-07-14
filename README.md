@@ -38,6 +38,7 @@ Der erste Contract liegt unter:
 - `apps/software-factory/architecture_sheet.schema.json`
 - `apps/software-factory/app_profile.json`
 - `data/software-factory/architecture-method/arc42_architecture_sheet.md`
+- `data/software-factory/architecture-method/arc42_sections.json`
 - `data/software-factory/architecture-method/description_to_sheet_mapping.md`
 - `data/software-factory/architecture-method/django_building_blocks.md`
 - `data/software-factory/architecture-method/quality_goals_catalog.md`
@@ -45,15 +46,18 @@ Der erste Contract liegt unter:
 - `apps/software-factory/examples/good_architecture_sheet.json`
 - `apps/software-factory/examples/bad_architecture_sheet.md`
 
-Das Architecture Sheet ist bewusst ein maschinenlesbares Zwischenformat. Es ist
-kein vollstaendiges arc42-Dokument, sondern der spaetere Uebergabepunkt zwischen
+Das Architecture Sheet ist bewusst ein maschinenlesbares Zwischenformat und
+enthaelt ab `schema_version` `1.0.0` ein vollstaendiges `arc42`-Objekt mit den
+12 arc42-Kapiteln. Es bleibt zugleich der spaetere Uebergabepunkt zwischen
 Architektur-Agent, Workorder-Agenten und Implementierungs-Agenten.
 
 Der aktuelle Contract ist `schema_version` `1.0.0`. Er enthaelt neben den
-arc42-orientierten Kernabschnitten auch Architecture Drivers,
-Architecture Decisions, Acceptance Criteria und einen Readiness-Status. Damit
-ist das Sheet nicht nur Dokumentation, sondern ein pruefbarer Arbeitsvertrag fuer
-Folgeagenten.
+arc42-Kapiteln auch weiterhin maschinenlesbare Arbeitsfelder wie Architecture
+Drivers, Architecture Decisions, Acceptance Criteria und einen Readiness-Status.
+Der Requirement Analyst trennt `in_scope`, `out_of_scope` und `not_evidenced`;
+Synthesizer, Reviewer und Korrekturlauf duerfen nur belegten Scope als
+Architektur verwenden. Damit ist das Sheet nicht nur Dokumentation, sondern ein
+pruefbarer Arbeitsvertrag fuer Folgeagenten.
 
 Die Generator-API ist job-basiert. Der synchrone Endpunkt wurde entfernt, damit
 Langlauf-Agenten nicht hinter einem blockierenden HTTP-Request versteckt werden.

@@ -123,39 +123,38 @@ Docker Compose mounts `./data` as writable so uploaded knowledge is persisted on
 the host during local experiments. `./apps` and `./template` stay read-only
 because app configuration should remain an explicit file change for now.
 
-The Software Factory architecture-sheet endpoint accepts:
+The Software Factory architecture-sheet workflow is job-based. Create a job with:
 
 ```json
 {
-  "description": "A Django application for customers, offers, approvals, and PDF exports.",
-  "use_llm": true
+  "description": "Eine Django-Anwendung fuer Kunden, Angebote, Freigaben und PDF-Exporte.",
+  "generation_mode": "agentic_with_review"
 }
 ```
 
-It returns a schema-shaped `architecture_sheet`, validation metadata, method
-sources, trace steps, and generation metadata. The generator first creates a
-deterministic base sheet. When a structured LLM provider such as Ollama is
-configured, the LLM can enrich the sheet as JSON. Only known schema fields are
-merged back, and validation still decides whether the result is usable. If LLM
-generation fails, the deterministic sheet remains the fallback.
-
-`use_llm` is optional. If it is omitted, the endpoint uses:
-
-```env
-AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED=false
+```text
+POST /apps/software-factory/architecture-sheet/jobs
+GET  /apps/software-factory/architecture-sheet/jobs/{job_id}
+GET  /apps/software-factory/architecture-sheet/jobs/{job_id}/events
 ```
 
-Keep this disabled for fast deterministic runs. Enable it when you want the
-configured LLM provider to enrich the generated sheet.
+The result contains a schema-shaped `architecture_sheet`, validation metadata,
+method sources, trace steps, and generation metadata. The workflow requires a
+structured LLM provider; it does not create a generic deterministic fallback
+sheet. `agentic_with_review` runs Requirement Analyst, Architecture Synthesizer,
+Architecture Reviewer, and up to two correction passes.
 
 The current architecture-sheet contract is `schema_version` `1.0.0`. It includes
-architecture drivers, explicit architecture decisions, acceptance criteria, and a
-readiness status so later workorder agents can consume the sheet predictably.
+architecture drivers, explicit architecture decisions, acceptance criteria, a
+readiness status, and a complete `arc42` object with all 12 chapters. The
+Requirement Analyst separates `in_scope`, `out_of_scope`, and `not_evidenced`;
+only `in_scope` and concrete `core_facts` may become architecture content.
 
 The Software Factory method collection lives under
 `data/software-factory/architecture-method/`. It contains the arc42 overview,
-description-to-sheet mapping rules, Django building-block guidance, a
-quality-goal catalog, and risk/review rules.
+the structured `arc42_sections.json` reference, description-to-sheet mapping
+rules, Django building-block guidance, a quality-goal catalog, and risk/review
+rules.
 
 ## Embedding Providers
 

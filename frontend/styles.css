@@ -606,39 +606,40 @@ textarea {
 
 .sheet-sections {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px;
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding: 8px 22px 22px;
 }
 
 .sheet-section {
   min-width: 0;
-  border: 1px solid #e1e6ee;
-  border-radius: 8px;
-  padding: 13px;
-  background: #ffffff;
+  border-top: 1px solid #e1e6ee;
+  padding: 18px 0;
+  background: transparent;
 }
 
 .sheet-section h3 {
-  margin: 0 0 9px;
-  font-size: 14px;
+  margin: 0 0 10px;
+  font-size: 18px;
   line-height: 1.25;
   color: #18212d;
 }
 
 .sheet-section p {
   margin: 0;
+  line-height: 1.55;
   color: #475263;
 }
 
 .sheet-list {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   margin: 0;
-  padding-left: 18px;
+  padding-left: 22px;
 }
 
 .sheet-list li {
+  line-height: 1.5;
   color: #475263;
 }
 
