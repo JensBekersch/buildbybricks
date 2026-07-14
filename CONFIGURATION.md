@@ -124,13 +124,26 @@ The Software Factory architecture-sheet endpoint accepts:
 
 ```json
 {
-  "description": "A Django application for customers, offers, approvals, and PDF exports."
+  "description": "A Django application for customers, offers, approvals, and PDF exports.",
+  "use_llm": true
 }
 ```
 
 It returns a schema-shaped `architecture_sheet`, validation metadata, method
-sources, and trace steps. The current generator is deterministic so local tests
-remain stable.
+sources, trace steps, and generation metadata. The generator first creates a
+deterministic base sheet. When a structured LLM provider such as Ollama is
+configured, the LLM can enrich the sheet as JSON. Only known schema fields are
+merged back, and validation still decides whether the result is usable. If LLM
+generation fails, the deterministic sheet remains the fallback.
+
+`use_llm` is optional. If it is omitted, the endpoint uses:
+
+```env
+AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED=false
+```
+
+Keep this disabled for fast deterministic runs. Enable it when you want the
+configured LLM provider to enrich the generated sheet.
 
 The current architecture-sheet contract is `schema_version` `1.0.0`. It includes
 architecture drivers, explicit architecture decisions, acceptance criteria, and a
@@ -160,7 +173,9 @@ Use `http://ollama:11434` when Ollama runs as the second Compose service. Use `h
 
 ## LLM Providers
 
-LLM configuration supports the deterministic answer composer and Ollama chat generation.
+LLM configuration supports the deterministic answer composer, Ollama chat
+generation, and Ollama JSON generation for the Software Factory architecture
+sheet endpoint.
 
 Current default:
 

@@ -3,10 +3,11 @@
 from dataclasses import dataclass
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from agentic_rag_template.applications import ApplicationInstance
 from agentic_rag_template.ingestion import load_documents
+from agentic_rag_template.llm.models import LLMProvider
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class ArchitectureSheetResult:
     validation: Dict[str, Any]
     sources: List[Dict[str, Any]]
     trace: List[str]
+    generation: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -26,29 +28,60 @@ class ArchitectureSheetResult:
             "validation": self.validation,
             "sources": self.sources,
             "trace": self.trace,
+            "generation": self.generation,
         }
 
 
-def generate_architecture_sheet(description: str, application: ApplicationInstance) -> ArchitectureSheetResult:
+def generate_architecture_sheet(
+    description: str,
+    application: ApplicationInstance,
+    llm_provider: Optional[LLMProvider] = None,
+) -> ArchitectureSheetResult:
     """Create a schema-shaped architecture sheet from a free-form description."""
     normalized_description = " ".join(description.strip().split())
     schema = _load_schema(application)
     sources = _load_method_sources(application)
-    sheet = _build_sheet(normalized_description)
+    base_sheet = _build_sheet(normalized_description)
+    sheet = base_sheet
+    trace = [
+        "validated_description",
+        "loaded_architecture_sheet_schema",
+        "loaded_architecture_method_sources",
+        "generated_django_architecture_sheet",
+    ]
+    generation = {
+        "mode": "deterministic",
+        "llm_provider": getattr(llm_provider, "name", "none") if llm_provider else "none",
+        "llm_model": getattr(llm_provider, "model", "none") if llm_provider else "none",
+        "warnings": [],
+    }
+
+    llm_sheet = _try_generate_llm_sheet(
+        description=normalized_description,
+        base_sheet=base_sheet,
+        schema=schema,
+        method_sources=sources,
+        llm_provider=llm_provider,
+    )
+
+    if llm_sheet["sheet"] is not None:
+        sheet = _merge_known_schema_fields(base_sheet, llm_sheet["sheet"], schema)
+        generation["mode"] = "llm-assisted"
+        trace.append("generated_llm_architecture_sheet")
+    elif llm_sheet["warning"]:
+        generation["warnings"].append(llm_sheet["warning"])
+        trace.append("skipped_or_failed_llm_architecture_sheet")
+
     validation = _validate_required_fields(sheet, schema)
+    trace.append("validated_architecture_sheet_contract")
 
     return ArchitectureSheetResult(
         sheet=sheet,
         schema_id=str(schema.get("$id", "")),
         validation=validation,
         sources=sources,
-        trace=[
-            "validated_description",
-            "loaded_architecture_sheet_schema",
-            "loaded_architecture_method_sources",
-            "generated_django_architecture_sheet",
-            "validated_architecture_sheet_contract",
-        ],
+        trace=trace,
+        generation=generation,
     )
 
 
@@ -71,6 +104,98 @@ def _load_method_sources(application: ApplicationInstance) -> List[Dict[str, Any
         }
         for document in documents
     ]
+
+
+def _try_generate_llm_sheet(
+    description: str,
+    base_sheet: Dict[str, Any],
+    schema: Dict[str, Any],
+    method_sources: List[Dict[str, Any]],
+    llm_provider: Optional[LLMProvider],
+) -> Dict[str, Any]:
+    if llm_provider is None or llm_provider.name == "deterministic":
+        return {"sheet": None, "warning": ""}
+
+    generate_json = getattr(llm_provider, "generate_json", None)
+
+    if not callable(generate_json):
+        return {
+            "sheet": None,
+            "warning": f"LLM provider '{llm_provider.name}' does not support structured JSON generation.",
+        }
+
+    try:
+        candidate = generate_json(
+            system_prompt=_build_architecture_sheet_system_prompt(),
+            user_prompt=_build_architecture_sheet_user_prompt(
+                description=description,
+                base_sheet=base_sheet,
+                schema=schema,
+                method_sources=method_sources,
+            ),
+        )
+    except Exception as error:
+        return {"sheet": None, "warning": f"LLM generation failed: {error}"}
+
+    if not isinstance(candidate, dict):
+        return {"sheet": None, "warning": "LLM generation did not return a JSON object."}
+
+    sheet = candidate.get("architecture_sheet", candidate)
+
+    if not isinstance(sheet, dict):
+        return {"sheet": None, "warning": "LLM architecture sheet payload is not an object."}
+
+    return {"sheet": sheet, "warning": ""}
+
+
+def _build_architecture_sheet_system_prompt() -> str:
+    return "\n".join(
+        [
+            "Du bist ein Software-Architektur-Agent fuer Django-Applikationen.",
+            "Erzeuge ausschliesslich valides JSON.",
+            "Halte dich an das bereitgestellte Architecture-Sheet-Schema.",
+            "Erfinde keine unbekannten Fakten. Nutze assumptions und open_questions fuer Unsicherheit.",
+            "Behalte schema_version 1.0.0 bei.",
+        ]
+    )
+
+
+def _build_architecture_sheet_user_prompt(
+    description: str,
+    base_sheet: Dict[str, Any],
+    schema: Dict[str, Any],
+    method_sources: List[Dict[str, Any]],
+) -> str:
+    return "\n\n".join(
+        [
+            f"Beschreibung:\n{description}",
+            f"Schema:\n{json.dumps(schema, ensure_ascii=True)}",
+            f"Methodenquellen:\n{json.dumps(method_sources, ensure_ascii=True)}",
+            f"Deterministisches Basissheet zum Verbessern:\n{json.dumps(base_sheet, ensure_ascii=True)}",
+            (
+                "Aufgabe: Gib ein vollstaendiges JSON-Objekt fuer das Architecture Sheet zurueck. "
+                "Keine Markdown-Zaunbloecke, keine Erklaerung ausserhalb von JSON."
+            ),
+        ]
+    )
+
+
+def _merge_known_schema_fields(
+    base_sheet: Dict[str, Any],
+    candidate_sheet: Dict[str, Any],
+    schema: Dict[str, Any],
+) -> Dict[str, Any]:
+    known_fields = set(schema.get("properties", {}).keys())
+    merged = dict(base_sheet)
+
+    for field in known_fields:
+        value = candidate_sheet.get(field)
+
+        if value not in (None, "", [], {}):
+            merged[field] = value
+
+    merged["schema_version"] = "1.0.0"
+    return merged
 
 
 def _build_sheet(description: str) -> Dict[str, Any]:

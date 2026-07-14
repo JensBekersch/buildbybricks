@@ -28,6 +28,7 @@ class Settings:
     llm_api_key: str = ""
     llm_timeout_seconds: int = 300
     llm_max_tokens: int = 160
+    architecture_llm_enabled: bool = False
     debug: bool = True
 
     @classmethod
@@ -58,5 +59,8 @@ class Settings:
             llm_api_key=os.getenv("AGENTIC_RAG_LLM_API_KEY", ""),
             llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "300")),
             llm_max_tokens=int(os.getenv("AGENTIC_RAG_LLM_MAX_TOKENS", "160")),
+            architecture_llm_enabled=(
+                os.getenv("AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED", "false").lower() == "true"
+            ),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )

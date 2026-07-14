@@ -50,6 +50,31 @@ class OllamaLLMProvider:
             trace=["ollama_chat_completed"],
         )
 
+    def generate_json(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        """Generate a structured JSON object through Ollama."""
+        response = self._post_chat(
+            build_json_payload(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model=self.model,
+                max_tokens=max(self.max_tokens, 2048),
+            )
+        )
+        content = str(response.get("message", {}).get("content", "")).strip()
+
+        if not content:
+            raise RuntimeError("Ollama returned an empty JSON response")
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as error:
+            raise RuntimeError("Ollama returned invalid JSON") from error
+
+        if not isinstance(payload, dict):
+            raise RuntimeError("Ollama returned JSON that is not an object")
+
+        return payload
+
     def _post_chat(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
@@ -88,6 +113,34 @@ def build_payload(request_payload: LLMRequest, model: str, max_tokens: int = 160
             {
                 "role": "user",
                 "content": build_user_prompt(request_payload),
+            },
+        ],
+    }
+
+
+def build_json_payload(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    max_tokens: int = 2048,
+) -> Dict[str, Any]:
+    """Build an Ollama chat payload that requests a JSON object."""
+    return {
+        "model": model,
+        "stream": False,
+        "format": "json",
+        "options": {
+            "temperature": 0.1,
+            "num_predict": max_tokens,
+        },
+        "messages": [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
             },
         ],
     }

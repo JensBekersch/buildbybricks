@@ -61,13 +61,22 @@ Beispiel:
 
 ```json
 {
-  "description": "Eine Django-App fuer Kunden, Angebote, Freigaben und PDF-Exporte."
+  "description": "Eine Django-App fuer Kunden, Angebote, Freigaben und PDF-Exporte.",
+  "use_llm": true
 }
 ```
 
-Die Antwort enthaelt `architecture_sheet`, `validation`, `sources` und `trace`.
-Der Generator ist in dieser Stufe deterministisch und schema-basiert; spaeter
-kann ein LLM die Struktur anreichern, ohne den API-Vertrag zu brechen.
+Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
+`generation`. Der Generator erzeugt zuerst ein deterministisches Basissheet. Wenn
+ein strukturfaehiger LLM-Provider wie Ollama konfiguriert ist, darf das LLM das
+Sheet als JSON anreichern. Danach werden nur bekannte Schemafelder uebernommen
+und der Contract wird erneut validiert. Bei LLM-Fehlern bleibt das
+deterministische Sheet als Fallback erhalten.
+
+`use_llm` ist optional. Ohne diese Angabe nutzt der Endpoint die Einstellung
+`AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED`, die standardmaessig `false` ist. So
+bleibt der Workflow schnell und stabil, waehrend Ollama gezielt fuer
+LLM-Anreicherung zugeschaltet werden kann.
 
 ## Grundkonstrukt
 
