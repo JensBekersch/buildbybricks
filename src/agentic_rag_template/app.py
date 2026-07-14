@@ -5,6 +5,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+import re
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -15,9 +16,14 @@ from agentic_rag_template.config import Settings
 from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.evaluation import EvaluationRunner
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
+from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.template_config import load_application_profile
+
+
+SAFE_COLLECTION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+SAFE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]*$")
 
 
 def create_app_settings() -> Settings:
@@ -59,6 +65,23 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/collections":
                 self._send_json(self._list_collections(application))
+                return
+
+            documents_collection = self._parse_collection_documents_route(app_route["remainder"])
+            if documents_collection is not None:
+                self._send_json(self._list_documents(application, documents_collection))
+                return
+
+            if app_route["remainder"] == "/ingestion/preview":
+                self._send_json(self._preview_ingestion(parsed_url.query, application))
+                return
+
+            if app_route["remainder"] == "/vector-store/preview":
+                self._send_json(self._preview_vector_search(parsed_url.query, application))
+                return
+
+            if app_route["remainder"] == "/retrieval/search":
+                self._send_json(self._search_retriever(parsed_url.query, application))
                 return
 
             if app_route["remainder"] == "/evaluation/run":
@@ -106,6 +129,21 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             self._send_chat_response(application)
             return
+
+        if app_route:
+            documents_collection = self._parse_collection_documents_route(app_route["remainder"])
+            if documents_collection is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                upload_response = self._upload_document(application, documents_collection)
+
+                if upload_response is not None:
+                    self._send_json(upload_response, status=HTTPStatus.CREATED)
+
+                return
 
         if parsed_url.path != "/chat":
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
@@ -207,6 +245,63 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             )
 
         return {"collections": collections}
+
+    def _list_documents(self, application: ApplicationInstance, collection: str) -> Dict[str, Any]:
+        if not self._is_safe_collection_name(collection):
+            return {"error": "collection contains unsupported characters"}
+
+        documents = load_documents(application.data_dir, collection=collection)
+        return {
+            "app_id": application.id,
+            "collection": collection,
+            "document_count": len(documents),
+            "documents": [
+                {
+                    "title": document.title,
+                    "filename": document.path.name,
+                    "relative_path": document.relative_path.as_posix(),
+                    "extension": document.path.suffix.lower(),
+                    "char_count": len(document.content),
+                }
+                for document in documents
+            ],
+        }
+
+    def _upload_document(
+        self, application: ApplicationInstance, collection: str
+    ) -> Optional[Dict[str, Any]]:
+        if not self._is_safe_collection_name(collection):
+            self.send_error(HTTPStatus.BAD_REQUEST, "collection contains unsupported characters")
+            return None
+
+        payload = self._read_json_body()
+        filename = str(payload.get("filename", "")).strip()
+        content = str(payload.get("content", "")).strip()
+
+        if not filename:
+            self.send_error(HTTPStatus.BAD_REQUEST, "filename is required")
+            return None
+
+        if not content:
+            self.send_error(HTTPStatus.BAD_REQUEST, "content is required")
+            return None
+
+        if not self._is_safe_filename(filename):
+            self.send_error(HTTPStatus.BAD_REQUEST, "filename contains unsupported characters")
+            return None
+
+        target_dir = application.data_dir / collection
+        target_path = target_dir / filename
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(f"{content}\n", encoding="utf-8")
+
+        return {
+            "app_id": application.id,
+            "collection": collection,
+            "filename": filename,
+            "relative_path": target_path.relative_to(application.data_dir).as_posix(),
+            "char_count": len(content),
+        }
 
     def _preview_ingestion(self, query: str, application: ApplicationInstance) -> Dict[str, Any]:
         params = parse_qs(query)
@@ -325,6 +420,26 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         remainder = "" if len(parts) == 3 else f"/{parts[3]}"
         return {"app_id": parts[2], "remainder": remainder}
+
+    def _parse_collection_documents_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 3 and parts[0] == "collections" and parts[2] == "documents":
+            return parts[1]
+
+        return None
+
+    def _is_safe_collection_name(self, collection: str) -> bool:
+        return bool(SAFE_COLLECTION_PATTERN.fullmatch(collection))
+
+    def _is_safe_filename(self, filename: str) -> bool:
+        path = Path(filename)
+        return (
+            path.name == filename
+            and ".." not in path.parts
+            and bool(SAFE_FILENAME_PATTERN.fullmatch(filename))
+            and path.suffix.lower() in SUPPORTED_EXTENSIONS
+        )
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
