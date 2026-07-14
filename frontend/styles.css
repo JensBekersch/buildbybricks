@@ -425,6 +425,18 @@ textarea {
   content: "OK";
 }
 
+.progress-steps li[data-state="failed"] {
+  color: #8a2d2d;
+  font-weight: 700;
+}
+
+.progress-steps li[data-state="failed"]::before {
+  border-color: #d28a8a;
+  color: #8a2d2d;
+  background: #fff0f0;
+  content: "!";
+}
+
 .panel-kicker {
   margin: 0 0 4px;
   font-size: 11px;
