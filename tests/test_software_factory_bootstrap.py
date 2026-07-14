@@ -116,6 +116,21 @@ def test_software_factory_architecture_sheet_schema_has_required_contract() -> N
         "open_questions",
         "assumptions",
         "readiness",
+        "arc42",
+    }
+    assert set(schema["$defs"]["arc42_document"]["required"]) == {
+        "introduction_and_goals",
+        "constraints",
+        "context_and_scope",
+        "solution_strategy",
+        "building_block_view",
+        "runtime_view",
+        "deployment_view",
+        "crosscutting_concepts",
+        "architecture_decisions",
+        "quality_requirements",
+        "risks_and_technical_debt",
+        "glossary",
     }
 
 

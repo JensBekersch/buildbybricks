@@ -58,7 +58,7 @@
     {
       "name": "Offers",
       "responsibility": "Angebote verwalten.",
-      "django_mapping": "Django app `offers` with models, services and views."
+      "django_mapping": "Django-App `offers` mit Models, Services und Views."
     }
   ],
   "runtime_scenarios": [
@@ -100,5 +100,193 @@
   "readiness": {
     "status": "ready-for-review",
     "summary": "Strukturell vollstaendig, aber noch nicht fachlich freigegeben."
+  },
+  "arc42": {
+    "introduction_and_goals": {
+      "summary": "Angebote koennen strukturiert erstellt, geprueft, freigegeben und exportiert werden.",
+      "goals": [
+        {
+          "description": "Angebote werden nachvollziehbar erstellt, geprueft und freigegeben."
+        }
+      ],
+      "stakeholders": [
+        {
+          "name": "Vertrieb",
+          "description": "Erstellt und bearbeitet Angebote."
+        }
+      ],
+      "quality_goals": [
+        {
+          "name": "Nachvollziehbarkeit",
+          "scenario": "Eine Freigabeentscheidung kann spaeter mit Nutzer und Zeitpunkt rekonstruiert werden.",
+          "priority": "high"
+        }
+      ],
+      "non_goals": [
+        {
+          "description": "Nicht beschriebene externe CRM-Integrationen sind nicht Teil des aktuellen Scopes."
+        }
+      ]
+    },
+    "constraints": {
+      "constraints": [
+        {
+          "description": "Umsetzung als Django-Applikation."
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Eine relationale Datenbank ist ausreichend."
+        }
+      ],
+      "open_questions": [
+        {
+          "description": "Welche Freigabestufen gibt es?"
+        }
+      ]
+    },
+    "context_and_scope": {
+      "business_context": {
+        "users": [
+          {
+            "name": "Authentifizierte Nutzer",
+            "description": "Arbeiten rollenbasiert mit Angeboten."
+          }
+        ],
+        "external_systems": [],
+        "interfaces": [
+          {
+            "name": "Web UI",
+            "type": "web-ui",
+            "description": "Oberflaeche fuer Angebotserstellung und Freigabe."
+          }
+        ]
+      },
+      "technical_context": [
+        {
+          "name": "Web UI",
+          "type": "web-ui",
+          "description": "Oberflaeche fuer Angebotserstellung und Freigabe."
+        }
+      ],
+      "in_scope": [
+        {
+          "description": "Kunden, Angebote und Freigaben werden im Django-System verwaltet."
+        }
+      ],
+      "out_of_scope": [
+        {
+          "description": "Externe CRM-Integrationen sind nicht belegt."
+        }
+      ],
+      "not_evidenced": [
+        {
+          "description": "Mobile App"
+        }
+      ]
+    },
+    "solution_strategy": {
+      "summary": "Modularer Django-Schnitt mit getrennten Apps fuer Kunden, Angebote und Freigaben.",
+      "key_ideas": [
+        {
+          "description": "Fachliche Kernobjekte werden in Django Apps mit Models, Services und Views getrennt."
+        }
+      ]
+    },
+    "building_block_view": {
+      "summary": "Die Bausteine bilden die fachlichen Module der Angebotsverwaltung ab.",
+      "building_blocks": [
+        {
+          "name": "Offers",
+          "responsibility": "Angebote verwalten.",
+          "django_mapping": "Django-App `offers` mit Models, Services und Views."
+        }
+      ]
+    },
+    "runtime_view": {
+      "summary": "Die Laufzeitsicht beschreibt architekturrelevante Freigabeablaeufe.",
+      "scenarios": [
+        {
+          "name": "Angebot freigeben",
+          "steps": [
+            "Vertrieb reicht Angebot ein.",
+            "Management entscheidet.",
+            "System speichert Entscheidung im Audit-Trail."
+          ]
+        }
+      ]
+    },
+    "deployment_view": {
+      "summary": "Containerisierte Django-App mit relationaler Datenbank.",
+      "nodes": [
+        {
+          "name": "Django Webprozess",
+          "description": "Fuehrt Web UI, Services und ORM-Zugriffe aus."
+        },
+        {
+          "name": "Relationale Datenbank",
+          "description": "Persistiert Kunden, Angebote und Freigaben."
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Eine relationale Datenbank ist ausreichend."
+        }
+      ]
+    },
+    "crosscutting_concepts": {
+      "concepts": [
+        {
+          "name": "Auditierbarkeit",
+          "description": "Freigabeentscheidungen werden nachvollziehbar gespeichert."
+        }
+      ]
+    },
+    "architecture_decisions": [
+      {
+        "id": "ADR-001",
+        "decision": "Freigaben werden als eigene Django App modelliert.",
+        "rationale": "Der Workflow ist fachlich eigenstaendig und braucht eigene Tests.",
+        "status": "proposed"
+      }
+    ],
+    "quality_requirements": {
+      "quality_goals": [
+        {
+          "name": "Nachvollziehbarkeit",
+          "scenario": "Eine Freigabeentscheidung kann spaeter mit Nutzer und Zeitpunkt rekonstruiert werden.",
+          "priority": "high"
+        }
+      ],
+      "quality_scenarios": [
+        {
+          "description": "Freigabe-Workflow ist als Runtime-Szenario beschrieben.",
+          "verification": "Sheet enthaelt ein Szenario mit Freigabeschritten."
+        }
+      ]
+    },
+    "risks_and_technical_debt": {
+      "risks": [
+        {
+          "description": "Rollenmatrix ist noch unklar.",
+          "mitigation": "Rollen vor Workorder-Erzeugung klaeren."
+        }
+      ],
+      "technical_debt": [
+        {
+          "description": "Freigabestufen muessen vor Workorder-Erzeugung konkretisiert werden."
+        }
+      ]
+    },
+    "glossary": [
+      {
+        "term": "Angebot",
+        "definition": "Fachliches Dokument, das erstellt, geprueft und freigegeben wird."
+      },
+      {
+        "term": "Freigabe",
+        "definition": "Nachvollziehbare Entscheidung ueber ein Angebot."
+      }
+    ]
   }
 }

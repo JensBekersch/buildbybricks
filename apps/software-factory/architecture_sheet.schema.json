@@ -27,7 +27,8 @@
     "risks",
     "open_questions",
     "assumptions",
-    "readiness"
+    "readiness",
+    "arc42"
   ],
   "properties": {
     "schema_version": {
@@ -210,9 +211,344 @@
           "minLength": 1
         }
       }
+    },
+    "arc42": {
+      "$ref": "#/$defs/arc42_document"
     }
   },
   "$defs": {
+    "arc42_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "introduction_and_goals",
+        "constraints",
+        "context_and_scope",
+        "solution_strategy",
+        "building_block_view",
+        "runtime_view",
+        "deployment_view",
+        "crosscutting_concepts",
+        "architecture_decisions",
+        "quality_requirements",
+        "risks_and_technical_debt",
+        "glossary"
+      ],
+      "properties": {
+        "introduction_and_goals": {
+          "$ref": "#/$defs/arc42_introduction_and_goals"
+        },
+        "constraints": {
+          "$ref": "#/$defs/arc42_constraints"
+        },
+        "context_and_scope": {
+          "$ref": "#/$defs/arc42_context_and_scope"
+        },
+        "solution_strategy": {
+          "$ref": "#/$defs/arc42_solution_strategy"
+        },
+        "building_block_view": {
+          "$ref": "#/$defs/arc42_building_block_view"
+        },
+        "runtime_view": {
+          "$ref": "#/$defs/arc42_runtime_view"
+        },
+        "deployment_view": {
+          "$ref": "#/$defs/arc42_deployment_view"
+        },
+        "crosscutting_concepts": {
+          "$ref": "#/$defs/arc42_crosscutting_concepts"
+        },
+        "architecture_decisions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/architecture_decision"
+          }
+        },
+        "quality_requirements": {
+          "$ref": "#/$defs/arc42_quality_requirements"
+        },
+        "risks_and_technical_debt": {
+          "$ref": "#/$defs/arc42_risks_and_technical_debt"
+        },
+        "glossary": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/glossary_item"
+          }
+        }
+      }
+    },
+    "arc42_introduction_and_goals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "goals",
+        "stakeholders",
+        "quality_goals",
+        "non_goals"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        },
+        "stakeholders": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "quality_goals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/quality_goal"
+          }
+        },
+        "non_goals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
+    "arc42_constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraints",
+        "assumptions",
+        "open_questions"
+      ],
+      "properties": {
+        "constraints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
+    "arc42_context_and_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "business_context",
+        "technical_context",
+        "in_scope",
+        "out_of_scope",
+        "not_evidenced"
+      ],
+      "properties": {
+        "business_context": {
+          "$ref": "#/$defs/context"
+        },
+        "technical_context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interface_item"
+          }
+        },
+        "in_scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        },
+        "not_evidenced": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
+    "arc42_solution_strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "key_ideas"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key_ideas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
+    "arc42_building_block_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "building_blocks"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "building_blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/building_block"
+          }
+        }
+      }
+    },
+    "arc42_runtime_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "scenarios"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenarios": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/runtime_scenario"
+          }
+        }
+      }
+    },
+    "arc42_deployment_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "nodes",
+        "assumptions"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
+    "arc42_crosscutting_concepts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "concepts"
+      ],
+      "properties": {
+        "concepts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        }
+      }
+    },
+    "arc42_quality_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quality_goals",
+        "quality_scenarios"
+      ],
+      "properties": {
+        "quality_goals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/quality_goal"
+          }
+        },
+        "quality_scenarios": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/acceptance_criterion"
+          }
+        }
+      }
+    },
+    "arc42_risks_and_technical_debt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "risks",
+        "technical_debt"
+      ],
+      "properties": {
+        "risks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/risk"
+          }
+        },
+        "technical_debt": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_item"
+          }
+        }
+      }
+    },
     "architecture_driver": {
       "type": "object",
       "additionalProperties": false,
@@ -374,6 +710,56 @@
         "description": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "users",
+        "external_systems",
+        "interfaces"
+      ],
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "external_systems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interface_item"
+          }
+        }
+      }
+    },
+    "glossary_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "term",
+        "definition"
+      ],
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 1
+        },
+        "definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string"
         }
       }
     },

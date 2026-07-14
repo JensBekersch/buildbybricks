@@ -20,6 +20,9 @@ Sheets der Software Factory.
 Ein Architecture Sheet ist reviewfaehig, wenn:
 
 - alle Pflichtfelder gefuellt sind,
+- alle 12 arc42-Kapitel vorhanden und fachlich gefuellt sind,
+- `in_scope`, `out_of_scope` und `not_evidenced` aus der Requirement-Analyse
+  nachvollziehbar in Kontext und Abgrenzung sichtbar sind,
 - Django Building Blocks fachlich nachvollziehbar sind,
 - Architecture Decisions mit Begruendung vorhanden sind,
 - Risiken jeweils eine Mitigation besitzen,
@@ -32,8 +35,17 @@ Ein Sheet ist nicht reviewfaehig, wenn:
 - es nur generische Aussagen enthaelt,
 - es keine offenen Fragen nennt,
 - es unbekannte Integrationen erfindet,
+- es Inhalte aus `out_of_scope` oder `not_evidenced` als aktuelle Architektur
+  verwendet,
+- es Begriffe wie Projektmanagement, Cloud, Team-Zuordnung, Loeschen, Ersteller
+  oder Zustaendiger verwendet, ohne dass sie in der Nutzerbeschreibung belegt
+  sind,
 - es keine Teststrategie enthaelt,
 - es Architekturentscheidungen ohne Begruendung ausgibt.
+
+Wenn der Review eine Scope-Verletzung findet, muss ein Korrekturlauf diese
+Inhalte entfernen oder als Nicht-Ziel beziehungsweise offene Klaerung
+einsortieren. Der Korrekturlauf darf keine neue Funktion erfinden.
 
 ## Freigabe
 

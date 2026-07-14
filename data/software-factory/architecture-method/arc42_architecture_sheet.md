@@ -2,8 +2,9 @@
 
 Dieses Methodenwissen beschreibt den ersten produktiven Workflow der Software Factory:
 Aus einer freien Beschreibung eines Softwareartefakts wird ein strukturiertes
-Architecture Sheet erzeugt. Das Sheet ist kein vollstaendiges arc42-Dokument,
-sondern ein kompakter, pruefbarer Zwischenstand fuer nachgelagerte Agenten.
+Architecture Sheet erzeugt. Das Sheet enthaelt ein maschinenlesbares
+`arc42`-Objekt mit allen 12 Kapiteln plus zusaetzliche Arbeitsfelder fuer
+nachgelagerte Agenten.
 
 Ergaenzende Methodenquellen in dieser Collection:
 
@@ -53,6 +54,23 @@ Ein Architecture Sheet enthaelt mindestens:
 - open_questions: Punkte, die vor Umsetzung geklaert werden muessen.
 - assumptions: Annahmen, die aus der Beschreibung abgeleitet wurden.
 - readiness: Status und kurze Einschaetzung fuer Review/Freigabe.
+- arc42: Vollstaendiges Dokumentobjekt mit den Kapiteln
+  `introduction_and_goals`, `constraints`, `context_and_scope`,
+  `solution_strategy`, `building_block_view`, `runtime_view`,
+  `deployment_view`, `crosscutting_concepts`, `architecture_decisions`,
+  `quality_requirements`, `risks_and_technical_debt` und `glossary`.
+
+Der Requirement Analyst muss die Beschreibung vor der Synthese trennen in:
+
+- `in_scope`: belegte Funktionen, Rollen, Objekte, Schnittstellen und
+  Qualitaetsziele.
+- `out_of_scope`: explizit ausgeschlossene oder spaetere Inhalte.
+- `not_evidenced`: Begriffe oder Features, die nicht belegt sind und daher
+  nicht als Architekturinhalt verwendet werden duerfen.
+
+Der Synthesizer darf nur `in_scope` und belegte `core_facts` als Architektur
+verwenden. `out_of_scope` und `not_evidenced` duerfen nur als Abgrenzung,
+Nicht-Ziel oder offene Klaerung sichtbar werden.
 
 ## Django-spezifische Heuristiken
 
@@ -89,6 +107,7 @@ offenen Fragen und Annahmen markiert, nicht still ausgelassen.
 Ein produktiv brauchbares Sheet muss:
 
 - alle Pflichtfelder des Schemas `1.0.0` enthalten,
+- alle 12 arc42-Kapitel im `arc42`-Objekt enthalten,
 - mindestens eine Architekturentscheidung enthalten,
 - mindestens ein Qualitaetsziel mit Szenario enthalten,
 - mindestens ein Risiko mit Mitigation enthalten,
@@ -103,6 +122,8 @@ Ein schlechtes Sheet:
 - vermischt fachliche Ziele, Loesungen und Annahmen,
 - nennt keine Risiken oder offenen Fragen,
 - liefert keine Django-Zuordnung,
+- verwendet nicht belegte Features wie Projektmanagement, Cloud, Team-Zuordnung,
+  Loeschen, Ersteller oder Zustaendiger als aktuelle Architektur,
 - erfindet Details, statt Annahmen und Fragen zu markieren.
 
 ## Beispiel fuer ein kompaktes Sheet

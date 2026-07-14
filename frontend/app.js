@@ -605,9 +605,10 @@ function appendList(container, items) {
   normalizedItems.forEach((item) => {
     const listItem = document.createElement("li");
     if (typeof item === "object" && item !== null) {
-      const title = valueText(item.name || item.title || item.decision || item.scenario || item.risk);
+      const title = valueText(item.name || item.title || item.term || item.decision || item.scenario || item.risk);
       const description = valueText(
         item.description ||
+          item.definition ||
           item.responsibility ||
           item.rationale ||
           item.mitigation ||
@@ -658,6 +659,11 @@ function appendSection(title, content) {
 function renderArchitectureSections(sheet) {
   architectureSections.replaceChildren();
 
+  if (sheet.arc42) {
+    renderArc42Sections(sheet.arc42);
+    return;
+  }
+
   appendSection("Architekturtreiber", sheet.architecture_drivers || sheet.drivers || []);
   appendSection("Qualitaetsziele", sheet.quality_goals || []);
   appendSection("Kontext & Schnittstellen", sheet.context || sheet.external_interfaces || []);
@@ -669,6 +675,25 @@ function renderArchitectureSections(sheet) {
   appendSection("Offene Fragen", sheet.open_questions || []);
   appendSection("Akzeptanzkriterien", sheet.acceptance_criteria || []);
   appendSection("Teststrategie", sheet.test_strategy || []);
+}
+
+function renderArc42Sections(arc42) {
+  const sections = [
+    ["1. Einfuehrung & Ziele", arc42.introduction_and_goals],
+    ["2. Randbedingungen", arc42.constraints],
+    ["3. Kontext & Abgrenzung", arc42.context_and_scope],
+    ["4. Loesungsstrategie", arc42.solution_strategy],
+    ["5. Bausteinsicht", arc42.building_block_view],
+    ["6. Laufzeitsicht", arc42.runtime_view],
+    ["7. Verteilungssicht", arc42.deployment_view],
+    ["8. Querschnittliche Konzepte", arc42.crosscutting_concepts],
+    ["9. Architekturentscheidungen", arc42.architecture_decisions],
+    ["10. Qualitaetsanforderungen", arc42.quality_requirements],
+    ["11. Risiken & technische Schulden", arc42.risks_and_technical_debt],
+    ["12. Glossar", arc42.glossary],
+  ];
+
+  sections.forEach(([title, content]) => appendSection(title, content));
 }
 
 function displayPriority(priority) {
