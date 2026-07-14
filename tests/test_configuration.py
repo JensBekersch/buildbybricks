@@ -1,6 +1,13 @@
 from agentic_rag_template.config import Settings
 
 
+def test_settings_default_llm_timeout_allows_local_agentic_runs(monkeypatch) -> None:
+    monkeypatch.delenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", raising=False)
+    settings = Settings.from_env()
+
+    assert settings.llm_timeout_seconds == 1200
+
+
 def test_settings_reads_llm_configuration_from_environment(monkeypatch) -> None:
     monkeypatch.setenv("AGENTIC_RAG_LLM_PROVIDER", "ollama")
     monkeypatch.setenv("AGENTIC_RAG_LLM_MODEL", "llama3.1")
