@@ -27,6 +27,37 @@ Docker Compose reads `.env` automatically and passes the values into the contain
 docker compose up --build
 ```
 
+## Optional Ollama Container
+
+Ollama can run as a second Docker Compose service. It is behind the optional `ollama` profile so the default local development path stays lightweight.
+
+Start the app plus Ollama:
+
+```bash
+docker compose --profile ollama up --build
+```
+
+Ollama is then reachable inside the Compose network at:
+
+```text
+http://ollama:11434
+```
+
+It is also exposed on the host at:
+
+```text
+http://localhost:11434
+```
+
+Pulling models is still a separate action. For example, after the service is running:
+
+```bash
+docker compose --profile ollama exec ollama ollama pull llama3.1
+docker compose --profile ollama exec ollama ollama pull nomic-embed-text
+```
+
+The app does not yet call Ollama directly. The service is available so the next implementation step can add `OllamaLLMProvider` and `OllamaEmbeddingProvider` behind the existing provider settings.
+
 ## Data and Template Files
 
 Knowledge goes into `data/<collection>/`.
@@ -60,10 +91,10 @@ Planned Ollama embedding configuration:
 ```env
 AGENTIC_RAG_EMBEDDING_PROVIDER=ollama
 AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
-AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
+AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://ollama:11434
 ```
 
-Inside Docker on macOS, `host.docker.internal` lets the container reach Ollama running on the host machine.
+Use `http://ollama:11434` when Ollama runs as the second Compose service. Use `http://host.docker.internal:11434` when Ollama runs directly on the host machine and only the app runs in Docker.
 
 ## LLM Providers
 
@@ -81,7 +112,7 @@ Planned Ollama chat configuration:
 ```env
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
-AGENTIC_RAG_LLM_API_BASE_URL=http://host.docker.internal:11434
+AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
 ```
 
 Planned OpenAI-style configuration:
@@ -104,6 +135,17 @@ To actually use Ollama as the LLM, we still need to implement:
 - tests that can run without requiring Ollama, plus optional integration tests when Ollama is available
 
 The ingestion, retrieval, sources, evaluation, Docker runtime, and `.env` configuration surface are already in place.
+
+## MCP Experiments
+
+MCP servers are separate tool services, not part of Ollama itself. The same Compose pattern can be used later:
+
+- add one MCP server as another Compose service
+- expose it through environment variables
+- add an agent tool adapter in `src/agentic_rag_template/tools/`
+- include it in `template/app_profile.json`
+
+For now, the project has explicit local tools: `search_knowledge_base`, `read_source`, and `answer_with_citations`.
 
 ## Quick Local Knowledge Test
 

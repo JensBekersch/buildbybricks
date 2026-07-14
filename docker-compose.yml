@@ -13,12 +13,24 @@ services:
       AGENTIC_RAG_EMBEDDING_PROVIDER: "${AGENTIC_RAG_EMBEDDING_PROVIDER:-hash}"
       AGENTIC_RAG_EMBEDDING_MODEL: "${AGENTIC_RAG_EMBEDDING_MODEL:-local-hash-v1}"
       AGENTIC_RAG_EMBEDDING_DIMENSION: "${AGENTIC_RAG_EMBEDDING_DIMENSION:-64}"
-      AGENTIC_RAG_EMBEDDING_API_BASE_URL: "${AGENTIC_RAG_EMBEDDING_API_BASE_URL:-http://host.docker.internal:11434}"
+      AGENTIC_RAG_EMBEDDING_API_BASE_URL: "${AGENTIC_RAG_EMBEDDING_API_BASE_URL:-http://ollama:11434}"
       AGENTIC_RAG_EMBEDDING_API_KEY: "${AGENTIC_RAG_EMBEDDING_API_KEY:-}"
       AGENTIC_RAG_LLM_PROVIDER: "${AGENTIC_RAG_LLM_PROVIDER:-deterministic}"
       AGENTIC_RAG_LLM_MODEL: "${AGENTIC_RAG_LLM_MODEL:-local-deterministic-v1}"
-      AGENTIC_RAG_LLM_API_BASE_URL: "${AGENTIC_RAG_LLM_API_BASE_URL:-http://host.docker.internal:11434}"
+      AGENTIC_RAG_LLM_API_BASE_URL: "${AGENTIC_RAG_LLM_API_BASE_URL:-http://ollama:11434}"
       AGENTIC_RAG_LLM_API_KEY: "${AGENTIC_RAG_LLM_API_KEY:-}"
     volumes:
       - ./data:/app/data:ro
       - ./template:/app/template:ro
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles:
+      - ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+volumes:
+  ollama:
