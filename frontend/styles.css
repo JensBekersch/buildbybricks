@@ -141,6 +141,11 @@ textarea {
   display: none !important;
 }
 
+.architecture-empty[hidden],
+#architecture-result[hidden] {
+  display: none !important;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(210px, 260px) minmax(420px, 1fr) minmax(300px, 380px);
