@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from agentic_rag_template.agent import AgentRequest, StudyAgent
 from agentic_rag_template.api.schemas import ChatRequest, ChatResponse
+from agentic_rag_template.applications import ApplicationInstance, FileApplicationRegistry
 from agentic_rag_template.config import Settings
 from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.evaluation import EvaluationRunner
@@ -41,23 +42,47 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             return
 
         if parsed_url.path == "/collections":
-            self._send_json(self._list_collections())
+            self._send_json(self._list_collections(self._default_application()))
+            return
+
+        app_route = self._parse_app_route(parsed_url.path)
+
+        if app_route:
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            if app_route["remainder"] == "":
+                self._send_json(application.to_dict())
+                return
+
+            if app_route["remainder"] == "/collections":
+                self._send_json(self._list_collections(application))
+                return
+
+            if app_route["remainder"] == "/evaluation/run":
+                self._send_json(self._run_evaluation(application))
+                return
+
+        if parsed_url.path == "/apps":
+            self._send_json(self._list_applications())
             return
 
         if parsed_url.path == "/ingestion/preview":
-            self._send_json(self._preview_ingestion(parsed_url.query))
+            self._send_json(self._preview_ingestion(parsed_url.query, self._default_application()))
             return
 
         if parsed_url.path == "/vector-store/preview":
-            self._send_json(self._preview_vector_search(parsed_url.query))
+            self._send_json(self._preview_vector_search(parsed_url.query, self._default_application()))
             return
 
         if parsed_url.path == "/retrieval/search":
-            self._send_json(self._search_retriever(parsed_url.query))
+            self._send_json(self._search_retriever(parsed_url.query, self._default_application()))
             return
 
         if parsed_url.path == "/evaluation/run":
-            self._send_json(self._run_evaluation())
+            self._send_json(self._run_evaluation(self._default_application()))
             return
 
         if parsed_url.path == "/template/profile":
@@ -70,13 +95,28 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self) -> None:
-        if self.path != "/chat":
+        parsed_url = urlparse(self.path)
+        app_route = self._parse_app_route(parsed_url.path)
+
+        if app_route and app_route["remainder"] == "/chat":
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_chat_response(application)
+            return
+
+        if parsed_url.path != "/chat":
             self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
             return
 
+        self._send_chat_response(self._default_application())
+
+    def _send_chat_response(self, application: ApplicationInstance) -> None:
         payload = self._read_json_body()
         message = str(payload.get("message", "")).strip()
-        profile = load_application_profile(self.settings.template_dir)
+        profile = application.profile
 
         if not message:
             self._send_json({"error": "message is required"}, status=HTTPStatus.BAD_REQUEST)
@@ -88,7 +128,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             collection=payload.get("collection") or profile.default_collection,
             top_k=int(payload.get("top_k", profile.default_top_k)),
         )
-        response = self._handle_chat(request)
+        response = self._handle_chat(request, application)
         self._send_json(
             {
                 "answer": response.answer,
@@ -107,15 +147,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             }
         )
 
-    def _handle_chat(self, request: ChatRequest) -> ChatResponse:
+    def _handle_chat(self, request: ChatRequest, application: Optional[ApplicationInstance] = None) -> ChatResponse:
+        active_application = application or self._default_application()
         embedding_provider = create_embedding_provider(self.settings)
         llm_provider = create_llm_provider(self.settings)
-        profile = load_application_profile(self.settings.template_dir)
         agent = StudyAgent(
-            self.settings.data_dir,
+            active_application.data_dir,
             embedding_provider,
             llm_provider=llm_provider,
-            answer_policy=profile.answer_policy,
+            answer_policy=active_application.profile.answer_policy,
         )
         response = agent.answer(
             AgentRequest(
@@ -133,11 +173,32 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         )
         return chat_response
 
-    def _list_collections(self) -> Dict[str, Any]:
+    def _list_applications(self) -> Dict[str, Any]:
+        return {
+            "applications": [
+                application.summary().to_dict()
+                for application in FileApplicationRegistry(self.settings).list()
+            ]
+        }
+
+    def _find_application(self, app_id: str) -> Optional[ApplicationInstance]:
+        try:
+            return FileApplicationRegistry(self.settings).get(app_id)
+        except ValueError as error:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(error))
+            return None
+        except KeyError as error:
+            self.send_error(HTTPStatus.NOT_FOUND, str(error))
+            return None
+
+    def _default_application(self) -> ApplicationInstance:
+        return FileApplicationRegistry(self.settings).get("default")
+
+    def _list_collections(self, application: ApplicationInstance) -> Dict[str, Any]:
         collections = []
 
-        for collection in discover_collections(self.settings.data_dir):
-            documents = load_documents(self.settings.data_dir, collection=collection)
+        for collection in discover_collections(application.data_dir):
+            documents = load_documents(application.data_dir, collection=collection)
             collections.append(
                 {
                     "name": collection,
@@ -147,10 +208,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         return {"collections": collections}
 
-    def _preview_ingestion(self, query: str) -> Dict[str, Any]:
+    def _preview_ingestion(self, query: str, application: ApplicationInstance) -> Dict[str, Any]:
         params = parse_qs(query)
         collection = params.get("collection", [None])[0]
-        chunks = ingest_data(self.settings.data_dir, collection=collection)
+        chunks = ingest_data(application.data_dir, collection=collection)
 
         return {
             "chunk_count": len(chunks),
@@ -170,7 +231,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             ],
         }
 
-    def _preview_vector_search(self, query: str) -> Dict[str, Any]:
+    def _preview_vector_search(self, query: str, application: ApplicationInstance) -> Dict[str, Any]:
         params = parse_qs(query)
         search_query = params.get("q", [""])[0].strip()
         collection = params.get("collection", [None])[0]
@@ -183,7 +244,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 "model": self.settings.embedding_model,
             }
 
-        chunks = ingest_data(self.settings.data_dir, collection=collection)
+        chunks = ingest_data(application.data_dir, collection=collection)
         embedding_provider = create_embedding_provider(self.settings)
         vector_store = InMemoryVectorStore(embedding_provider)
         vector_store.add_chunks(chunks)
@@ -210,7 +271,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             ],
         }
 
-    def _search_retriever(self, query: str) -> Dict[str, Any]:
+    def _search_retriever(self, query: str, application: ApplicationInstance) -> Dict[str, Any]:
         params = parse_qs(query)
         search_query = params.get("q", [""])[0].strip()
         collection = params.get("collection", [None])[0]
@@ -218,7 +279,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         try:
             embedding_provider = create_embedding_provider(self.settings)
-            retriever = Retriever(self.settings.data_dir, embedding_provider)
+            retriever = Retriever(application.data_dir, embedding_provider)
             response = retriever.retrieve(
                 RetrievalQuery(
                     text=search_query,
@@ -235,23 +296,35 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         payload["dimension"] = embedding_provider.dimension
         return payload
 
-    def _run_evaluation(self) -> Dict[str, Any]:
+    def _run_evaluation(self, application: ApplicationInstance) -> Dict[str, Any]:
         embedding_provider = create_embedding_provider(self.settings)
         llm_provider = create_llm_provider(self.settings)
-        profile = load_application_profile(self.settings.template_dir)
         agent = StudyAgent(
-            self.settings.data_dir,
+            application.data_dir,
             embedding_provider,
             llm_provider=llm_provider,
-            answer_policy=profile.answer_policy,
+            answer_policy=application.profile.answer_policy,
         )
-        report = EvaluationRunner(agent).run_template(self.settings.template_dir)
+        report = EvaluationRunner(agent).run_template(application.template_dir)
         payload = report.to_dict()
+        payload["app_id"] = application.id
         payload["provider"] = embedding_provider.name
         payload["model"] = embedding_provider.model
         payload["llm_provider"] = llm_provider.name
         payload["llm_model"] = llm_provider.model
         return payload
+
+    def _parse_app_route(self, path: str) -> Optional[Dict[str, str]]:
+        if not path.startswith("/apps/"):
+            return None
+
+        parts = path.split("/", 3)
+
+        if len(parts) < 3 or not parts[2]:
+            return None
+
+        remainder = "" if len(parts) == 3 else f"/{parts[3]}"
+        return {"app_id": parts[2], "remainder": remainder}
 
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))

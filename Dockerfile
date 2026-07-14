@@ -12,6 +12,7 @@ COPY src ./src
 COPY frontend ./frontend
 COPY data ./data
 COPY template ./template
+COPY apps ./apps
 
 EXPOSE 8000
 

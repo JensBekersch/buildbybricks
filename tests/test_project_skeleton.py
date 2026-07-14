@@ -31,10 +31,40 @@ def test_chat_schema_defaults_are_empty_collections() -> None:
 def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
     frontend_dir = tmp_path / "frontend"
     data_dir = tmp_path / "data"
+    apps_dir = tmp_path / "apps"
+    template_dir = tmp_path / "template"
     frontend_dir.mkdir()
     data_dir.mkdir()
+    template_dir.mkdir()
+    policy_app_dir = apps_dir / "policy-assistant"
+    policy_app_dir.mkdir(parents=True)
+    policy_data_dir = data_dir / "policy-assistant" / "policies"
+    policy_data_dir.mkdir(parents=True)
     (frontend_dir / "index.html").write_text("<h1>Chat</h1>", encoding="utf-8")
-    settings = Settings(frontend_dir=frontend_dir, data_dir=data_dir, host="127.0.0.1", port=0)
+    (policy_app_dir / "app_profile.json").write_text(
+        json.dumps(
+            {
+                "name": "Policy Assistant",
+                "description": "Answers from policy docs.",
+                "default_collection": "policies",
+                "default_top_k": 2,
+                "answer_policy": "Use policy sources only.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (policy_data_dir / "rules.md").write_text(
+        "Policy documents explain approval workflows.",
+        encoding="utf-8",
+    )
+    settings = Settings(
+        frontend_dir=frontend_dir,
+        data_dir=data_dir,
+        template_dir=template_dir,
+        apps_dir=apps_dir,
+        host="127.0.0.1",
+        port=0,
+    )
     server = create_server(settings)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -45,6 +75,18 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         health_payload = json.loads(health_response.read().decode("utf-8"))
         collections_response = request.urlopen(f"http://{host}:{port}/collections", timeout=2)
         collections_payload = json.loads(collections_response.read().decode("utf-8"))
+        apps_response = request.urlopen(f"http://{host}:{port}/apps", timeout=2)
+        apps_payload = json.loads(apps_response.read().decode("utf-8"))
+        policy_app_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant",
+            timeout=2,
+        )
+        policy_app_payload = json.loads(policy_app_response.read().decode("utf-8"))
+        policy_collections_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant/collections",
+            timeout=2,
+        )
+        policy_collections_payload = json.loads(policy_collections_response.read().decode("utf-8"))
         search_response = request.urlopen(
             f"http://{host}:{port}/vector-store/preview?q=agentic",
             timeout=2,
@@ -74,13 +116,32 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         )
         chat_response = request.urlopen(chat_request, timeout=2)
         chat_payload = json.loads(chat_response.read().decode("utf-8"))
+        policy_chat_request = request.Request(
+            f"http://{host}:{port}/apps/policy-assistant/chat",
+            data=json.dumps({"message": "What do policy documents explain?"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        policy_chat_response = request.urlopen(policy_chat_request, timeout=2)
+        policy_chat_payload = json.loads(policy_chat_response.read().decode("utf-8"))
 
         assert health_payload["status"] == "ok"
-        assert collections_payload == {"collections": []}
+        assert collections_payload == {
+            "collections": [{"name": "policy-assistant", "document_count": 1}]
+        }
+        assert [application["id"] for application in apps_payload["applications"]] == [
+            "default",
+            "policy-assistant",
+        ]
+        assert policy_app_payload["name"] == "Policy Assistant"
+        assert policy_app_payload["profile"]["default_collection"] == "policies"
+        assert policy_collections_payload == {
+            "collections": [{"name": "policies", "document_count": 1}]
+        }
         assert search_payload["provider"] == "hash"
-        assert search_payload["indexed_chunk_count"] == 0
+        assert search_payload["indexed_chunk_count"] == 1
         assert retrieval_payload["provider"] == "hash"
-        assert retrieval_payload["indexed_chunk_count"] == 0
+        assert retrieval_payload["indexed_chunk_count"] == 1
         assert retrieval_payload["trace"] == [
             "loaded_chunks",
             "embedded_chunks",
@@ -104,6 +165,8 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             "search_knowledge_base",
             "answer_with_citations",
         ]
+        assert policy_chat_payload["sources"][0]["location"] == "policies/rules.md"
+        assert "Policy documents" in policy_chat_payload["answer"]
     finally:
         server.shutdown()
         server.server_close()

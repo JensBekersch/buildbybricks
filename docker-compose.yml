@@ -10,6 +10,7 @@ services:
       AGENTIC_RAG_FRONTEND_DIR: "${AGENTIC_RAG_FRONTEND_DIR:-frontend}"
       AGENTIC_RAG_DATA_DIR: "${AGENTIC_RAG_DATA_DIR:-data}"
       AGENTIC_RAG_TEMPLATE_DIR: "${AGENTIC_RAG_TEMPLATE_DIR:-template}"
+      AGENTIC_RAG_APPS_DIR: "${AGENTIC_RAG_APPS_DIR:-apps}"
       AGENTIC_RAG_EMBEDDING_PROVIDER: "${AGENTIC_RAG_EMBEDDING_PROVIDER:-hash}"
       AGENTIC_RAG_EMBEDDING_MODEL: "${AGENTIC_RAG_EMBEDDING_MODEL:-local-hash-v1}"
       AGENTIC_RAG_EMBEDDING_DIMENSION: "${AGENTIC_RAG_EMBEDDING_DIMENSION:-64}"
@@ -24,6 +25,7 @@ services:
     volumes:
       - ./data:/app/data:ro
       - ./template:/app/template:ro
+      - ./apps:/app/apps:ro
 
   ollama:
     image: ollama/ollama:latest

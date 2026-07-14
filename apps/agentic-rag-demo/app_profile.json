@@ -1,0 +1,12 @@
+{
+  "name": "Agentic RAG Demo",
+  "description": "A configured demo instance that answers from its own knowledge collection.",
+  "default_collection": "knowledge",
+  "default_top_k": 3,
+  "answer_policy": "Answer only from the configured demo knowledge sources, cite sources, and state uncertainty clearly.",
+  "enabled_tools": [
+    "search_knowledge_base",
+    "read_source",
+    "answer_with_citations"
+  ]
+}

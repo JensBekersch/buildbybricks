@@ -14,6 +14,7 @@ class Settings:
     sample_data_dir: Path = Path("data/sample")
     frontend_dir: Path = Path("frontend")
     template_dir: Path = Path("template")
+    apps_dir: Path = Path("apps")
     host: str = "0.0.0.0"
     port: int = 8000
     embedding_provider: str = "hash"
@@ -37,6 +38,7 @@ class Settings:
             sample_data_dir=Path(os.getenv("AGENTIC_RAG_SAMPLE_DATA_DIR", "data/sample")),
             frontend_dir=Path(os.getenv("AGENTIC_RAG_FRONTEND_DIR", "frontend")),
             template_dir=Path(os.getenv("AGENTIC_RAG_TEMPLATE_DIR", "template")),
+            apps_dir=Path(os.getenv("AGENTIC_RAG_APPS_DIR", "apps")),
             host=os.getenv("AGENTIC_RAG_HOST", "0.0.0.0"),
             port=int(os.getenv("AGENTIC_RAG_PORT", "8000")),
             embedding_provider=os.getenv("AGENTIC_RAG_EMBEDDING_PROVIDER", "hash"),

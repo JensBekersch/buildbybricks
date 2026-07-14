@@ -150,6 +150,10 @@ Diese Punkte sind bewusst vorlaeufig und sollen im Verlauf der Studie validiert 
 ├── template/
 │   ├── app_profile.json
 │   └── evaluation_cases.json
+├── apps/
+│   └── <app-id>/
+│       ├── app_profile.json
+│       └── evaluation_cases.json
 ├── frontend/
 │   ├── index.html
 │   ├── styles.css
@@ -173,6 +177,28 @@ data/
 ```
 
 Die Ingestion liest aktuell `.md` und `.txt` Dateien rekursiv aus diesen Collection-Ordnern. Jeder Chunk erhaelt Metadaten fuer Collection, relativen Dateipfad, Dateiname, Dateityp, Chunk-Index und Zeichenposition.
+
+## App-Instanzen
+
+Die bisherige Template-App bleibt als `default`-Instanz verfuegbar. Zusaetzlich koennen wiederverwendbare Anwendungen unter `apps/<app-id>/` angelegt werden. Eine App-Instanz besitzt ihr eigenes Profil und optional eigene Evaluationsfaelle:
+
+```text
+apps/
+└── policy-assistant/
+    ├── app_profile.json
+    └── evaluation_cases.json
+```
+
+Das Wissen einer App liegt unter `data/<app-id>/<collection>/`:
+
+```text
+data/
+└── policy-assistant/
+    └── policies/
+        └── handbook.md
+```
+
+Damit koennen verschiedene Anwendungen dieselbe Runtime, dieselben Provider und dasselbe Frontend nutzen, aber getrennte Prompts, Collections und Tests haben.
 
 ## Naechster Schritt
 
@@ -278,6 +304,11 @@ python3 scripts/smoke_test.py
 Nuetzliche lokale Endpunkte:
 
 - `GET /collections` zeigt die erkannten Collections unter `data/`
+- `GET /apps` zeigt alle konfigurierten App-Instanzen
+- `GET /apps/{app_id}` zeigt Profil und Runtime-Pfade einer App
+- `GET /apps/{app_id}/collections` zeigt die Collections einer App
+- `POST /apps/{app_id}/chat` chattet gegen eine bestimmte App-Instanz
+- `GET /apps/{app_id}/evaluation/run` startet die Evaluation einer App
 - `GET /ingestion/preview?collection=sample` zeigt die ersten ingestierten Chunks einer Collection
 - `GET /vector-store/preview?collection=sample&q=agentic` baut lokal einen In-Memory-Index und zeigt Suchtreffer mit Scores
 - `GET /retrieval/search?collection=sample&q=agentic&top_k=3` nutzt den Retriever und liefert agentenfreundliche Suchergebnisse mit Trace
