@@ -38,6 +38,8 @@ class GenericArchitectureLLMProvider:
     model = "generic-json-v1"
 
     def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Requirement Analyst" in system_prompt:
+            raise RuntimeError("pipeline unavailable")
         assert "Vermeide generische Platzhalter" in system_prompt
         return {
             "artifact_name": "Generische Fachanwendung",
@@ -66,6 +68,97 @@ class GenericArchitectureLLMProvider:
                 ],
             },
         }
+
+
+class AgenticArchitectureLLMProvider:
+    name = "agentic-architecture-llm"
+    model = "agentic-json-v1"
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        self.calls.append(system_prompt.split("\n")[0])
+        if "Requirement Analyst" in system_prompt:
+            return {
+                "artifact_name": "Arbeitszeit Cockpit",
+                "business_goal": "Arbeitszeiten erfassen, pruefen, freigeben und als Monatsbericht auswerten.",
+                "roles": [
+                    {"name": "Mitarbeitende", "description": "Erfassen eigene Zeiteintraege."},
+                    {"name": "Fuehrungskraefte", "description": "Pruefen und geben Teamzeiten frei."},
+                    {"name": "Administratoren", "description": "Verwalten Stammdaten."},
+                ],
+                "core_entities": [
+                    {"name": "Zeiteintrag", "description": "Datum, Start, Ende, Pause, Projekt und Taetigkeit."},
+                    {"name": "Monatsabschluss", "description": "Gebundelte Monatsuebersicht mit Freigabestatus."},
+                    {"name": "Arbeitszeitmodell", "description": "Sollzeiten, Feiertage und Pausenregeln."},
+                ],
+                "workflows": [
+                    {"name": "Arbeitszeit loggen", "description": "Mitarbeitende erfassen und korrigieren offene Zeiten."},
+                    {"name": "Monat freigeben", "description": "Fuehrungskraefte pruefen Monatsuebersichten."},
+                    {"name": "CSV exportieren", "description": "Freigegebene Monatsberichte werden exportiert."},
+                ],
+                "current_interfaces": [
+                    {"name": "Django Web UI", "type": "web-ui", "description": "Oberflaeche fuer Zeiterfassung und Freigabe."},
+                    {"name": "Django Admin", "type": "admin-ui", "description": "Stammdatenpflege."},
+                ],
+                "future_interfaces": [
+                    {"name": "Mobile REST API", "type": "rest-api", "description": "Spaetere mobile Nutzung."}
+                ],
+                "quality_goals": [
+                    {"name": "Berechnungskorrektheit", "description": "Soll-Ist-Zeiten werden korrekt berechnet."}
+                ],
+                "constraints": [{"description": "Erste Version als serverseitige Django-Anwendung."}],
+                "risks": [
+                    {
+                        "description": "Arbeitszeitregeln koennen komplex sein.",
+                        "mitigation": "Regeln in Services kapseln und testen.",
+                    }
+                ],
+                "assumptions": [{"description": "REST API ist nicht Teil des ersten Scopes."}],
+                "open_questions": [{"description": "Welche Rundungsregeln gelten?"}],
+            }
+        if "Architecture Synthesizer" in system_prompt:
+            assert "Requirement-Analyse" in user_prompt
+            return {
+                "artifact_name": "Arbeitszeit Cockpit",
+                "business_goal": "Arbeitszeiten erfassen, pruefen, freigeben und auswerten.",
+                "building_blocks": [
+                    {
+                        "name": "Zeiteintrag",
+                        "responsibility": "Zeiteintraege erfassen und validieren.",
+                        "django_mapping": "Django app `timesheets`.",
+                    },
+                    {
+                        "name": "Monatsabschluss",
+                        "responsibility": "Monatsuebersichten und Freigabestatus steuern.",
+                        "django_mapping": "Django app `approvals`.",
+                    },
+                ],
+                "runtime_scenarios": [
+                    {
+                        "name": "Arbeitszeit loggen",
+                        "steps": ["Mitarbeitender erfasst Zeit.", "System validiert und speichert."],
+                    }
+                ],
+                "context": {
+                    "users": [{"name": "Mitarbeitende", "description": "Erfassen eigene Zeiten."}],
+                    "external_systems": [
+                        {
+                            "name": "Zukuenftige Integrationen",
+                            "description": "Mobile REST API ist spaeterer Scope.",
+                        }
+                    ],
+                    "interfaces": [
+                        {"name": "Django Web UI", "type": "web-ui", "description": "Aktueller Scope."}
+                    ],
+                },
+                "data_view": "Zentrale Models sind Zeiteintrag, Monatsabschluss und Arbeitszeitmodell.",
+                "test_strategy": "Service-Tests fuer Soll-Ist-Berechnung und Workflow-Tests fuer Freigabe.",
+            }
+        if "Architecture Reviewer" in system_prompt:
+            return {"passes": True, "findings": [], "required_corrections": []}
+        raise AssertionError(system_prompt)
 
 
 def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> None:
@@ -126,6 +219,45 @@ def test_generate_architecture_sheet_can_merge_llm_json() -> None:
     assert sheet["architecture_decisions"][0]["id"] == "ADR-LLM-001"
     assert sheet["quality_goals"]
     assert "generated_llm_architecture_sheet" in payload["trace"]
+
+
+def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    provider = AgenticArchitectureLLMProvider()
+
+    result = generate_architecture_sheet(
+        "Django-Webanwendung zur Erfassung und Auswertung von Arbeitszeiten mit spaeterer REST API.",
+        application,
+        llm_provider=provider,
+    )
+    payload = result.to_dict()
+    sheet = payload["architecture_sheet"]
+    block_names = {block["name"] for block in sheet["building_blocks"]}
+    interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
+
+    assert payload["generation"]["mode"] == "agentic-llm"
+    assert payload["generation"]["architecture_review"]["passes"] is True
+    assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
+    assert provider.calls == [
+        "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
+        "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
+        "Du bist der Architecture Reviewer einer agentischen Django-Softwarefabrik.",
+    ]
+    assert sheet["artifact_name"] == "Arbeitszeit Cockpit"
+    assert "Zeiteintrag" in block_names
+    assert "Monatsabschluss" in block_names
+    assert "rest-api" not in interface_types
+    assert payload["trace"][-4:] == [
+        "analyzed_requirements",
+        "synthesized_architecture_sheet",
+        "reviewed_architecture_sheet",
+        "validated_architecture_sheet_contract",
+    ]
 
 
 def test_generate_architecture_sheet_focuses_on_work_time_domain() -> None:
