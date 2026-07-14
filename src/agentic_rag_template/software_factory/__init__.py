@@ -11,6 +11,11 @@ from agentic_rag_template.software_factory.job_store import (
 )
 from agentic_rag_template.software_factory.jobs import (
     ARCHITECTURE_GENERATION_STEPS,
+    EVENT_LOG,
+    EVENT_STEP_COMPLETED,
+    EVENT_STEP_FAILED,
+    EVENT_STEP_SKIPPED,
+    EVENT_STEP_STARTED,
     JOB_STATUS_CANCELED,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
@@ -21,14 +26,21 @@ from agentic_rag_template.software_factory.jobs import (
     STEP_STATUS_PENDING,
     STEP_STATUS_RUNNING,
     STEP_STATUS_SKIPPED,
+    ArchitectureGenerationEvent,
     ArchitectureGenerationJob,
     ArchitectureGenerationLogEntry,
     ArchitectureGenerationStep,
     ArchitectureGenerationStepDefinition,
+    apply_architecture_generation_event,
 )
 
 __all__ = [
     "ARCHITECTURE_GENERATION_STEPS",
+    "EVENT_LOG",
+    "EVENT_STEP_COMPLETED",
+    "EVENT_STEP_FAILED",
+    "EVENT_STEP_SKIPPED",
+    "EVENT_STEP_STARTED",
     "JOB_STATUS_CANCELED",
     "JOB_STATUS_COMPLETED",
     "JOB_STATUS_FAILED",
@@ -39,6 +51,7 @@ __all__ = [
     "STEP_STATUS_PENDING",
     "STEP_STATUS_RUNNING",
     "STEP_STATUS_SKIPPED",
+    "ArchitectureGenerationEvent",
     "ArchitectureGenerationJob",
     "ArchitectureGenerationJobStoreError",
     "ArchitectureGenerationLogEntry",
@@ -47,5 +60,6 @@ __all__ = [
     "ArchitectureSheetGenerationError",
     "ArchitectureSheetResult",
     "PostgresArchitectureGenerationJobStore",
+    "apply_architecture_generation_event",
     "generate_architecture_sheet",
 ]

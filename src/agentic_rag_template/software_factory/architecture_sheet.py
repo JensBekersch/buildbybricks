@@ -3,11 +3,21 @@
 from dataclasses import dataclass
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from agentic_rag_template.applications import ApplicationInstance
 from agentic_rag_template.ingestion import load_documents
 from agentic_rag_template.llm.models import LLMProvider
+from agentic_rag_template.software_factory.jobs import (
+    EVENT_STEP_COMPLETED,
+    EVENT_STEP_FAILED,
+    EVENT_STEP_SKIPPED,
+    EVENT_STEP_STARTED,
+    ArchitectureGenerationEvent,
+)
+
+
+ArchitectureGenerationEventHandler = Callable[[ArchitectureGenerationEvent], None]
 
 
 @dataclass(frozen=True)
@@ -36,17 +46,77 @@ class ArchitectureSheetGenerationError(RuntimeError):
     """Raised when an architecture sheet cannot be generated safely."""
 
 
+def _emit_event(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    event_type: str,
+    step: str,
+    message: str,
+    level: str = "info",
+) -> None:
+    if event_handler is None:
+        return
+    event_handler(
+        ArchitectureGenerationEvent(
+            type=event_type,
+            step=step,
+            message=message,
+            level=level,
+        )
+    )
+
+
+def _emit_started(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    message: str,
+) -> None:
+    _emit_event(event_handler, EVENT_STEP_STARTED, step, message)
+
+
+def _emit_completed(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    message: str,
+) -> None:
+    _emit_event(event_handler, EVENT_STEP_COMPLETED, step, message)
+
+
+def _emit_failed(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    message: str,
+) -> None:
+    _emit_event(event_handler, EVENT_STEP_FAILED, step, message, level="error")
+
+
+def _emit_skipped(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    message: str,
+) -> None:
+    _emit_event(event_handler, EVENT_STEP_SKIPPED, step, message)
+
+
 def generate_architecture_sheet(
     description: str,
     application: ApplicationInstance,
     llm_provider: Optional[LLMProvider] = None,
     generation_mode: str = "agentic_with_review",
+    event_handler: Optional[ArchitectureGenerationEventHandler] = None,
 ) -> ArchitectureSheetResult:
     """Create a schema-shaped architecture sheet from a free-form description."""
+    _emit_started(event_handler, "validate_description", "Beschreibung wird validiert.")
     normalized_description = " ".join(description.strip().split())
     mode = _normalize_generation_mode(generation_mode)
+    _emit_completed(event_handler, "validate_description", "Beschreibung ist verwendbar.")
+
+    _emit_started(event_handler, "load_schema", "Architecture-Sheet-Schema wird geladen.")
     schema = _load_schema(application)
+    _emit_completed(event_handler, "load_schema", "Architecture-Sheet-Schema wurde geladen.")
+
+    _emit_started(event_handler, "load_method_sources", "Methodenwissen wird geladen.")
     sources = _load_method_sources(application)
+    _emit_completed(event_handler, "load_method_sources", "Methodenwissen wurde geladen.")
     trace = [
         "validated_description",
         "loaded_architecture_sheet_schema",
@@ -66,12 +136,12 @@ def generate_architecture_sheet(
         method_sources=sources,
         llm_provider=llm_provider,
         include_review=mode == "agentic_with_review",
+        event_handler=event_handler,
     )
 
     if agentic_sheet["sheet"] is None:
-        raise ArchitectureSheetGenerationError(
-            agentic_sheet["warning"] or "Agentic architecture generation did not return a sheet."
-        )
+        warning = agentic_sheet["warning"] or "Agentic architecture generation did not return a sheet."
+        raise ArchitectureSheetGenerationError(warning)
 
     sheet = _merge_known_schema_fields(agentic_sheet["base_sheet"], agentic_sheet["sheet"], schema)
     generation["pipeline"] = (
@@ -88,7 +158,9 @@ def generate_architecture_sheet(
     if mode == "agentic_with_review":
         trace.append("reviewed_architecture_sheet")
 
+    _emit_started(event_handler, "validate_contract", "Architecture Sheet wird gegen den Contract validiert.")
     validation = _validate_required_fields(sheet, schema)
+    _emit_completed(event_handler, "validate_contract", "Architecture Sheet wurde gegen den Contract validiert.")
     trace.append("validated_architecture_sheet_contract")
 
     return ArchitectureSheetResult(
@@ -140,8 +212,10 @@ def _try_generate_agentic_architecture_sheet(
     method_sources: List[Dict[str, Any]],
     llm_provider: Optional[LLMProvider],
     include_review: bool,
+    event_handler: Optional[ArchitectureGenerationEventHandler],
 ) -> Dict[str, Any]:
     if llm_provider is None or llm_provider.name == "deterministic":
+        _emit_failed(event_handler, "analyze_requirements", "Architecture sheet generation requires a structured LLM provider.")
         return {
             "sheet": None,
             "base_sheet": None,
@@ -153,6 +227,11 @@ def _try_generate_agentic_architecture_sheet(
     generate_json = getattr(llm_provider, "generate_json", None)
 
     if not callable(generate_json):
+        _emit_failed(
+            event_handler,
+            "analyze_requirements",
+            f"LLM provider '{llm_provider.name}' does not support structured JSON generation.",
+        )
         return {
             "sheet": None,
             "base_sheet": None,
@@ -161,13 +240,20 @@ def _try_generate_agentic_architecture_sheet(
             "warning": f"LLM provider '{llm_provider.name}' does not support structured JSON generation.",
         }
 
+    current_step = "analyze_requirements"
+
     try:
+        _emit_started(event_handler, "analyze_requirements", "Requirement Analyst wird aufgerufen.")
         raw_analysis = generate_json(
             system_prompt=_build_requirements_analyst_system_prompt(),
             user_prompt=_build_requirements_analyst_user_prompt(description, method_sources),
         )
         analysis = _normalize_requirements_analysis(raw_analysis, description)
+        _emit_completed(event_handler, "analyze_requirements", "Requirement-Analyse wurde erstellt.")
         base_sheet = _build_sheet_from_requirements_analysis(description, analysis)
+
+        current_step = "synthesize_architecture"
+        _emit_started(event_handler, "synthesize_architecture", "Architecture Synthesizer wird aufgerufen.")
         raw_sheet = generate_json(
             system_prompt=_build_architecture_synthesizer_system_prompt(),
             user_prompt=_build_architecture_synthesizer_user_prompt(
@@ -181,6 +267,7 @@ def _try_generate_agentic_architecture_sheet(
         candidate_sheet = raw_sheet.get("architecture_sheet", raw_sheet)
 
         if not isinstance(candidate_sheet, dict):
+            _emit_failed(event_handler, "synthesize_architecture", "Architecture synthesizer did not return a JSON object.")
             return {
                 "sheet": None,
                 "base_sheet": None,
@@ -190,9 +277,12 @@ def _try_generate_agentic_architecture_sheet(
             }
 
         reviewed_sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema)
+        _emit_completed(event_handler, "synthesize_architecture", "Architecture Sheet wurde synthetisiert.")
         review = {}
         warning = ""
         if include_review:
+            current_step = "review_architecture"
+            _emit_started(event_handler, "review_architecture", "Architecture Reviewer wird aufgerufen.")
             raw_review = generate_json(
                 system_prompt=_build_architecture_reviewer_system_prompt(),
                 user_prompt=_build_architecture_reviewer_user_prompt(
@@ -203,6 +293,12 @@ def _try_generate_agentic_architecture_sheet(
             )
             review = _normalize_architecture_review(raw_review)
             warning = "" if review.get("passes") else "Architecture reviewer found issues."
+            if warning:
+                _emit_failed(event_handler, "review_architecture", warning)
+            else:
+                _emit_completed(event_handler, "review_architecture", "Architecture Review wurde abgeschlossen.")
+        else:
+            _emit_skipped(event_handler, "review_architecture", "Architecture Review wurde fuer diesen Modus uebersprungen.")
         return {
             "sheet": reviewed_sheet,
             "base_sheet": base_sheet,
@@ -211,6 +307,7 @@ def _try_generate_agentic_architecture_sheet(
             "warning": warning,
         }
     except Exception as error:
+        _emit_failed(event_handler, current_step, f"Agentic architecture pipeline failed: {error}")
         return {
             "sheet": None,
             "base_sheet": None,

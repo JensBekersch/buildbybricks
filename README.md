@@ -75,7 +75,10 @@ Create-Beispiel:
 
 Die Antwort enthaelt zunaechst einen persistenten Job mit `id`, `status`,
 `steps`, `logs`, Modellinformationen und spaeter `result`. Die eigentliche
-Ausfuehrung wird im Worker-Ausbauschritt an diese Jobs angebunden. Der Generator
+Ausfuehrung wird im Worker-Ausbauschritt an diese Jobs angebunden. Die
+Architecture-Sheet-Pipeline emittiert bereits echte Events wie
+`step_started`, `step_completed`, `step_failed` und `step_skipped`; diese Events
+koennen direkt auf den persistenten Job angewendet werden. Der Generator
 unterstuetzt zwei sichtbare Modi:
 
 - `agentic`: Requirement Analyst und Architecture Synthesizer laufen als

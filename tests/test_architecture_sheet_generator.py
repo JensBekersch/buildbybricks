@@ -9,7 +9,12 @@ from agentic_rag_template.applications import FileApplicationRegistry
 from agentic_rag_template.config import Settings
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
+    EVENT_STEP_COMPLETED,
+    EVENT_STEP_FAILED,
+    EVENT_STEP_SKIPPED,
+    EVENT_STEP_STARTED,
     ArchitectureSheetGenerationError,
+    apply_architecture_generation_event,
     generate_architecture_sheet,
 )
 
@@ -190,6 +195,16 @@ class TodoArchitectureLLMProvider:
         raise AssertionError(system_prompt)
 
 
+class FailingRequirementsLLMProvider:
+    name = "failing-requirements-llm"
+    model = "failing-json-v1"
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Requirement Analyst" in system_prompt:
+            raise RuntimeError("requirements failed")
+        raise AssertionError(system_prompt)
+
+
 class FakeArchitectureJobStore:
     def __init__(self) -> None:
         self.jobs = {}
@@ -271,6 +286,74 @@ def test_generate_architecture_sheet_can_skip_agentic_review() -> None:
     assert "reviewed_architecture_sheet" not in payload["trace"]
 
 
+def test_generate_architecture_sheet_emits_real_pipeline_events() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    events = []
+
+    result = generate_architecture_sheet(
+        "Django-Webanwendung zur Erfassung und Auswertung von Arbeitszeiten.",
+        application,
+        llm_provider=AgenticArchitectureLLMProvider(),
+        generation_mode="agentic",
+        event_handler=events.append,
+    )
+
+    assert result.validation["valid"] is True
+    assert [(event.type, event.step) for event in events] == [
+        (EVENT_STEP_STARTED, "validate_description"),
+        (EVENT_STEP_COMPLETED, "validate_description"),
+        (EVENT_STEP_STARTED, "load_schema"),
+        (EVENT_STEP_COMPLETED, "load_schema"),
+        (EVENT_STEP_STARTED, "load_method_sources"),
+        (EVENT_STEP_COMPLETED, "load_method_sources"),
+        (EVENT_STEP_STARTED, "analyze_requirements"),
+        (EVENT_STEP_COMPLETED, "analyze_requirements"),
+        (EVENT_STEP_STARTED, "synthesize_architecture"),
+        (EVENT_STEP_COMPLETED, "synthesize_architecture"),
+        (EVENT_STEP_SKIPPED, "review_architecture"),
+        (EVENT_STEP_STARTED, "validate_contract"),
+        (EVENT_STEP_COMPLETED, "validate_contract"),
+    ]
+
+
+def test_architecture_generation_events_update_job_state() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    job = ArchitectureGenerationJob.create(
+        "Django-Webanwendung zur Erfassung und Auswertung von Arbeitszeiten.",
+        generation_mode="agentic",
+        job_id="event-job",
+    )
+
+    result = generate_architecture_sheet(
+        job.description,
+        application,
+        llm_provider=AgenticArchitectureLLMProvider(),
+        generation_mode=job.generation_mode,
+        event_handler=lambda event: apply_architecture_generation_event(job, event),
+    )
+    job.complete(result.to_dict())
+    payload = job.to_dict()
+    steps = {step["key"]: step for step in payload["steps"]}
+
+    assert payload["status"] == "completed"
+    assert steps["validate_description"]["status"] == "completed"
+    assert steps["analyze_requirements"]["status"] == "completed"
+    assert steps["synthesize_architecture"]["status"] == "completed"
+    assert steps["review_architecture"]["status"] == "skipped"
+    assert steps["validate_contract"]["status"] == "completed"
+    assert payload["result"]["architecture_sheet"]["artifact_name"] == "Arbeitszeit Cockpit"
+
+
 def test_generate_architecture_sheet_requires_structured_llm_provider() -> None:
     settings = Settings(
         apps_dir=PROJECT_ROOT / "apps",
@@ -285,6 +368,60 @@ def test_generate_architecture_sheet_requires_structured_llm_provider() -> None:
         assert "requires a structured LLM provider" in str(error)
     else:
         raise AssertionError("Architecture sheet generation must not fall back to a generic sheet.")
+
+
+def test_generate_architecture_sheet_emits_failed_event_without_structured_llm() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    events = []
+
+    try:
+        generate_architecture_sheet(
+            "Eine einfache Todo Liste.",
+            application,
+            event_handler=events.append,
+        )
+    except ArchitectureSheetGenerationError:
+        pass
+    else:
+        raise AssertionError("Architecture sheet generation must fail without a structured LLM provider.")
+
+    assert (EVENT_STEP_FAILED, "analyze_requirements") in [
+        (event.type, event.step) for event in events
+    ]
+
+
+def test_generate_architecture_sheet_attaches_exception_to_current_step() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    events = []
+
+    try:
+        generate_architecture_sheet(
+            "Eine einfache Todo Liste.",
+            application,
+            llm_provider=FailingRequirementsLLMProvider(),
+            event_handler=events.append,
+        )
+    except ArchitectureSheetGenerationError:
+        pass
+    else:
+        raise AssertionError("Architecture sheet generation must fail when the analyst fails.")
+
+    failed_events = [
+        event for event in events if event.type == EVENT_STEP_FAILED
+    ]
+    assert [(event.step, event.message) for event in failed_events] == [
+        ("analyze_requirements", "Agentic architecture pipeline failed: requirements failed")
+    ]
 
 
 def test_generate_architecture_sheet_preserves_explicit_no_login_requirement() -> None:
