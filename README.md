@@ -66,21 +66,22 @@ Beispiel:
 ```json
 {
   "description": "Eine Django-App fuer Kunden, Angebote, Freigaben und PDF-Exporte.",
-  "use_llm": true
+  "generation_mode": "agentic_with_review"
 }
 ```
 
 Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
-`generation`. Der Generator erzeugt zuerst ein deterministisches Basissheet. Wenn
-ein strukturfaehiger LLM-Provider wie Ollama konfiguriert ist, darf das LLM das
-Sheet als JSON anreichern. Danach werden nur bekannte Schemafelder uebernommen
-und der Contract wird erneut validiert. Bei LLM-Fehlern bleibt das
-deterministische Sheet als Fallback erhalten.
+`generation`. Der Generator unterstuetzt zwei sichtbare Modi:
 
-`use_llm` ist optional. Ohne diese Angabe nutzt der Endpoint die Einstellung
-`AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED`, die standardmaessig `false` ist. So
-bleibt der Workflow schnell und stabil, waehrend Ollama gezielt fuer
-LLM-Anreicherung zugeschaltet werden kann.
+- `agentic`: Requirement Analyst und Architecture Synthesizer laufen als
+  strukturierte LLM-Schritte.
+- `agentic_with_review`: zusaetzlich prueft ein Architecture Reviewer das Sheet
+  auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
+
+`generation_mode` ist optional und faellt dann auf `agentic_with_review`
+zurueck. Der Endpunkt erzeugt kein deterministisches oder generisches
+Fallback-Sheet. Wenn kein strukturierter LLM-Provider konfiguriert ist oder die
+agentische Pipeline fehlschlaegt, antwortet die API mit einem Fehler.
 
 ## Grundkonstrukt
 
@@ -364,9 +365,13 @@ Ollama kann so konfiguriert werden:
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
-AGENTIC_RAG_LLM_TIMEOUT_SECONDS=300
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200
 AGENTIC_RAG_LLM_MAX_TOKENS=160
 ```
+
+Agentische Architecture-Sheet-Laeufe koennen mit lokalen Ollama-Modellen
+mehrere Minuten dauern. `AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200` gibt dem
+mehrstufigen Generator lokal bis zu 20 Minuten Zeit, bevor die API abbricht.
 
 Ollama kann optional als zweiter Compose-Service gestartet werden:
 

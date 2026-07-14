@@ -26,9 +26,8 @@ class Settings:
     llm_model: str = "local-deterministic-v1"
     llm_api_base_url: str = "http://localhost:11434"
     llm_api_key: str = ""
-    llm_timeout_seconds: int = 300
+    llm_timeout_seconds: int = 1200
     llm_max_tokens: int = 160
-    architecture_llm_enabled: bool = False
     debug: bool = True
 
     @classmethod
@@ -57,10 +56,7 @@ class Settings:
                 "http://localhost:11434",
             ),
             llm_api_key=os.getenv("AGENTIC_RAG_LLM_API_KEY", ""),
-            llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "300")),
+            llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "1200")),
             llm_max_tokens=int(os.getenv("AGENTIC_RAG_LLM_MAX_TOKENS", "160")),
-            architecture_llm_enabled=(
-                os.getenv("AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED", "false").lower() == "true"
-            ),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )
