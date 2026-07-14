@@ -3,6 +3,7 @@ from agentic_rag_template.software_factory import (
     EVENT_STEP_COMPLETED,
     EVENT_STEP_STARTED,
     JOB_STATUS_COMPLETED,
+    JOB_STATUS_CANCELED,
     JOB_STATUS_FAILED,
     JOB_STATUS_RUNNING,
     ArchitectureGenerationEvent,
@@ -42,6 +43,11 @@ class DummyStore:
             return None
         self.job.mark_running("Worker hat den Job uebernommen.")
         return self.job
+
+    def get(self, job_id):
+        if self.job is not None and self.job.id == job_id:
+            return self.job
+        return None
 
     def save(self, job):
         self.saved_jobs.append(job.to_dict())
@@ -131,3 +137,34 @@ def test_architecture_worker_marks_job_failed_on_error(monkeypatch) -> None:
     assert job.status == JOB_STATUS_FAILED
     assert "LLM nicht erreichbar" in job.error
     assert store.saved_jobs[-1]["status"] == JOB_STATUS_FAILED
+
+
+def test_architecture_worker_does_not_complete_canceled_job(monkeypatch) -> None:
+    job = ArchitectureGenerationJob.create(
+        "Eine einfache Team Todo Liste.",
+        generation_mode="agentic",
+        job_id="job-1",
+    )
+    store = DummyStore(job)
+
+    def fake_generate_architecture_sheet(*args, **kwargs):
+        job.cancel("Benutzerabbruch.")
+        store.save(job)
+        return DummyResult()
+
+    monkeypatch.setattr(
+        "agentic_rag_template.software_factory.worker.generate_architecture_sheet",
+        fake_generate_architecture_sheet,
+    )
+    worker = ArchitectureGenerationWorker(
+        settings=Settings(),
+        job_store=store,
+        llm_provider_factory=lambda settings: DummyProvider(),
+    )
+
+    processed = worker.process_next()
+
+    assert processed is True
+    assert job.status == JOB_STATUS_CANCELED
+    assert job.result is None
+    assert store.saved_jobs[-1]["status"] == JOB_STATUS_CANCELED

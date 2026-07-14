@@ -42,6 +42,19 @@ button:disabled {
   cursor: wait;
 }
 
+.ghost-button {
+  min-height: 30px;
+  border-color: #c4cad3;
+  padding: 0 9px;
+  color: #465264;
+  background: #ffffff;
+}
+
+.ghost-button:hover {
+  color: #1f5f8b;
+  background: #f3f7fb;
+}
+
 label {
   display: block;
   margin: 0 0 6px;
@@ -326,6 +339,21 @@ textarea {
 .architecture-form {
   display: grid;
   gap: 12px;
+}
+
+.architecture-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.architecture-actions button:first-child {
+  border-color: #a44848;
+  background: #a44848;
+}
+
+.architecture-actions button:first-child:hover {
+  background: #843838;
 }
 
 .architecture-form textarea {
@@ -620,6 +648,52 @@ textarea {
   gap: 10px;
 }
 
+.job-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.job-list-button {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  gap: 3px;
+  border-color: #e1e6ee;
+  padding: 9px 10px;
+  text-align: left;
+  color: #263241;
+  background: #ffffff;
+}
+
+.job-list-button:hover,
+.job-list-button[data-active="true"] {
+  border-color: #83b9b2;
+  color: #173f3b;
+  background: #f0faf8;
+}
+
+.job-list-button strong,
+.job-list-button span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-list-button strong {
+  font-size: 13px;
+}
+
+.job-list-button span {
+  font-size: 12px;
+  color: #657181;
+}
+
 .review-meta {
   display: grid;
   gap: 8px;
@@ -668,6 +742,14 @@ textarea {
 .support-list span {
   font-size: 12px;
   color: #6b7280;
+}
+
+.support-list li[data-level="error"] strong {
+  color: #8a2d2d;
+}
+
+.support-list li[data-level="warning"] strong {
+  color: #875100;
 }
 
 .support-list.compact {

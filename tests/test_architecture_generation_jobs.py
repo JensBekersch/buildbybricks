@@ -1,5 +1,6 @@
 from agentic_rag_template.software_factory import (
     JOB_STATUS_COMPLETED,
+    JOB_STATUS_CANCELED,
     JOB_STATUS_FAILED,
     JOB_STATUS_QUEUED,
     JOB_STATUS_RUNNING,
@@ -102,3 +103,36 @@ def test_architecture_generation_job_rejects_unknown_generation_mode() -> None:
         assert "generation_mode" in str(error)
     else:
         raise AssertionError("Unknown generation modes must be rejected.")
+
+
+def test_architecture_generation_job_can_be_canceled_before_terminal_state() -> None:
+    job = ArchitectureGenerationJob.create(
+        "Eine Django App fuer Aufgaben.",
+        generation_mode="agentic",
+        job_id="job-6",
+    )
+    job.mark_running()
+
+    job.cancel("Benutzerabbruch.")
+    payload = job.to_dict()
+
+    assert payload["status"] == JOB_STATUS_CANCELED
+    assert payload["error"] == "Benutzerabbruch."
+    assert payload["finished_at"] is not None
+    assert payload["logs"][-1]["level"] == "warning"
+
+
+def test_architecture_generation_job_rejects_cancel_after_terminal_state() -> None:
+    job = ArchitectureGenerationJob.create(
+        "Eine Django App fuer Aufgaben.",
+        generation_mode="agentic",
+        job_id="job-7",
+    )
+    job.complete({"architecture_sheet": {"artifact_name": "Team Todo"}})
+
+    try:
+        job.cancel()
+    except ValueError as error:
+        assert "Terminal jobs" in str(error)
+    else:
+        raise AssertionError("Completed jobs must not be canceled.")

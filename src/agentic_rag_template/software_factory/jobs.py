@@ -11,6 +11,11 @@ JOB_STATUS_RUNNING = "running"
 JOB_STATUS_COMPLETED = "completed"
 JOB_STATUS_FAILED = "failed"
 JOB_STATUS_CANCELED = "canceled"
+TERMINAL_JOB_STATUSES = {
+    JOB_STATUS_COMPLETED,
+    JOB_STATUS_FAILED,
+    JOB_STATUS_CANCELED,
+}
 
 STEP_STATUS_PENDING = "pending"
 STEP_STATUS_RUNNING = "running"
@@ -280,11 +285,19 @@ class ArchitectureGenerationJob:
         self.add_log(error, level="error", step=self.current_step)
 
     def cancel(self, message: str = "Job wurde abgebrochen.") -> None:
+        if self.status in TERMINAL_JOB_STATUSES:
+            raise ValueError("Terminal jobs cannot be canceled.")
         self.status = JOB_STATUS_CANCELED
         self.error = message
         self.finished_at = utc_now()
         self._touch()
         self.add_log(message, level="warning", step=self.current_step)
+
+    def can_cancel(self) -> bool:
+        return self.status not in TERMINAL_JOB_STATUSES
+
+    def can_retry(self) -> bool:
+        return self.status in {JOB_STATUS_FAILED, JOB_STATUS_CANCELED}
 
     def add_log(self, message: str, level: str = "info", step: str = "") -> None:
         self.logs.append(ArchitectureGenerationLogEntry(message=message, level=level, step=step))

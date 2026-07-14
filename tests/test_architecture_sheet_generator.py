@@ -597,3 +597,64 @@ def test_architecture_sheet_job_events_streams_current_job_snapshot() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_architecture_sheet_job_cancel_and_retry_actions() -> None:
+    settings = Settings(
+        frontend_dir=PROJECT_ROOT / "frontend",
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+        host="127.0.0.1",
+        port=0,
+        llm_provider="ollama",
+        llm_model="qwen3:14b",
+    )
+    store = FakeArchitectureJobStore()
+    job = ArchitectureGenerationJob.create(
+        "Eine Django-Anwendung fuer Kundenverwaltung.",
+        generation_mode="agentic",
+        job_id="cancel-job",
+    )
+    store.save(job)
+    server = create_server(settings, architecture_job_store=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        cancel_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs/cancel-job/cancel",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(cancel_request, timeout=2) as response:
+            canceled = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 200
+        assert canceled["job"]["id"] == "cancel-job"
+        assert canceled["job"]["status"] == "canceled"
+        assert "Benutzer" in canceled["job"]["error"]
+
+        retry_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs/cancel-job/retry",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(retry_request, timeout=2) as response:
+            retried = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 202
+        assert retried["source_job_id"] == "cancel-job"
+        assert retried["job"]["id"] != "cancel-job"
+        assert retried["job"]["status"] == "queued"
+        assert retried["job"]["description"] == "Eine Django-Anwendung fuer Kundenverwaltung."
+        assert retried["job"]["generation_mode"] == "agentic"
+        assert retried["job"]["llm_provider"] == "ollama"
+        assert retried["job"]["llm_model"] == "qwen3:14b"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
