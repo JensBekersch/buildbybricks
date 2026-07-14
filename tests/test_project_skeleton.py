@@ -142,6 +142,11 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             timeout=2,
         )
         profile_payload = json.loads(profile_response.read().decode("utf-8"))
+        runtime_config_response = request.urlopen(
+            f"http://{host}:{port}/runtime/config",
+            timeout=2,
+        )
+        runtime_config_payload = json.loads(runtime_config_response.read().decode("utf-8"))
 
         chat_request = request.Request(
             f"http://{host}:{port}/chat",
@@ -197,6 +202,10 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         assert evaluation_payload["total_cases"] >= 2
         assert evaluation_payload["provider"] == "hash"
         assert profile_payload["default_collection"] == "sample"
+        assert runtime_config_payload["llm"]["provider"] == "deterministic"
+        assert runtime_config_payload["llm"]["timeout_seconds"] == 1200
+        assert runtime_config_payload["llm"]["max_tokens"] == 4096
+        assert runtime_config_payload["pipelines"]["architecture_sheet"]["mode"] == "agentic_with_review"
         assert "keine passende Quelle gefunden" in chat_payload["answer"]
         assert chat_payload["sources"] == []
         assert "Keine lokalen Treffer" in chat_payload["uncertainty"]

@@ -59,6 +59,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"status": "ok", "app": self.settings.app_name})
             return
 
+        if parsed_url.path == "/runtime/config":
+            self._send_json(self.settings.runtime_config())
+            return
+
         if parsed_url.path == "/collections":
             self._send_json(self._list_collections(self._default_application()))
             return
@@ -228,7 +232,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         generation_mode = str(payload.get("generation_mode") or "").strip()
         if not generation_mode:
-            generation_mode = "agentic_with_review"
+            generation_mode = self.settings.architecture_generation_mode
         llm_provider = create_llm_provider(self.settings)
 
         try:

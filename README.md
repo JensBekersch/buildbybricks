@@ -67,6 +67,7 @@ POST /apps/software-factory/architecture-sheet/jobs/{job_id}/cancel
 POST /apps/software-factory/architecture-sheet/jobs/{job_id}/retry
 GET  /apps/software-factory/architecture-sheets
 GET  /apps/software-factory/architecture-sheets/{artifact_id}
+GET  /runtime/config
 ```
 
 Create-Beispiel:
@@ -98,7 +99,8 @@ unterstuetzt zwei sichtbare Modi:
   auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
 
 `generation_mode` ist optional und faellt dann auf `agentic_with_review`
-zurueck. Der Generator erzeugt kein deterministisches oder generisches
+zurueck, sofern `AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE` nicht anders gesetzt
+ist. Der Generator erzeugt kein deterministisches oder generisches
 Fallback-Sheet.
 
 ## Grundkonstrukt
@@ -388,7 +390,14 @@ AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
 AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200
 AGENTIC_RAG_LLM_MAX_TOKENS=4096
+AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE=agentic_with_review
 ```
+
+Die aktive, nicht-geheime Runtime-Konfiguration ist ueber `GET /runtime/config`
+sichtbar. Die UI zeigt daraus Provider, Modell, Timeout, Tokenbudget und den
+aktiven Architecture-Sheet-Modus an. API-Keys werden nicht ausgegeben; die API
+meldet nur, ob ein Key konfiguriert ist. Pro-App- und Pro-Pipeline-Overrides
+sind im Config-Shape vorbereitet, aber noch nicht aktiviert.
 
 Agentische Architecture-Sheet-Laeufe koennen mit lokalen Ollama-Modellen
 mehrere Minuten dauern. `AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200` gibt dem

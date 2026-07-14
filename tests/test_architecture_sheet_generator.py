@@ -558,6 +558,42 @@ def test_architecture_sheet_job_endpoints_create_list_and_get_job() -> None:
         thread.join(timeout=2)
 
 
+def test_architecture_sheet_job_uses_configured_default_generation_mode() -> None:
+    settings = Settings(
+        frontend_dir=PROJECT_ROOT / "frontend",
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+        host="127.0.0.1",
+        port=0,
+        llm_provider="ollama",
+        llm_model="qwen3:14b",
+        architecture_generation_mode="agentic",
+    )
+    store = FakeArchitectureJobStore()
+    server = create_server(settings, architecture_job_store=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        create_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs",
+            data=json.dumps({"description": "Eine Django-Anwendung fuer Kundenverwaltung."}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(create_request, timeout=2) as response:
+            created = json.loads(response.read().decode("utf-8"))
+
+        assert response.status == 202
+        assert created["job"]["generation_mode"] == "agentic"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
 def test_architecture_sheet_job_events_streams_current_job_snapshot() -> None:
     settings = Settings(
         frontend_dir=PROJECT_ROOT / "frontend",

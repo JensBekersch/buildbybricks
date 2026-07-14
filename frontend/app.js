@@ -23,6 +23,11 @@ const generateArchitectureButton = document.querySelector("#generate-architectur
 const cancelArchitectureJobButton = document.querySelector("#cancel-architecture-job");
 const retryArchitectureJobButton = document.querySelector("#retry-architecture-job");
 const refreshArchitectureJobsButton = document.querySelector("#refresh-architecture-jobs");
+const llmProvider = document.querySelector("#llm-provider");
+const llmModel = document.querySelector("#llm-model");
+const llmTimeout = document.querySelector("#llm-timeout");
+const llmTokenBudget = document.querySelector("#llm-token-budget");
+const llmPipelineMode = document.querySelector("#llm-pipeline-mode");
 const architectureStatus = document.querySelector("#architecture-status");
 const architectureProgress = document.querySelector("#architecture-progress");
 const architectureProgressLabel = document.querySelector("#architecture-progress-label");
@@ -48,6 +53,7 @@ const architectureJobLogs = document.querySelector("#architecture-job-logs");
 const architectureTrace = document.querySelector("#architecture-trace");
 
 let applications = [];
+let runtimeConfig = null;
 let activeAppId = "default";
 let activeCollection = "";
 let activeArchitectureJobId = "";
@@ -184,6 +190,29 @@ async function loadApplications() {
   const payload = await getJson("/apps");
   applications = payload.applications || [];
   renderApplications();
+}
+
+async function loadRuntimeConfig() {
+  runtimeConfig = await getJson("/runtime/config");
+  renderRuntimeConfig(runtimeConfig);
+}
+
+function renderRuntimeConfig(config) {
+  const llm = config.llm || {};
+  const architecturePipeline = (config.pipelines || {}).architecture_sheet || {};
+
+  llmProvider.textContent = llm.provider || "-";
+  llmModel.textContent = llm.model || "-";
+  llmTimeout.textContent = llm.timeout_seconds ? `${llm.timeout_seconds}s` : "-";
+  llmTokenBudget.textContent = llm.max_tokens ? `${llm.max_tokens} Tokens` : "-";
+  llmPipelineMode.textContent = architecturePipeline.mode || "-";
+
+  if (
+    architecturePipeline.mode &&
+    Array.from(architectureGenerationMode.options).some((option) => option.value === architecturePipeline.mode)
+  ) {
+    architectureGenerationMode.value = architecturePipeline.mode;
+  }
 }
 
 async function loadCollections() {
@@ -742,6 +771,7 @@ async function generateArchitectureSheet() {
 async function initialize() {
   try {
     setRuntimeStatus("Verbinden...");
+    await loadRuntimeConfig();
     await loadApplications();
     await loadCollections();
     await loadArchitectureJobs();

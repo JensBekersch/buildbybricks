@@ -28,6 +28,7 @@ class Settings:
     llm_api_key: str = ""
     llm_timeout_seconds: int = 1200
     llm_max_tokens: int = 4096
+    architecture_generation_mode: str = "agentic_with_review"
     database_url: str = "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag"
     worker_poll_seconds: float = 2.0
     job_stream_poll_seconds: float = 1.0
@@ -61,6 +62,10 @@ class Settings:
             llm_api_key=os.getenv("AGENTIC_RAG_LLM_API_KEY", ""),
             llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "1200")),
             llm_max_tokens=int(os.getenv("AGENTIC_RAG_LLM_MAX_TOKENS", "4096")),
+            architecture_generation_mode=os.getenv(
+                "AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE",
+                "agentic_with_review",
+            ).strip().lower().replace("-", "_"),
             database_url=os.getenv(
                 "AGENTIC_RAG_DATABASE_URL",
                 "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag",
@@ -69,3 +74,33 @@ class Settings:
             job_stream_poll_seconds=float(os.getenv("AGENTIC_RAG_JOB_STREAM_POLL_SECONDS", "1")),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )
+
+    def runtime_config(self) -> dict:
+        """Return non-secret runtime configuration for API and UI inspection."""
+        return {
+            "app_name": self.app_name,
+            "llm": {
+                "provider": self.llm_provider,
+                "model": self.llm_model,
+                "api_base_url": self.llm_api_base_url,
+                "api_key_configured": bool(self.llm_api_key),
+                "timeout_seconds": self.llm_timeout_seconds,
+                "max_tokens": self.llm_max_tokens,
+                "scope": "global",
+            },
+            "pipelines": {
+                "architecture_sheet": {
+                    "mode": self.architecture_generation_mode,
+                    "supported_modes": ["agentic_with_review", "agentic"],
+                    "llm_provider": self.llm_provider,
+                    "llm_model": self.llm_model,
+                    "timeout_seconds": self.llm_timeout_seconds,
+                    "max_tokens": self.llm_max_tokens,
+                    "scope": "global-default",
+                }
+            },
+            "future_overrides": {
+                "per_app": False,
+                "per_pipeline": False,
+            },
+        }
