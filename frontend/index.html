@@ -77,10 +77,12 @@
             <label for="architecture-description">Softwareartefakt</label>
             <textarea id="architecture-description" name="description" rows="13" placeholder="Beschreibe Ziel, Nutzer, Kernfunktionen, Integrationen, Qualitaetsanforderungen und Randbedingungen."></textarea>
 
-            <label class="toggle-row" for="architecture-use-llm">
-              <input id="architecture-use-llm" name="use_llm" type="checkbox" checked>
-              <span>LLM fuer Ausarbeitung nutzen</span>
-            </label>
+            <label for="architecture-generation-mode">Generierungsmodus</label>
+            <select id="architecture-generation-mode" name="generation_mode">
+              <option value="agentic_with_review">Agentic + Review</option>
+              <option value="agentic">Agentic</option>
+              <option value="fast">Fast</option>
+            </select>
 
             <button id="generate-architecture" type="submit">Architecture Sheet erstellen</button>
             <p id="architecture-status" class="form-status" role="status"></p>
@@ -130,6 +132,10 @@
               <div>
                 <dt>Quelle</dt>
                 <dd id="architecture-provider">-</dd>
+              </div>
+              <div>
+                <dt>Pipeline</dt>
+                <dd id="architecture-pipeline">-</dd>
               </div>
             </dl>
           </section>

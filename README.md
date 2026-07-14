@@ -66,21 +66,23 @@ Beispiel:
 ```json
 {
   "description": "Eine Django-App fuer Kunden, Angebote, Freigaben und PDF-Exporte.",
-  "use_llm": true
+  "generation_mode": "agentic_with_review"
 }
 ```
 
 Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
-`generation`. Der Generator erzeugt zuerst ein deterministisches Basissheet. Wenn
-ein strukturfaehiger LLM-Provider wie Ollama konfiguriert ist, darf das LLM das
-Sheet als JSON anreichern. Danach werden nur bekannte Schemafelder uebernommen
-und der Contract wird erneut validiert. Bei LLM-Fehlern bleibt das
-deterministische Sheet als Fallback erhalten.
+`generation`. Der Generator unterstuetzt drei sichtbare Modi:
 
-`use_llm` ist optional. Ohne diese Angabe nutzt der Endpoint die Einstellung
-`AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED`, die standardmaessig `false` ist. So
-bleibt der Workflow schnell und stabil, waehrend Ollama gezielt fuer
-LLM-Anreicherung zugeschaltet werden kann.
+- `fast`: lokaler deterministischer Fallback ohne LLM.
+- `agentic`: Requirement Analyst und Architecture Synthesizer laufen als
+  strukturierte LLM-Schritte.
+- `agentic_with_review`: zusaetzlich prueft ein Architecture Reviewer das Sheet
+  auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
+
+`generation_mode` ist optional. Fehlt die Angabe, bleibt `use_llm` aus aelteren
+Clients kompatibel: `use_llm=true` entspricht `agentic_with_review`,
+`use_llm=false` entspricht `fast`. Ohne beide Angaben nutzt der Endpoint die
+Einstellung `AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED`.
 
 ## Grundkonstrukt
 

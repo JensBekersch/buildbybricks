@@ -49,9 +49,11 @@ def generate_architecture_sheet(
     description: str,
     application: ApplicationInstance,
     llm_provider: Optional[LLMProvider] = None,
+    generation_mode: str = "fast",
 ) -> ArchitectureSheetResult:
     """Create a schema-shaped architecture sheet from a free-form description."""
     normalized_description = " ".join(description.strip().split())
+    mode = _normalize_generation_mode(generation_mode, llm_provider)
     schema = _load_schema(application)
     sources = _load_method_sources(application)
     base_sheet = _build_sheet(normalized_description)
@@ -63,7 +65,8 @@ def generate_architecture_sheet(
         "generated_django_architecture_sheet",
     ]
     generation = {
-        "mode": "deterministic",
+        "mode": "deterministic" if mode == "fast" else mode,
+        "requested_mode": mode,
         "llm_provider": getattr(llm_provider, "name", "none") if llm_provider else "none",
         "llm_model": getattr(llm_provider, "model", "none") if llm_provider else "none",
         "warnings": [],
@@ -73,24 +76,26 @@ def generate_architecture_sheet(
         description=normalized_description,
         schema=schema,
         method_sources=sources,
-        llm_provider=llm_provider,
+        llm_provider=llm_provider if mode in ("agentic", "agentic_with_review") else None,
+        include_review=mode == "agentic_with_review",
     )
 
     if agentic_sheet["sheet"] is not None:
         sheet = _merge_known_schema_fields(agentic_sheet["base_sheet"], agentic_sheet["sheet"], schema)
-        generation["mode"] = "agentic-llm"
-        generation["pipeline"] = "requirement_analyst -> architecture_synthesizer -> architecture_reviewer"
+        generation["mode"] = mode
+        generation["pipeline"] = (
+            "requirement_analyst -> architecture_synthesizer -> architecture_reviewer"
+            if mode == "agentic_with_review"
+            else "requirement_analyst -> architecture_synthesizer"
+        )
         generation["requirement_analysis"] = agentic_sheet["analysis"]
-        generation["architecture_review"] = agentic_sheet["review"]
+        if agentic_sheet["review"]:
+            generation["architecture_review"] = agentic_sheet["review"]
         if agentic_sheet["warning"]:
             generation["warnings"].append(agentic_sheet["warning"])
-        trace.extend(
-            [
-                "analyzed_requirements",
-                "synthesized_architecture_sheet",
-                "reviewed_architecture_sheet",
-            ]
-        )
+        trace.extend(["analyzed_requirements", "synthesized_architecture_sheet"])
+        if mode == "agentic_with_review":
+            trace.append("reviewed_architecture_sheet")
     elif agentic_sheet["warning"]:
         generation["warnings"].append(agentic_sheet["warning"])
         trace.append("skipped_or_failed_agentic_architecture_pipeline")
@@ -100,7 +105,11 @@ def generate_architecture_sheet(
         base_sheet=base_sheet,
         schema=schema,
         method_sources=sources,
-        llm_provider=llm_provider if agentic_sheet["sheet"] is None else None,
+        llm_provider=(
+            llm_provider
+            if agentic_sheet["sheet"] is None and mode == "legacy_llm_enrichment"
+            else None
+        ),
     )
 
     if llm_sheet["sheet"] is not None:
@@ -146,11 +155,28 @@ def _load_method_sources(application: ApplicationInstance) -> List[Dict[str, Any
     ]
 
 
+def _normalize_generation_mode(generation_mode: str, llm_provider: Optional[LLMProvider]) -> str:
+    allowed_modes = {"fast", "agentic", "agentic_with_review", "legacy_llm_enrichment"}
+    mode = (generation_mode or "fast").strip().lower().replace("-", "_")
+
+    if mode in ("deterministic", "offline"):
+        mode = "fast"
+
+    if mode not in allowed_modes:
+        mode = "agentic_with_review" if llm_provider else "fast"
+
+    if llm_provider is None and mode != "fast":
+        return "fast"
+
+    return mode
+
+
 def _try_generate_agentic_architecture_sheet(
     description: str,
     schema: Dict[str, Any],
     method_sources: List[Dict[str, Any]],
     llm_provider: Optional[LLMProvider],
+    include_review: bool,
 ) -> Dict[str, Any]:
     if llm_provider is None or llm_provider.name == "deterministic":
         return {"sheet": None, "base_sheet": None, "analysis": {}, "review": {}, "warning": ""}
@@ -195,16 +221,19 @@ def _try_generate_agentic_architecture_sheet(
             }
 
         reviewed_sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema)
-        raw_review = generate_json(
-            system_prompt=_build_architecture_reviewer_system_prompt(),
-            user_prompt=_build_architecture_reviewer_user_prompt(
-                description=description,
-                requirement_analysis=analysis,
-                sheet=reviewed_sheet,
-            ),
-        )
-        review = _normalize_architecture_review(raw_review)
-        warning = "" if review.get("passes") else "Architecture reviewer found issues."
+        review = {}
+        warning = ""
+        if include_review:
+            raw_review = generate_json(
+                system_prompt=_build_architecture_reviewer_system_prompt(),
+                user_prompt=_build_architecture_reviewer_user_prompt(
+                    description=description,
+                    requirement_analysis=analysis,
+                    sheet=reviewed_sheet,
+                ),
+            )
+            review = _normalize_architecture_review(raw_review)
+            warning = "" if review.get("passes") else "Architecture reviewer found issues."
         return {
             "sheet": reviewed_sheet,
             "base_sheet": base_sheet,
@@ -663,7 +692,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
     ]
     building_blocks.extend(_domain_building_blocks(analysis))
 
-    if has_approval:
+    if has_approval and analysis.kind != "time_tracking":
         building_blocks.append(
             {
                 "name": "Approval Workflow",
@@ -730,7 +759,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
         *_domain_runtime_scenarios(analysis),
     ]
 
-    if has_approval:
+    if has_approval and analysis.kind != "time_tracking":
         runtime_scenarios.append(
             {
                 "name": "Freigabe durchfuehren",

@@ -18,7 +18,7 @@ const views = document.querySelectorAll(".view");
 
 const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
-const architectureUseLlm = document.querySelector("#architecture-use-llm");
+const architectureGenerationMode = document.querySelector("#architecture-generation-mode");
 const architectureStatus = document.querySelector("#architecture-status");
 const architectureEmpty = document.querySelector("#architecture-empty");
 const architectureResult = document.querySelector("#architecture-result");
@@ -31,6 +31,7 @@ const architectureJson = document.querySelector("#architecture-json");
 const architectureReviewStatus = document.querySelector("#architecture-review-status");
 const architectureSchema = document.querySelector("#architecture-schema");
 const architectureProvider = document.querySelector("#architecture-provider");
+const architecturePipeline = document.querySelector("#architecture-pipeline");
 const architectureSourceCount = document.querySelector("#architecture-source-count");
 const architectureSources = document.querySelector("#architecture-sources");
 const architectureTrace = document.querySelector("#architecture-trace");
@@ -367,9 +368,13 @@ function renderArchitectureResult(payload) {
   const generation = payload.generation || {};
   const sources = payload.sources || [];
   const trace = payload.trace || [];
-  const provider = generation.provider || generation.llm_provider || generation.mode || "Regelbasiert";
-  const model = generation.model || generation.llm_model || "";
-  const usedLlm = Boolean(generation.used_llm || generation.llm_provider);
+  const provider =
+    generation.provider ||
+    (generation.llm_provider && generation.llm_provider !== "none" ? generation.llm_provider : "") ||
+    generation.mode ||
+    "Regelbasiert";
+  const model = generation.model || (generation.llm_model !== "none" ? generation.llm_model : "");
+  const usedLlm = Boolean(generation.used_llm || (generation.llm_provider && generation.llm_provider !== "none"));
 
   architectureEmpty.hidden = true;
   architectureResult.hidden = false;
@@ -384,6 +389,7 @@ function renderArchitectureResult(payload) {
   architectureReviewStatus.textContent = validation.valid ? "Bestanden" : "Mit Hinweisen";
   architectureSchema.textContent = payload.schema_id || "-";
   architectureProvider.textContent = model ? `${provider} · ${model}` : provider;
+  architecturePipeline.textContent = generation.pipeline || generation.requested_mode || generation.mode || "-";
   architectureSourceCount.textContent = String(sources.length);
 
   renderArchitectureSections(sheet);
@@ -409,7 +415,7 @@ async function generateArchitectureSheet() {
 
   const payload = await postJson(appPath("software-factory", "architecture-sheet"), {
     description,
-    use_llm: architectureUseLlm.checked,
+    generation_mode: architectureGenerationMode.value,
   });
 
   renderArchitectureResult(payload);

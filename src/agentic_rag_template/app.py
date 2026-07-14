@@ -176,7 +176,11 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "description is required"}, status=HTTPStatus.BAD_REQUEST)
             return
 
-        use_llm = _payload_bool(payload.get("use_llm"), self.settings.architecture_llm_enabled)
+        generation_mode = str(payload.get("generation_mode") or "").strip()
+        if not generation_mode:
+            use_llm = _payload_bool(payload.get("use_llm"), self.settings.architecture_llm_enabled)
+            generation_mode = "agentic_with_review" if use_llm else "fast"
+        use_llm = generation_mode != "fast"
         llm_provider = create_llm_provider(self.settings) if use_llm else None
 
         try:
@@ -184,6 +188,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 description,
                 application,
                 llm_provider=llm_provider,
+                generation_mode=generation_mode,
             )
         except FileNotFoundError as error:
             self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)

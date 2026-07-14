@@ -207,6 +207,7 @@ def test_generate_architecture_sheet_can_merge_llm_json() -> None:
         "Eine Django-App fuer Angebote und Freigaben.",
         application,
         llm_provider=FakeArchitectureLLMProvider(),
+        generation_mode="legacy_llm_enrichment",
     )
     payload = result.to_dict()
     sheet = payload["architecture_sheet"]
@@ -234,13 +235,14 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
         "Django-Webanwendung zur Erfassung und Auswertung von Arbeitszeiten mit spaeterer REST API.",
         application,
         llm_provider=provider,
+        generation_mode="agentic_with_review",
     )
     payload = result.to_dict()
     sheet = payload["architecture_sheet"]
     block_names = {block["name"] for block in sheet["building_blocks"]}
     interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
 
-    assert payload["generation"]["mode"] == "agentic-llm"
+    assert payload["generation"]["mode"] == "agentic_with_review"
     assert payload["generation"]["architecture_review"]["passes"] is True
     assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
     assert provider.calls == [
@@ -258,6 +260,33 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
         "reviewed_architecture_sheet",
         "validated_architecture_sheet_contract",
     ]
+
+
+def test_generate_architecture_sheet_can_skip_agentic_review() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    provider = AgenticArchitectureLLMProvider()
+
+    result = generate_architecture_sheet(
+        "Django-Webanwendung zur Erfassung und Auswertung von Arbeitszeiten.",
+        application,
+        llm_provider=provider,
+        generation_mode="agentic",
+    )
+    payload = result.to_dict()
+
+    assert payload["generation"]["mode"] == "agentic"
+    assert payload["generation"]["pipeline"] == "requirement_analyst -> architecture_synthesizer"
+    assert "architecture_review" not in payload["generation"]
+    assert provider.calls == [
+        "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
+        "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
+    ]
+    assert "reviewed_architecture_sheet" not in payload["trace"]
 
 
 def test_generate_architecture_sheet_focuses_on_work_time_domain() -> None:
@@ -315,6 +344,7 @@ def test_llm_generation_keeps_work_time_domain_focus() -> None:
         ),
         application,
         llm_provider=GenericArchitectureLLMProvider(),
+        generation_mode="legacy_llm_enrichment",
     )
     payload = result.to_dict()
     sheet = payload["architecture_sheet"]
