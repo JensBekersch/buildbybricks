@@ -43,6 +43,24 @@ Das Architecture Sheet ist bewusst ein maschinenlesbares Zwischenformat. Es ist
 kein vollstaendiges arc42-Dokument, sondern der spaetere Uebergabepunkt zwischen
 Architektur-Agent, Workorder-Agenten und Implementierungs-Agenten.
 
+Der erste Generator-Endpunkt ist:
+
+```text
+POST /apps/software-factory/architecture-sheet
+```
+
+Beispiel:
+
+```json
+{
+  "description": "Eine Django-App fuer Kunden, Angebote, Freigaben und PDF-Exporte."
+}
+```
+
+Die Antwort enthaelt `architecture_sheet`, `validation`, `sources` und `trace`.
+Der Generator ist in dieser Stufe deterministisch und schema-basiert; spaeter
+kann ein LLM die Struktur anreichern, ohne den API-Vertrag zu brechen.
+
 ## Grundkonstrukt
 
 Ein minimales agentic-RAG-System braucht folgende Bestandteile:

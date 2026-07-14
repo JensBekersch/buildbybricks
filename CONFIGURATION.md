@@ -104,6 +104,7 @@ Runtime endpoints:
 - `GET /apps/{app_id}/retrieval/search?q={query}&collection={collection}`
 - `POST /apps/{app_id}/chat`
 - `GET /apps/{app_id}/evaluation/run`
+- `POST /apps/software-factory/architecture-sheet`
 
 The document upload endpoint accepts JSON and writes supported text files into
 the app data directory:
@@ -118,6 +119,18 @@ the app data directory:
 Docker Compose mounts `./data` as writable so uploaded knowledge is persisted on
 the host during local experiments. `./apps` and `./template` stay read-only
 because app configuration should remain an explicit file change for now.
+
+The Software Factory architecture-sheet endpoint accepts:
+
+```json
+{
+  "description": "A Django application for customers, offers, approvals, and PDF exports."
+}
+```
+
+It returns a schema-shaped `architecture_sheet`, validation metadata, method
+sources, and trace steps. The current generator is deterministic so local tests
+remain stable.
 
 ## Embedding Providers
 
