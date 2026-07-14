@@ -8,17 +8,62 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="chat-header">
-        <h1>Agentic RAG Study Chat</h1>
-        <p>Frontend shell for the upcoming API-backed chat flow.</p>
+      <header class="app-header">
+        <div>
+          <h1>Agentic RAG Studio</h1>
+          <p id="app-description">Lokale Study Runtime</p>
+        </div>
+        <div class="runtime-status" id="runtime-status">Verbinden...</div>
       </header>
-      <section id="chat-log" class="chat-log" aria-label="Chat Verlauf"></section>
-      <form id="chat-form" class="chat-form">
-        <label class="sr-only" for="message-input">Nachricht</label>
-        <input id="message-input" name="message" type="text" placeholder="Frage eingeben" autocomplete="off">
-        <button type="submit">Senden</button>
-      </form>
+
+      <section class="workspace">
+        <aside class="control-panel" aria-label="App und Wissen">
+          <section class="panel-section">
+            <h2>Anwendung</h2>
+            <label for="app-select">App</label>
+            <select id="app-select"></select>
+          </section>
+
+          <section class="panel-section">
+            <h2>Collection</h2>
+            <label for="collection-select">Aktive Collection</label>
+            <select id="collection-select"></select>
+            <button id="refresh-collections" type="button">Aktualisieren</button>
+          </section>
+        </aside>
+
+        <section class="chat-panel" aria-label="Chat">
+          <div id="chat-log" class="chat-log" aria-label="Chat Verlauf"></div>
+          <form id="chat-form" class="chat-form">
+            <label class="sr-only" for="message-input">Nachricht</label>
+            <input id="message-input" name="message" type="text" placeholder="Frage eingeben" autocomplete="off">
+            <button type="submit">Senden</button>
+          </form>
+        </section>
+
+        <aside class="knowledge-panel" aria-label="Wissen">
+          <section class="panel-section">
+            <div class="section-heading">
+              <h2>Dokumente</h2>
+              <span id="document-count">0</span>
+            </div>
+            <ul id="document-list" class="document-list"></ul>
+          </section>
+
+          <form id="upload-form" class="upload-form">
+            <h2>Wissen hinzufuegen</h2>
+            <label for="upload-collection">Collection</label>
+            <input id="upload-collection" name="collection" type="text" autocomplete="off">
+            <label for="upload-filename">Dateiname</label>
+            <input id="upload-filename" name="filename" type="text" placeholder="notiz.md" autocomplete="off">
+            <label for="upload-content">Inhalt</label>
+            <textarea id="upload-content" name="content" rows="9"></textarea>
+            <button type="submit">Hochladen</button>
+            <p id="upload-status" class="form-status" role="status"></p>
+          </form>
+        </aside>
+      </section>
     </main>
-    <script src="app.js"></script>
+    <script src="app.js?v=knowledge-ui"></script>
   </body>
 </html>
