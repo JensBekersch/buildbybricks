@@ -19,6 +19,7 @@ from agentic_rag_template.evaluation import EvaluationRunner
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
 from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
+from agentic_rag_template.observability import render_prometheus_metrics
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
@@ -61,6 +62,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if parsed_url.path == "/runtime/config":
             self._send_json(self.settings.runtime_config())
+            return
+
+        if parsed_url.path == "/metrics":
+            self._send_metrics_response()
             return
 
         if parsed_url.path == "/collections":
@@ -693,6 +698,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         payload["llm_model"] = llm_provider.model
         return payload
 
+    def _send_metrics_response(self) -> None:
+        try:
+            jobs = self._architecture_job_store().list(limit=500)
+            payload = render_prometheus_metrics(self.settings, jobs)
+        except Exception as error:
+            safe_reason = str(error).replace("\\", "\\\\").replace('"', '\\"')
+            payload = (
+                "# HELP buildbybricks_metrics_error Metrics collection error.\n"
+                "# TYPE buildbybricks_metrics_error gauge\n"
+                f'buildbybricks_metrics_error{{reason="{safe_reason}"}} 1\n'
+            )
+
+        self._send_text(payload, content_type="text/plain; version=0.0.4; charset=utf-8")
+
     def _parse_app_route(self, path: str) -> Optional[Dict[str, str]]:
         if not path.startswith("/apps/"):
             return None
@@ -795,6 +814,19 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_text(
+        self,
+        payload: str,
+        status: HTTPStatus = HTTPStatus.OK,
+        content_type: str = "text/plain; charset=utf-8",
+    ) -> None:
+        body = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

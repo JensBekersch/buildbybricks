@@ -99,6 +99,7 @@ class ArchitectureGenerationLogEntry:
     message: str
     level: str = "info"
     step: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -107,14 +108,18 @@ class ArchitectureGenerationLogEntry:
             "level": self.level,
             "step": self.step,
             "message": self.message,
+            "metadata": self.metadata,
         }
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "ArchitectureGenerationLogEntry":
+        raw_metadata = payload.get("metadata", {})
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         return cls(
             message=str(payload.get("message", "")),
             level=str(payload.get("level", "info")),
             step=str(payload.get("step", "")),
+            metadata=dict(metadata),
             created_at=parse_timestamp(payload.get("created_at")) or utc_now(),
         )
 
@@ -299,8 +304,21 @@ class ArchitectureGenerationJob:
     def can_retry(self) -> bool:
         return self.status in {JOB_STATUS_FAILED, JOB_STATUS_CANCELED}
 
-    def add_log(self, message: str, level: str = "info", step: str = "") -> None:
-        self.logs.append(ArchitectureGenerationLogEntry(message=message, level=level, step=step))
+    def add_log(
+        self,
+        message: str,
+        level: str = "info",
+        step: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.logs.append(
+            ArchitectureGenerationLogEntry(
+                message=message,
+                level=level,
+                step=step,
+                metadata=metadata or {},
+            )
+        )
         self._touch()
 
     def to_dict(self, include_result: bool = True) -> Dict[str, Any]:
@@ -386,7 +404,7 @@ def apply_architecture_generation_event(
         return
 
     if event.type == EVENT_LOG:
-        job.add_log(event.message, level=event.level, step=event.step)
+        job.add_log(event.message, level=event.level, step=event.step, metadata=event.metadata)
         return
 
     raise ValueError(f"Unknown architecture generation event type: {event.type}")

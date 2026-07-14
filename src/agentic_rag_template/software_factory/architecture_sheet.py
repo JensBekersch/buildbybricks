@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import json
 import re
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from agentic_rag_template.applications import ApplicationInstance
@@ -11,6 +12,7 @@ from agentic_rag_template.llm.models import LLMProvider
 from agentic_rag_template.software_factory.jobs import (
     EVENT_STEP_COMPLETED,
     EVENT_STEP_FAILED,
+    EVENT_LOG,
     EVENT_STEP_SKIPPED,
     EVENT_STEP_STARTED,
     ArchitectureGenerationEvent,
@@ -52,6 +54,7 @@ def _emit_event(
     step: str,
     message: str,
     level: str = "info",
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     if event_handler is None:
         return
@@ -61,6 +64,7 @@ def _emit_event(
             step=step,
             message=message,
             level=level,
+            metadata=metadata or {},
         )
     )
 
@@ -95,6 +99,16 @@ def _emit_skipped(
     message: str,
 ) -> None:
     _emit_event(event_handler, EVENT_STEP_SKIPPED, step, message)
+
+
+def _emit_log(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    message: str,
+    level: str = "info",
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    _emit_event(event_handler, EVENT_LOG, step, message, level=level, metadata=metadata)
 
 
 def generate_architecture_sheet(
@@ -244,7 +258,12 @@ def _try_generate_agentic_architecture_sheet(
 
     try:
         _emit_started(event_handler, "analyze_requirements", "Requirement Analyst wird aufgerufen.")
-        raw_analysis = generate_json(
+        raw_analysis = _call_generate_json_with_metrics(
+            generate_json=generate_json,
+            llm_provider=llm_provider,
+            event_handler=event_handler,
+            step="analyze_requirements",
+            llm_step="requirement_analyst",
             system_prompt=_build_requirements_analyst_system_prompt(),
             user_prompt=_build_requirements_analyst_user_prompt(description, method_sources),
         )
@@ -254,7 +273,12 @@ def _try_generate_agentic_architecture_sheet(
 
         current_step = "synthesize_architecture"
         _emit_started(event_handler, "synthesize_architecture", "Architecture Synthesizer wird aufgerufen.")
-        raw_sheet = generate_json(
+        raw_sheet = _call_generate_json_with_metrics(
+            generate_json=generate_json,
+            llm_provider=llm_provider,
+            event_handler=event_handler,
+            step="synthesize_architecture",
+            llm_step="architecture_synthesizer",
             system_prompt=_build_architecture_synthesizer_system_prompt(),
             user_prompt=_build_architecture_synthesizer_user_prompt(
                 description=description,
@@ -283,7 +307,12 @@ def _try_generate_agentic_architecture_sheet(
         if include_review:
             current_step = "review_architecture"
             _emit_started(event_handler, "review_architecture", "Architecture Reviewer wird aufgerufen.")
-            raw_review = generate_json(
+            raw_review = _call_generate_json_with_metrics(
+                generate_json=generate_json,
+                llm_provider=llm_provider,
+                event_handler=event_handler,
+                step="review_architecture",
+                llm_step="architecture_reviewer",
                 system_prompt=_build_architecture_reviewer_system_prompt(),
                 user_prompt=_build_architecture_reviewer_user_prompt(
                     description=description,
@@ -315,6 +344,55 @@ def _try_generate_agentic_architecture_sheet(
             "review": {},
             "warning": f"Agentic architecture pipeline failed: {error}",
         }
+
+
+def _call_generate_json_with_metrics(
+    generate_json: Callable[..., Dict[str, Any]],
+    llm_provider: LLMProvider,
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    llm_step: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> Dict[str, Any]:
+    started_at = time.perf_counter()
+    metadata = {
+        "kind": "llm_call",
+        "llm_step": llm_step,
+        "provider": getattr(llm_provider, "name", "none"),
+        "model": getattr(llm_provider, "model", "none"),
+    }
+
+    try:
+        result = generate_json(system_prompt=system_prompt, user_prompt=user_prompt)
+    except Exception as error:
+        duration_seconds = time.perf_counter() - started_at
+        _emit_log(
+            event_handler,
+            step,
+            f"LLM call failed: {error}",
+            level="error",
+            metadata={
+                **metadata,
+                "status": "failed",
+                "duration_seconds": round(duration_seconds, 6),
+                "error": str(error),
+            },
+        )
+        raise
+
+    duration_seconds = time.perf_counter() - started_at
+    _emit_log(
+        event_handler,
+        step,
+        "LLM call completed.",
+        metadata={
+            **metadata,
+            "status": "completed",
+            "duration_seconds": round(duration_seconds, 6),
+        },
+    )
+    return result
 
 
 def _compact_schema_contract(schema: Dict[str, Any]) -> Dict[str, Any]:
