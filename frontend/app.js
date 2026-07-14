@@ -13,6 +13,27 @@ const runtimeStatus = document.querySelector("#runtime-status");
 const chatForm = document.querySelector("#chat-form");
 const chatLog = document.querySelector("#chat-log");
 const messageInput = document.querySelector("#message-input");
+const modeTabs = document.querySelectorAll("[data-view-target]");
+const views = document.querySelectorAll(".view");
+
+const architectureForm = document.querySelector("#architecture-form");
+const architectureDescription = document.querySelector("#architecture-description");
+const architectureUseLlm = document.querySelector("#architecture-use-llm");
+const architectureStatus = document.querySelector("#architecture-status");
+const architectureEmpty = document.querySelector("#architecture-empty");
+const architectureResult = document.querySelector("#architecture-result");
+const architectureTitle = document.querySelector("#architecture-title");
+const architectureBusinessGoal = document.querySelector("#architecture-business-goal");
+const architectureValidation = document.querySelector("#architecture-validation");
+const architectureGeneration = document.querySelector("#architecture-generation");
+const architectureSections = document.querySelector("#architecture-sections");
+const architectureJson = document.querySelector("#architecture-json");
+const architectureReviewStatus = document.querySelector("#architecture-review-status");
+const architectureSchema = document.querySelector("#architecture-schema");
+const architectureProvider = document.querySelector("#architecture-provider");
+const architectureSourceCount = document.querySelector("#architecture-source-count");
+const architectureSources = document.querySelector("#architecture-sources");
+const architectureTrace = document.querySelector("#architecture-trace");
 
 let applications = [];
 let activeAppId = "default";
@@ -158,6 +179,13 @@ async function loadDocuments() {
   renderDocuments(payload.documents || []);
 }
 
+async function setActiveApplication(appId) {
+  activeAppId = appId;
+  activeCollection = "";
+  renderApplications();
+  await loadCollections();
+}
+
 function appendMessage(author, text, details = [], sources = [], uncertainty = "") {
   const message = document.createElement("article");
   const content = document.createElement("p");
@@ -203,6 +231,192 @@ function appendMessage(author, text, details = [], sources = [], uncertainty = "
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+function activateView(targetId) {
+  views.forEach((view) => {
+    view.hidden = view.id !== targetId;
+  });
+
+  modeTabs.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.viewTarget === targetId);
+  });
+}
+
+function createElement(tagName, className, text = "") {
+  const element = document.createElement(tagName);
+  if (className) {
+    element.className = className;
+  }
+  if (text) {
+    element.textContent = text;
+  }
+  return element;
+}
+
+function valueText(value) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  if (Array.isArray(value)) {
+    return value.map(valueText).filter(Boolean).join(", ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, entry]) => `${key.replaceAll("_", " ")}: ${valueText(entry)}`)
+      .join("; ");
+  }
+  return String(value);
+}
+
+function appendList(container, items) {
+  const list = createElement("ul", "sheet-list");
+  const normalizedItems = Array.isArray(items) ? items : [items].filter(Boolean);
+
+  if (normalizedItems.length === 0) {
+    list.append(createElement("li", "", "Noch offen"));
+  }
+
+  normalizedItems.forEach((item) => {
+    const listItem = document.createElement("li");
+    if (typeof item === "object" && item !== null) {
+      const title = valueText(item.name || item.title || item.decision || item.scenario || item.risk);
+      const description = valueText(
+        item.description ||
+          item.responsibility ||
+          item.rationale ||
+          item.mitigation ||
+          item.trigger ||
+          item.value
+      );
+      const meta = valueText(
+        item.impact ||
+          item.status ||
+          item.priority ||
+          item.category ||
+          item.django_mapping ||
+          item.verification
+      );
+
+      if (title) {
+        listItem.append(createElement("strong", "", title));
+      }
+      if (description) {
+        listItem.append(createElement("span", "", description));
+      }
+      if (meta) {
+        listItem.append(createElement("small", "", meta));
+      }
+    } else {
+      listItem.textContent = valueText(item);
+    }
+    list.append(listItem);
+  });
+
+  container.append(list);
+}
+
+function appendSection(title, content) {
+  const section = createElement("section", "sheet-section");
+  section.append(createElement("h3", "", title));
+
+  if (Array.isArray(content)) {
+    appendList(section, content);
+  } else {
+    const text = valueText(content);
+    section.append(createElement("p", "", text || "Noch offen"));
+  }
+
+  architectureSections.append(section);
+}
+
+function renderArchitectureSections(sheet) {
+  architectureSections.replaceChildren();
+
+  appendSection("Architecture Drivers", sheet.architecture_drivers || sheet.drivers || []);
+  appendSection("Qualitaetsziele", sheet.quality_goals || []);
+  appendSection("Kontext & Schnittstellen", sheet.context || sheet.external_interfaces || []);
+  appendSection("Bausteine", sheet.building_blocks || []);
+  appendSection("Laufzeitszenarien", sheet.runtime_scenarios || []);
+  appendSection("Architekturentscheidungen", sheet.architecture_decisions || sheet.decisions || []);
+  appendSection("Risiken", sheet.risks || []);
+  appendSection("Annahmen", sheet.assumptions || []);
+  appendSection("Offene Fragen", sheet.open_questions || []);
+  appendSection("Akzeptanzkriterien", sheet.acceptance_criteria || []);
+  appendSection("Teststrategie", sheet.test_strategy || []);
+}
+
+function renderSupportList(element, items, emptyText, formatter) {
+  element.replaceChildren();
+
+  if (!items || items.length === 0) {
+    const item = document.createElement("li");
+    item.textContent = emptyText;
+    element.append(item);
+    return;
+  }
+
+  items.forEach((entry) => {
+    const item = document.createElement("li");
+    formatter(item, entry);
+    element.append(item);
+  });
+}
+
+function renderArchitectureResult(payload) {
+  const sheet = payload.architecture_sheet || {};
+  const validation = payload.validation || {};
+  const generation = payload.generation || {};
+  const sources = payload.sources || [];
+  const trace = payload.trace || [];
+  const provider = generation.provider || generation.llm_provider || generation.mode || "Regelbasiert";
+  const model = generation.model || generation.llm_model || "";
+  const usedLlm = Boolean(generation.used_llm || generation.llm_provider);
+
+  architectureEmpty.hidden = true;
+  architectureResult.hidden = false;
+  architectureTitle.textContent = sheet.artifact_name || sheet.title || sheet.name || "Unbenanntes Artefakt";
+  architectureBusinessGoal.textContent = valueText(sheet.business_goal || sheet.goal) || "Business-Ziel noch offen.";
+  architectureValidation.textContent = validation.valid ? "Schema gueltig" : "Schema pruefen";
+  architectureValidation.dataset.tone = validation.valid ? "ok" : "warn";
+  architectureGeneration.textContent = provider;
+  architectureGeneration.dataset.tone = usedLlm ? "accent" : "neutral";
+  architectureJson.textContent = JSON.stringify(sheet, null, 2);
+
+  architectureReviewStatus.textContent = validation.valid ? "Bestanden" : "Mit Hinweisen";
+  architectureSchema.textContent = payload.schema_id || "-";
+  architectureProvider.textContent = model ? `${provider} · ${model}` : provider;
+  architectureSourceCount.textContent = String(sources.length);
+
+  renderArchitectureSections(sheet);
+  renderSupportList(architectureSources, sources, "Keine Quellen", (item, source) => {
+    item.append(createElement("strong", "", source.title || "Quelle"));
+    item.append(createElement("span", "", source.location || source.relative_path || ""));
+  });
+  renderSupportList(architectureTrace, trace, "Noch kein Trace", (item, entry) => {
+    item.textContent = valueText(entry);
+  });
+}
+
+async function generateArchitectureSheet() {
+  const description = architectureDescription.value.trim();
+
+  if (!description) {
+    architectureStatus.textContent = "Bitte beschreibe zuerst das Softwareartefakt.";
+    return;
+  }
+
+  architectureStatus.textContent = "Generator laeuft...";
+  setRuntimeStatus("Generiert...", "neutral");
+
+  const payload = await postJson(appPath("software-factory", "architecture-sheet"), {
+    description,
+    use_llm: architectureUseLlm.checked,
+  });
+
+  renderArchitectureResult(payload);
+  architectureStatus.textContent = "Architecture Sheet erstellt.";
+  setRuntimeStatus("Bereit", "ok");
+}
+
 async function initialize() {
   try {
     setRuntimeStatus("Verbinden...");
@@ -215,13 +429,29 @@ async function initialize() {
   }
 }
 
-appSelect.addEventListener("change", async () => {
-  activeAppId = appSelect.value;
-  activeCollection = "";
-  renderApplications();
+modeTabs.forEach((button) => {
+  button.addEventListener("click", async () => {
+    const targetId = button.dataset.viewTarget;
+    activateView(targetId);
 
+    if (
+      targetId === "architecture-view" &&
+      activeAppId !== "software-factory" &&
+      applications.some((application) => application.id === "software-factory")
+    ) {
+      try {
+        await setActiveApplication("software-factory");
+        setRuntimeStatus("Bereit", "ok");
+      } catch (error) {
+        setRuntimeStatus(error.message, "error");
+      }
+    }
+  });
+});
+
+appSelect.addEventListener("change", async () => {
   try {
-    await loadCollections();
+    await setActiveApplication(appSelect.value);
     setRuntimeStatus("Bereit", "ok");
   } catch (error) {
     setRuntimeStatus(error.message, "error");
@@ -299,6 +529,17 @@ chatForm.addEventListener("submit", async (event) => {
     appendMessage("Agent", payload.answer, details, payload.sources || [], payload.uncertainty || "");
   } catch (error) {
     appendMessage("System", error.message || "Die API ist nicht erreichbar.");
+  }
+});
+
+architectureForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  try {
+    await generateArchitectureSheet();
+  } catch (error) {
+    architectureStatus.textContent = error.message || "Architecture Sheet konnte nicht erstellt werden.";
+    setRuntimeStatus("Fehler", "error");
   }
 });
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Agentic RAG Study Chat</title>
+    <title>Agentic RAG Studio</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -16,7 +16,12 @@
         <div class="runtime-status" id="runtime-status">Verbinden...</div>
       </header>
 
-      <section class="workspace">
+      <nav class="mode-tabs" aria-label="Arbeitsbereich">
+        <button class="mode-tab is-active" type="button" data-view-target="rag-view">Chat & Wissen</button>
+        <button class="mode-tab" type="button" data-view-target="architecture-view">Architecture Sheet</button>
+      </nav>
+
+      <section id="rag-view" class="workspace view">
         <aside class="control-panel" aria-label="App und Wissen">
           <section class="panel-section">
             <h2>Anwendung</h2>
@@ -63,7 +68,87 @@
           </form>
         </aside>
       </section>
+
+      <section id="architecture-view" class="architecture-workbench view" hidden>
+        <aside class="architecture-panel architecture-input" aria-label="Architecture Sheet Generator">
+          <div class="panel-kicker">Software Factory</div>
+          <h2>Architecture Sheet</h2>
+          <form id="architecture-form" class="architecture-form">
+            <label for="architecture-description">Softwareartefakt</label>
+            <textarea id="architecture-description" name="description" rows="13" placeholder="Beschreibe Ziel, Nutzer, Kernfunktionen, Integrationen, Qualitaetsanforderungen und Randbedingungen."></textarea>
+
+            <label class="toggle-row" for="architecture-use-llm">
+              <input id="architecture-use-llm" name="use_llm" type="checkbox" checked>
+              <span>LLM fuer Ausarbeitung nutzen</span>
+            </label>
+
+            <button id="generate-architecture" type="submit">Architecture Sheet erstellen</button>
+            <p id="architecture-status" class="form-status" role="status"></p>
+          </form>
+        </aside>
+
+        <section class="architecture-panel architecture-sheet" aria-label="Generiertes Architecture Sheet">
+          <div id="architecture-empty" class="architecture-empty">
+            <strong>Noch kein Sheet erzeugt</strong>
+            <span>Der Generator rendert das Ergebnis hier als pruefbares Arbeitsdokument.</span>
+          </div>
+
+          <article id="architecture-result" hidden>
+            <header class="sheet-header">
+              <div>
+                <p class="panel-kicker">Architecture Sheet</p>
+                <h2 id="architecture-title">Unbenanntes Artefakt</h2>
+              </div>
+              <div class="sheet-badges">
+                <span id="architecture-validation" class="badge">Validierung</span>
+                <span id="architecture-generation" class="badge">Generator</span>
+              </div>
+            </header>
+
+            <p id="architecture-business-goal" class="sheet-lede"></p>
+            <div id="architecture-sections" class="sheet-sections"></div>
+
+            <details class="json-panel">
+              <summary>JSON anzeigen</summary>
+              <pre id="architecture-json"></pre>
+            </details>
+          </article>
+        </section>
+
+        <aside class="architecture-panel architecture-review" aria-label="Pruefung und Quellen">
+          <section class="review-section">
+            <h2>Pruefung</h2>
+            <dl class="review-meta">
+              <div>
+                <dt>Status</dt>
+                <dd id="architecture-review-status">Wartet</dd>
+              </div>
+              <div>
+                <dt>Schema</dt>
+                <dd id="architecture-schema">-</dd>
+              </div>
+              <div>
+                <dt>Quelle</dt>
+                <dd id="architecture-provider">-</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="review-section">
+            <div class="section-heading">
+              <h2>Quellen</h2>
+              <span id="architecture-source-count">0</span>
+            </div>
+            <ol id="architecture-sources" class="support-list"></ol>
+          </section>
+
+          <section class="review-section">
+            <h2>Trace</h2>
+            <ol id="architecture-trace" class="support-list compact"></ol>
+          </section>
+        </aside>
+      </section>
     </main>
-    <script src="app.js?v=knowledge-ui"></script>
+    <script src="app.js?v=architecture-workspace"></script>
   </body>
 </html>
