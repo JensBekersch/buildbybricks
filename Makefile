@@ -8,7 +8,7 @@ DOCKER_COMPOSE = $(strip $(COMPOSE) $(COMPOSE_PROFILE_ARGS))
 help:
 	@echo "Targets:"
 	@echo "  make deploy   Pull latest git changes and restart containers"
-	@echo "  make pull     Pull latest git changes with --ff-only"
+	@echo "  make pull     Pull latest main changes with --ff-only"
 	@echo "  make up       Start containers in the background"
 	@echo "  make restart  Rebuild and restart containers"
 	@echo "  make logs     Follow container logs"
@@ -20,7 +20,7 @@ help:
 	@echo "  COMPOSE='docker compose'   Compose command"
 
 pull:
-	git pull --ff-only
+	git pull --ff-only origin main
 
 build:
 	$(DOCKER_COMPOSE) build
