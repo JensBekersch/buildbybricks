@@ -38,10 +38,18 @@ Der erste Contract liegt unter:
 - `apps/software-factory/architecture_sheet.schema.json`
 - `apps/software-factory/app_profile.json`
 - `data/software-factory/architecture-method/arc42_architecture_sheet.md`
+- `apps/software-factory/examples/good_architecture_sheet.json`
+- `apps/software-factory/examples/bad_architecture_sheet.md`
 
 Das Architecture Sheet ist bewusst ein maschinenlesbares Zwischenformat. Es ist
 kein vollstaendiges arc42-Dokument, sondern der spaetere Uebergabepunkt zwischen
 Architektur-Agent, Workorder-Agenten und Implementierungs-Agenten.
+
+Der aktuelle Contract ist `schema_version` `1.0.0`. Er enthaelt neben den
+arc42-orientierten Kernabschnitten auch Architecture Drivers,
+Architecture Decisions, Acceptance Criteria und einen Readiness-Status. Damit
+ist das Sheet nicht nur Dokumentation, sondern ein pruefbarer Arbeitsvertrag fuer
+Folgeagenten.
 
 Der erste Generator-Endpunkt ist:
 

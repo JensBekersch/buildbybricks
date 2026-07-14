@@ -16,18 +16,22 @@ Aenderungen daraus abgeleitet werden koennen.
 
 Ein Architecture Sheet enthaelt mindestens:
 
+- schema_version: Version des Sheet-Contracts, aktuell `1.0.0`.
 - artifact_name: Name des geplanten Softwareartefakts.
 - artifact_type: Fuer den Start vor allem `django-application`, `django-service`
   oder `django-app-module`.
+- input_summary: Verdichtete Nutzerbeschreibung als Arbeitsgrundlage.
 - business_goal: Fachliches Ziel und Nutzen.
 - stakeholders: Nutzer, Betreiber, Fachbereiche, Entwickler und weitere
   Anspruchsgruppen.
+- architecture_drivers: Zentrale Treiber fuer Architekturentscheidungen.
 - quality_goals: Die wichtigsten Qualitaetsziele mit konkretem Szenario und
   Prioritaet.
 - constraints: Technische, organisatorische, regulatorische und betriebliche
   Randbedingungen.
 - context: Nutzer, externe Systeme und Schnittstellen.
 - solution_strategy: Architekturidee in wenigen Saetzen.
+- architecture_decisions: Explizite Entscheidungen mit Begruendung und Status.
 - building_blocks: Grobe Bausteine und ihre Django-Zuordnung.
 - runtime_scenarios: Zentrale Ablauf- oder Nutzungsszenarien.
 - deployment_view: Erste Sicht auf Betrieb, Container, Umgebungen und
@@ -35,9 +39,11 @@ Ein Architecture Sheet enthaelt mindestens:
 - data_view: Wichtige Datenobjekte, Datenfluesse und Persistenz.
 - security_view: Authentifizierung, Autorisierung, Datenzugriff und Audit.
 - test_strategy: Welche Tests spaeter erzeugt werden muessen.
+- acceptance_criteria: Pruefbare Kriterien fuer die Brauchbarkeit des Sheets.
 - risks: Risiken mit moeglicher Mitigation.
 - open_questions: Punkte, die vor Umsetzung geklaert werden muessen.
 - assumptions: Annahmen, die aus der Beschreibung abgeleitet wurden.
+- readiness: Status und kurze Einschaetzung fuer Review/Freigabe.
 
 ## Django-spezifische Heuristiken
 
@@ -70,6 +76,25 @@ Wenn Informationen fehlen, sollen keine Details erfunden werden. Stattdessen:
 Das Architecture Sheet soll als JSON-kompatible Struktur erzeugt werden. Jeder
 Abschnitt muss vorhanden sein. Leere oder unklare Bereiche werden mit sinnvollen
 offenen Fragen und Annahmen markiert, nicht still ausgelassen.
+
+Ein produktiv brauchbares Sheet muss:
+
+- alle Pflichtfelder des Schemas `1.0.0` enthalten,
+- mindestens eine Architekturentscheidung enthalten,
+- mindestens ein Qualitaetsziel mit Szenario enthalten,
+- mindestens ein Risiko mit Mitigation enthalten,
+- offene Fragen sichtbar machen,
+- Django Building Blocks mit konkreter Django-Zuordnung benennen,
+- den Status `ready-for-review` erst setzen, wenn Folgeagenten daraus arbeiten
+  koennen.
+
+Ein schlechtes Sheet:
+
+- enthaelt nur Fliesstext ohne strukturierte Felder,
+- vermischt fachliche Ziele, Loesungen und Annahmen,
+- nennt keine Risiken oder offenen Fragen,
+- liefert keine Django-Zuordnung,
+- erfindet Details, statt Annahmen und Fragen zu markieren.
 
 ## Beispiel fuer ein kompaktes Sheet
 

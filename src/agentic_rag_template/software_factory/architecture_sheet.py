@@ -176,8 +176,10 @@ def _build_sheet(description: str) -> Dict[str, Any]:
         )
 
     return {
+        "schema_version": "1.0.0",
         "artifact_name": artifact_name,
         "artifact_type": "django-application",
+        "input_summary": description,
         "business_goal": (
             f"Das Softwareartefakt soll den beschriebenen fachlichen Prozess als Django-Applikation "
             f"unterstuetzen: {description}"
@@ -198,6 +200,18 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             {
                 "name": "Betrieb",
                 "description": "Betreibt Anwendung, Datenbank, Backups, Monitoring und Releases.",
+            },
+        ],
+        "architecture_drivers": [
+            {
+                "name": "Django-first Umsetzung",
+                "description": "Die erste produktive Softwarefabrik spezialisiert sich auf Django-Applikationen.",
+                "impact": "Architekturschnitte, Teststrategie und spaetere Workorders werden in Django-Begriffen formuliert.",
+            },
+            {
+                "name": "Folgeagenten-Faehigkeit",
+                "description": "Das Sheet muss spaeter von Workorder-, Implementierungs- und Testagenten verarbeitet werden.",
+                "impact": "Alle zentralen Architekturentscheidungen, Risiken und offenen Fragen werden strukturiert abgelegt.",
             },
         ],
         "quality_goals": [
@@ -245,6 +259,26 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             "Fachliche Module werden als Django Apps gekapselt, zentrale Regeln liegen in Services, "
             "Persistenz erfolgt ueber Django Models und kritische Workflows werden automatisiert getestet."
         ),
+        "architecture_decisions": [
+            {
+                "id": "ADR-001",
+                "decision": "Das Artefakt wird als Django-Applikation modelliert.",
+                "rationale": "Django liefert Auth, ORM, Admin, Migrations und Testunterstuetzung als produktive Basis.",
+                "status": "proposed",
+            },
+            {
+                "id": "ADR-002",
+                "decision": "Fachliche Verantwortlichkeiten werden in getrennte Django Apps geschnitten.",
+                "rationale": "Modulare Django Apps erleichtern Workorder-Schnitt, Tests und spaetere Erweiterungen.",
+                "status": "proposed",
+            },
+            {
+                "id": "ADR-003",
+                "decision": "Fachlogik wird nicht direkt in Views versteckt, sondern in Services oder klar testbaren Modulen gebuendelt.",
+                "rationale": "Das verbessert Testbarkeit und macht Folgeagenten-Aufgaben kleinteiliger und pruefbarer.",
+                "status": "proposed",
+            },
+        ],
         "building_blocks": building_blocks,
         "runtime_scenarios": runtime_scenarios,
         "deployment_view": (
@@ -263,6 +297,20 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             "Automatisierte Tests umfassen Model- und Service-Tests, Permission-Tests, Workflow-Tests "
             "und bei API-Anteilen API-Tests. Kritische Pfade werden als Integrationstests abgebildet."
         ),
+        "acceptance_criteria": [
+            {
+                "description": "Alle Pflichtfelder des Architecture-Sheet-Schemas sind gefuellt.",
+                "verification": "Schema- und Contract-Validierung meldet keine fehlenden Felder.",
+            },
+            {
+                "description": "Django-spezifische Building Blocks und Teststrategie sind vorhanden.",
+                "verification": "Das Sheet enthaelt Django Project/App-Zuordnungen und konkrete Testarten.",
+            },
+            {
+                "description": "Offene Fragen, Annahmen und Risiken sind fuer eine menschliche Review sichtbar.",
+                "verification": "Die Listen `open_questions`, `assumptions` und `risks` sind nicht leer.",
+            },
+        ],
         "risks": [
             {
                 "description": "Fachliche Regeln und Rollen koennen in der Beschreibung noch unvollstaendig sein.",
@@ -282,6 +330,10 @@ def _build_sheet(description: str) -> Dict[str, Any]:
                 "description": "Eine relationale Datenbank ist fuer die erste produktive Ausbaustufe ausreichend."
             },
         ],
+        "readiness": {
+            "status": "ready-for-review",
+            "summary": "Das Sheet ist strukturell vollstaendig, benoetigt aber menschliche Review vor Workorder-Erzeugung.",
+        },
     }
 
 
