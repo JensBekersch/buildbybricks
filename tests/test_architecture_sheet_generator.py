@@ -9,6 +9,7 @@ from agentic_rag_template.applications import FileApplicationRegistry
 from agentic_rag_template.config import Settings
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
+    EVENT_LOG,
     EVENT_STEP_COMPLETED,
     EVENT_STEP_FAILED,
     EVENT_STEP_SKIPPED,
@@ -216,7 +217,7 @@ class FakeArchitectureJobStore:
     def get(self, job_id: str):
         return self.jobs.get(job_id)
 
-    def list(self):
+    def list(self, limit=50):
         return list(self.jobs.values())
 
 
@@ -313,13 +314,21 @@ def test_generate_architecture_sheet_emits_real_pipeline_events() -> None:
         (EVENT_STEP_STARTED, "load_method_sources"),
         (EVENT_STEP_COMPLETED, "load_method_sources"),
         (EVENT_STEP_STARTED, "analyze_requirements"),
+        (EVENT_LOG, "analyze_requirements"),
         (EVENT_STEP_COMPLETED, "analyze_requirements"),
         (EVENT_STEP_STARTED, "synthesize_architecture"),
+        (EVENT_LOG, "synthesize_architecture"),
         (EVENT_STEP_COMPLETED, "synthesize_architecture"),
         (EVENT_STEP_SKIPPED, "review_architecture"),
         (EVENT_STEP_STARTED, "validate_contract"),
         (EVENT_STEP_COMPLETED, "validate_contract"),
     ]
+    llm_events = [event for event in events if event.type == EVENT_LOG]
+    assert [event.metadata["llm_step"] for event in llm_events] == [
+        "requirement_analyst",
+        "architecture_synthesizer",
+    ]
+    assert all(event.metadata["duration_seconds"] >= 0 for event in llm_events)
 
 
 def test_architecture_generation_events_update_job_state() -> None:
@@ -588,6 +597,59 @@ def test_architecture_sheet_job_uses_configured_default_generation_mode() -> Non
 
         assert response.status == 202
         assert created["job"]["generation_mode"] == "agentic"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_metrics_endpoint_exposes_architecture_job_metrics() -> None:
+    settings = Settings(
+        frontend_dir=PROJECT_ROOT / "frontend",
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+        host="127.0.0.1",
+        port=0,
+        llm_provider="ollama",
+        llm_model="qwen3:14b",
+    )
+    store = FakeArchitectureJobStore()
+    job = ArchitectureGenerationJob.create(
+        "Eine Django-Anwendung fuer Kundenverwaltung.",
+        generation_mode="agentic",
+        llm_provider="ollama",
+        llm_model="qwen3:14b",
+        job_id="metrics-job",
+    )
+    job.add_log(
+        "LLM call completed.",
+        step="analyze_requirements",
+        metadata={
+            "kind": "llm_call",
+            "llm_step": "requirement_analyst",
+            "provider": "ollama",
+            "model": "qwen3:14b",
+            "status": "completed",
+            "duration_seconds": 0.42,
+        },
+    )
+    job.complete({"architecture_sheet": {"artifact_name": "Kundenverwaltung"}})
+    store.save(job)
+    server = create_server(settings, architecture_job_store=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        with request.urlopen(f"http://{host}:{port}/metrics", timeout=2) as response:
+            payload = response.read().decode("utf-8")
+
+        assert response.status == 200
+        assert response.headers["Content-Type"].startswith("text/plain")
+        assert "buildbybricks_runtime_info" in payload
+        assert "buildbybricks_architecture_jobs" in payload
+        assert "buildbybricks_llm_call_duration_seconds_sum" in payload
     finally:
         server.shutdown()
         server.server_close()

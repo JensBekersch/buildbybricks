@@ -154,7 +154,10 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 11. **Observability**
 
-    Einfache Logs fuer Agentenschritte, verwendete Tools, gefundene Quellen, Tokenverbrauch und Fehler. Ohne Sichtbarkeit wird agentic RAG schnell undurchsichtig.
+    Strukturierte Logs fuer Agentenschritte, verwendete Tools, gefundene
+    Quellen, LLM-Call-Dauer, Job-Laufzeiten, Schrittzeiten und Fehler. Die App
+    stellt Prometheus-Metriken bereit; Compose startet Prometheus und Grafana
+    mit einem vorprovisionierten Software-Factory-Dashboard.
 
 12. **Docker Runtime**
 
@@ -442,10 +445,41 @@ Store-Initialisierung an. Die Queue nutzt `SELECT ... FOR UPDATE SKIP LOCKED`,
 damit spaeter mehrere Worker parallel laufen koennen, ohne denselben Job doppelt
 zu bearbeiten.
 
+## Observability
+
+Die API stellt unter `GET /metrics` Prometheus-Metriken bereit. Diese Metriken
+werden aus dem aktuellen Runtime-Config-Stand und den persistenten
+Architecture-Sheet-Jobs abgeleitet:
+
+- Job-Anzahl nach Status
+- Job-Laufzeiten nach Status
+- Schrittzeiten je Pipeline-Schritt
+- LLM-Call-Dauer je Agentenschritt, Provider, Modell und Ergebnisstatus
+- Fehlerursachen fehlgeschlagener Jobs
+- aktive nicht-geheime LLM-Konfiguration wie Provider, Modell, Timeout,
+  Tokenbudget und Architecture-Modus
+
+Compose startet Prometheus und Grafana standardmaessig mit:
+
+```text
+http://localhost:9090  Prometheus
+http://localhost:3000  Grafana
+```
+
+Grafana nutzt lokal `GRAFANA_ADMIN_USER=admin` und
+`GRAFANA_ADMIN_PASSWORD=admin`, sofern `.env` nichts anderes setzt. Die
+Prometheus-Datasource und das Dashboard `BuildByBricks Software Factory
+Observability` werden automatisch provisioniert:
+
+- `observability/prometheus/prometheus.yml`
+- `observability/grafana/provisioning/datasources/prometheus.yml`
+- `observability/grafana/provisioning/dashboards/software-factory.yml`
+- `observability/grafana/dashboards/software-factory-observability.json`
+
 ## Lokal Starten
 
 Der aktuelle Stand startet die HTTP API, das statische Frontend, den
-Architecture-Worker und Postgres:
+Architecture-Worker, Postgres, Prometheus und Grafana:
 
 ```bash
 docker compose up --build
