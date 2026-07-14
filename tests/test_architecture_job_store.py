@@ -1,5 +1,6 @@
 from agentic_rag_template.software_factory import (
     JOB_STATUS_COMPLETED,
+    JOB_STATUS_RUNNING,
     ArchitectureGenerationJob,
     PostgresArchitectureGenerationJobStore,
 )
@@ -23,6 +24,13 @@ class FakeCursor:
         if normalized_sql.startswith("SELECT PAYLOAD FROM ARCHITECTURE_GENERATION_JOBS WHERE ID"):
             payload = self.connection.rows.get(params["id"])
             self.connection.fetchone_result = (payload,) if payload else None
+        if normalized_sql.startswith("SELECT PAYLOAD FROM ARCHITECTURE_GENERATION_JOBS WHERE STATUS"):
+            self.connection.fetchone_result = None
+            for payload in self.connection.rows.values():
+                app_matches = "app_id" not in params or payload.get("app_id") == params["app_id"]
+                if payload.get("status") == params["status"] and app_matches:
+                    self.connection.fetchone_result = (payload,)
+                    break
         if normalized_sql.startswith("SELECT PAYLOAD FROM ARCHITECTURE_GENERATION_JOBS ORDER BY"):
             self.connection.fetchall_result = [(payload,) for payload in self.connection.rows.values()]
 
@@ -106,3 +114,39 @@ def test_postgres_job_store_lists_recent_jobs() -> None:
     jobs = store.list()
 
     assert [job.id for job in jobs] == ["job-1", "job-2"]
+
+
+def test_postgres_job_store_claims_oldest_queued_job() -> None:
+    connection = FakeConnection()
+    store = PostgresArchitectureGenerationJobStore(
+        "postgresql://example",
+        connection_factory=lambda database_url: connection,
+    )
+    first = ArchitectureGenerationJob.create("Erste App.", generation_mode="agentic", job_id="job-1")
+    second = ArchitectureGenerationJob.create("Zweite App.", generation_mode="agentic", job_id="job-2")
+
+    store.save(first)
+    store.save(second)
+    claimed = store.claim_next(app_id="software-factory")
+    next_claim = store.claim_next(app_id="software-factory")
+
+    assert claimed is not None
+    assert claimed.id == "job-1"
+    assert claimed.status == JOB_STATUS_RUNNING
+    assert claimed.started_at is not None
+    assert next_claim is not None
+    assert next_claim.id == "job-2"
+
+
+def test_postgres_job_store_claim_next_returns_none_without_queued_jobs() -> None:
+    connection = FakeConnection()
+    store = PostgresArchitectureGenerationJobStore(
+        "postgresql://example",
+        connection_factory=lambda database_url: connection,
+    )
+    job = ArchitectureGenerationJob.create("Eine App.", generation_mode="agentic", job_id="job-1")
+    job.complete({"architecture_sheet": {"artifact_name": "Fertig"}})
+
+    store.save(job)
+
+    assert store.claim_next(app_id="software-factory") is None

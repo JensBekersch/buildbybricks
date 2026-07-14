@@ -29,6 +29,7 @@ class Settings:
     llm_timeout_seconds: int = 1200
     llm_max_tokens: int = 4096
     database_url: str = "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag"
+    worker_poll_seconds: float = 2.0
     debug: bool = True
 
     @classmethod
@@ -63,5 +64,6 @@ class Settings:
                 "AGENTIC_RAG_DATABASE_URL",
                 "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag",
             ),
+            worker_poll_seconds=float(os.getenv("AGENTIC_RAG_WORKER_POLL_SECONDS", "2")),
             debug=os.getenv("AGENTIC_RAG_DEBUG", "true").lower() == "true",
         )

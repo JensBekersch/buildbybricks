@@ -403,22 +403,28 @@ docker compose --profile ollama up --build
 ## Persistenz
 
 Langlauf-Jobs der Software Factory werden in Postgres gespeichert. Compose
-startet dafuer einen eigenen Datenbank-Container mit persistentem Volume:
+startet dafuer einen eigenen Datenbank-Container mit persistentem Volume. Die
+API legt Architecture-Sheet-Jobs nur noch an; der Worker-Service claimt queued
+Jobs atomar aus Postgres, fuehrt die LLM-Pipeline aus und schreibt Fortschritt,
+Logs, Fehler und Ergebnis zurueck:
 
 ```text
 AGENTIC_RAG_DATABASE_URL=postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag
+AGENTIC_RAG_WORKER_POLL_SECONDS=2
 POSTGRES_DB=agentic_rag
 POSTGRES_USER=agentic_rag
 POSTGRES_PASSWORD=agentic_rag
 ```
 
 Der Job-Store legt die Tabelle `architecture_generation_jobs` beim Start der
-Store-Initialisierung an. Die API-Anbindung folgt im naechsten Ausbauschritt.
+Store-Initialisierung an. Die Queue nutzt `SELECT ... FOR UPDATE SKIP LOCKED`,
+damit spaeter mehrere Worker parallel laufen koennen, ohne denselben Job doppelt
+zu bearbeiten.
 
 ## Lokal Starten
 
-Der aktuelle Stand startet eine minimale HTTP API, das statische Chat-Frontend
-und Postgres:
+Der aktuelle Stand startet die HTTP API, das statische Frontend, den
+Architecture-Worker und Postgres:
 
 ```bash
 docker compose up --build

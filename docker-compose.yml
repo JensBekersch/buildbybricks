@@ -23,6 +23,37 @@ services:
       AGENTIC_RAG_LLM_TIMEOUT_SECONDS: "${AGENTIC_RAG_LLM_TIMEOUT_SECONDS:-1200}"
       AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
       AGENTIC_RAG_DATABASE_URL: "${AGENTIC_RAG_DATABASE_URL:-postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag}"
+      AGENTIC_RAG_WORKER_POLL_SECONDS: "${AGENTIC_RAG_WORKER_POLL_SECONDS:-2}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./template:/app/template:ro
+      - ./apps:/app/apps:ro
+
+  worker:
+    build:
+      context: .
+    command: ["python", "-m", "agentic_rag_template.software_factory.worker"]
+    environment:
+      AGENTIC_RAG_FRONTEND_DIR: "${AGENTIC_RAG_FRONTEND_DIR:-frontend}"
+      AGENTIC_RAG_DATA_DIR: "${AGENTIC_RAG_DATA_DIR:-data}"
+      AGENTIC_RAG_TEMPLATE_DIR: "${AGENTIC_RAG_TEMPLATE_DIR:-template}"
+      AGENTIC_RAG_APPS_DIR: "${AGENTIC_RAG_APPS_DIR:-apps}"
+      AGENTIC_RAG_EMBEDDING_PROVIDER: "${AGENTIC_RAG_EMBEDDING_PROVIDER:-hash}"
+      AGENTIC_RAG_EMBEDDING_MODEL: "${AGENTIC_RAG_EMBEDDING_MODEL:-local-hash-v1}"
+      AGENTIC_RAG_EMBEDDING_DIMENSION: "${AGENTIC_RAG_EMBEDDING_DIMENSION:-64}"
+      AGENTIC_RAG_EMBEDDING_API_BASE_URL: "${AGENTIC_RAG_EMBEDDING_API_BASE_URL:-http://ollama:11434}"
+      AGENTIC_RAG_EMBEDDING_API_KEY: "${AGENTIC_RAG_EMBEDDING_API_KEY:-}"
+      AGENTIC_RAG_LLM_PROVIDER: "${AGENTIC_RAG_LLM_PROVIDER:-deterministic}"
+      AGENTIC_RAG_LLM_MODEL: "${AGENTIC_RAG_LLM_MODEL:-local-deterministic-v1}"
+      AGENTIC_RAG_LLM_API_BASE_URL: "${AGENTIC_RAG_LLM_API_BASE_URL:-http://ollama:11434}"
+      AGENTIC_RAG_LLM_API_KEY: "${AGENTIC_RAG_LLM_API_KEY:-}"
+      AGENTIC_RAG_LLM_TIMEOUT_SECONDS: "${AGENTIC_RAG_LLM_TIMEOUT_SECONDS:-1200}"
+      AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
+      AGENTIC_RAG_DATABASE_URL: "${AGENTIC_RAG_DATABASE_URL:-postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag}"
+      AGENTIC_RAG_WORKER_POLL_SECONDS: "${AGENTIC_RAG_WORKER_POLL_SECONDS:-2}"
     depends_on:
       postgres:
         condition: service_healthy
