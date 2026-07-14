@@ -200,6 +200,24 @@ data/
 
 Damit koennen verschiedene Anwendungen dieselbe Runtime, dieselben Provider und dasselbe Frontend nutzen, aber getrennte Prompts, Collections und Tests haben.
 
+Wissen kann pro App und Collection ueber die API inspiziert und ergaenzt werden:
+
+- `GET /apps/{app_id}/collections/{collection}/documents`
+- `POST /apps/{app_id}/collections/{collection}/documents`
+- `GET /apps/{app_id}/ingestion/preview?collection={collection}`
+- `GET /apps/{app_id}/retrieval/search?q={query}&collection={collection}`
+
+Der Upload-Endpunkt erwartet aktuell JSON:
+
+```json
+{
+  "filename": "handbook.md",
+  "content": "Das neue Wissen fuer diese Collection."
+}
+```
+
+Unterstuetzt werden zunaechst `.md` und `.txt`. Die Dateien werden unter `data/<app-id>/<collection>/` gespeichert und stehen danach direkt fuer Retrieval und Chat zur Verfuegung.
+
 ## Naechster Schritt
 
 Als naechstes kann eine konkrete Anwendung auf dieses Template gelegt werden: eigene Collection unter `data/`, angepasstes `template/app_profile.json`, eigene `template/evaluation_cases.json` und danach optional ein echter Embedding-Provider wie Ollama.

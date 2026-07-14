@@ -87,6 +87,41 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             timeout=2,
         )
         policy_collections_payload = json.loads(policy_collections_response.read().decode("utf-8"))
+        policy_documents_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant/collections/policies/documents",
+            timeout=2,
+        )
+        policy_documents_payload = json.loads(policy_documents_response.read().decode("utf-8"))
+        upload_request = request.Request(
+            f"http://{host}:{port}/apps/policy-assistant/collections/policies/documents",
+            data=json.dumps(
+                {
+                    "filename": "approval-note.md",
+                    "content": "Additional policy notes require management approval.",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        upload_response = request.urlopen(upload_request, timeout=2)
+        upload_payload = json.loads(upload_response.read().decode("utf-8"))
+        updated_policy_documents_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant/collections/policies/documents",
+            timeout=2,
+        )
+        updated_policy_documents_payload = json.loads(
+            updated_policy_documents_response.read().decode("utf-8")
+        )
+        app_ingestion_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant/ingestion/preview?collection=policies",
+            timeout=2,
+        )
+        app_ingestion_payload = json.loads(app_ingestion_response.read().decode("utf-8"))
+        app_retrieval_response = request.urlopen(
+            f"http://{host}:{port}/apps/policy-assistant/retrieval/search?q=approval&collection=policies",
+            timeout=2,
+        )
+        app_retrieval_payload = json.loads(app_retrieval_response.read().decode("utf-8"))
         search_response = request.urlopen(
             f"http://{host}:{port}/vector-store/preview?q=agentic",
             timeout=2,
@@ -138,10 +173,21 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         assert policy_collections_payload == {
             "collections": [{"name": "policies", "document_count": 1}]
         }
+        assert policy_documents_payload["document_count"] == 1
+        assert policy_documents_payload["documents"][0]["relative_path"] == "policies/rules.md"
+        assert upload_response.status == 201
+        assert upload_payload["relative_path"] == "policies/approval-note.md"
+        assert updated_policy_documents_payload["document_count"] == 2
+        assert sorted(
+            document["relative_path"] for document in updated_policy_documents_payload["documents"]
+        ) == ["policies/approval-note.md", "policies/rules.md"]
+        assert app_ingestion_payload["chunk_count"] == 2
+        assert app_retrieval_payload["provider"] == "hash"
+        assert app_retrieval_payload["indexed_chunk_count"] == 2
         assert search_payload["provider"] == "hash"
-        assert search_payload["indexed_chunk_count"] == 1
+        assert search_payload["indexed_chunk_count"] == 2
         assert retrieval_payload["provider"] == "hash"
-        assert retrieval_payload["indexed_chunk_count"] == 1
+        assert retrieval_payload["indexed_chunk_count"] == 2
         assert retrieval_payload["trace"] == [
             "loaded_chunks",
             "embedded_chunks",

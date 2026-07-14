@@ -23,7 +23,7 @@ services:
       AGENTIC_RAG_LLM_TIMEOUT_SECONDS: "${AGENTIC_RAG_LLM_TIMEOUT_SECONDS:-300}"
       AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-160}"
     volumes:
-      - ./data:/app/data:ro
+      - ./data:/app/data
       - ./template:/app/template:ro
       - ./apps:/app/apps:ro
 

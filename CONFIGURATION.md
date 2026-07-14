@@ -98,8 +98,26 @@ Runtime endpoints:
 - `GET /apps`
 - `GET /apps/{app_id}`
 - `GET /apps/{app_id}/collections`
+- `GET /apps/{app_id}/collections/{collection}/documents`
+- `POST /apps/{app_id}/collections/{collection}/documents`
+- `GET /apps/{app_id}/ingestion/preview?collection={collection}`
+- `GET /apps/{app_id}/retrieval/search?q={query}&collection={collection}`
 - `POST /apps/{app_id}/chat`
 - `GET /apps/{app_id}/evaluation/run`
+
+The document upload endpoint accepts JSON and writes supported text files into
+the app data directory:
+
+```json
+{
+  "filename": "handbook.md",
+  "content": "Knowledge content for this app collection."
+}
+```
+
+Docker Compose mounts `./data` as writable so uploaded knowledge is persisted on
+the host during local experiments. `./apps` and `./template` stay read-only
+because app configuration should remain an explicit file change for now.
 
 ## Embedding Providers
 
