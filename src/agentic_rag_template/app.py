@@ -19,7 +19,10 @@ from agentic_rag_template.ingestion import discover_collections, ingest_data, lo
 from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
-from agentic_rag_template.software_factory import generate_architecture_sheet
+from agentic_rag_template.software_factory import (
+    ArchitectureSheetGenerationError,
+    generate_architecture_sheet,
+)
 from agentic_rag_template.template_config import load_application_profile
 
 
@@ -178,10 +181,8 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         generation_mode = str(payload.get("generation_mode") or "").strip()
         if not generation_mode:
-            use_llm = _payload_bool(payload.get("use_llm"), self.settings.architecture_llm_enabled)
-            generation_mode = "agentic_with_review" if use_llm else "fast"
-        use_llm = generation_mode != "fast"
-        llm_provider = create_llm_provider(self.settings) if use_llm else None
+            generation_mode = "agentic_with_review"
+        llm_provider = create_llm_provider(self.settings)
 
         try:
             result = generate_architecture_sheet(
@@ -192,6 +193,9 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             )
         except FileNotFoundError as error:
             self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+        except (ArchitectureSheetGenerationError, ValueError) as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
             return
 
         self._send_json(result.to_dict())
@@ -516,19 +520,6 @@ def create_server(settings: Optional[Settings] = None) -> ThreadingHTTPServer:
     frontend_dir.mkdir(parents=True, exist_ok=True)
     handler = partial(AgenticRagRequestHandler, settings=active_settings)
     return ThreadingHTTPServer((active_settings.host, active_settings.port), handler)
-
-
-def _payload_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-
-    if isinstance(value, bool):
-        return value
-
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-
-    return bool(value)
 
 
 def main() -> None:

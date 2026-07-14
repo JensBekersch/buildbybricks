@@ -71,18 +71,17 @@ Beispiel:
 ```
 
 Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
-`generation`. Der Generator unterstuetzt drei sichtbare Modi:
+`generation`. Der Generator unterstuetzt zwei sichtbare Modi:
 
-- `fast`: lokaler deterministischer Fallback ohne LLM.
 - `agentic`: Requirement Analyst und Architecture Synthesizer laufen als
   strukturierte LLM-Schritte.
 - `agentic_with_review`: zusaetzlich prueft ein Architecture Reviewer das Sheet
   auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
 
-`generation_mode` ist optional. Fehlt die Angabe, bleibt `use_llm` aus aelteren
-Clients kompatibel: `use_llm=true` entspricht `agentic_with_review`,
-`use_llm=false` entspricht `fast`. Ohne beide Angaben nutzt der Endpoint die
-Einstellung `AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED`.
+`generation_mode` ist optional und faellt dann auf `agentic_with_review`
+zurueck. Der Endpunkt erzeugt kein deterministisches oder generisches
+Fallback-Sheet. Wenn kein strukturierter LLM-Provider konfiguriert ist oder die
+agentische Pipeline fehlschlaegt, antwortet die API mit einem Fehler.
 
 ## Grundkonstrukt
 

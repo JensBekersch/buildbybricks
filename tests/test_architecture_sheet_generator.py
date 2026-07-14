@@ -1,73 +1,19 @@
 import json
 from pathlib import Path
 import threading
+from urllib.error import HTTPError
 from urllib import request
 
 from agentic_rag_template.app import create_server
 from agentic_rag_template.applications import FileApplicationRegistry
 from agentic_rag_template.config import Settings
-from agentic_rag_template.software_factory import generate_architecture_sheet
+from agentic_rag_template.software_factory import (
+    ArchitectureSheetGenerationError,
+    generate_architecture_sheet,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-
-class FakeArchitectureLLMProvider:
-    name = "fake-architecture-llm"
-    model = "fake-json-v1"
-
-    def generate_json(self, system_prompt: str, user_prompt: str):
-        assert "valides JSON" in system_prompt
-        assert "Deterministisches Basissheet" in user_prompt
-        return {
-            "artifact_name": "LLM Angebotsplattform",
-            "solution_strategy": "LLM-verfeinerte Django-Strategie mit klaren Fachmodulen.",
-            "architecture_decisions": [
-                {
-                    "id": "ADR-LLM-001",
-                    "decision": "Angebote werden als eigenes Django-Modul umgesetzt.",
-                    "rationale": "Der Angebotsprozess hat eigene Regeln, Tests und Freigaben.",
-                    "status": "proposed",
-                }
-            ],
-        }
-
-
-class GenericArchitectureLLMProvider:
-    name = "generic-architecture-llm"
-    model = "generic-json-v1"
-
-    def generate_json(self, system_prompt: str, user_prompt: str):
-        if "Requirement Analyst" in system_prompt:
-            raise RuntimeError("pipeline unavailable")
-        assert "Vermeide generische Platzhalter" in system_prompt
-        return {
-            "artifact_name": "Generische Fachanwendung",
-            "building_blocks": [
-                {
-                    "name": "Core Domain",
-                    "responsibility": "Generische Fachobjekte modellieren.",
-                    "django_mapping": "Django app `core`.",
-                }
-            ],
-            "runtime_scenarios": [
-                {
-                    "name": "Fachobjekt erfassen",
-                    "steps": ["Nutzer erfasst ein Objekt."],
-                }
-            ],
-            "context": {
-                "users": [{"name": "Fachanwender", "description": "Nutzen die Anwendung."}],
-                "external_systems": [],
-                "interfaces": [
-                    {
-                        "name": "Application API",
-                        "type": "rest-api",
-                        "description": "API fuer Clients.",
-                    }
-                ],
-            },
-        }
 
 
 class AgenticArchitectureLLMProvider:
@@ -161,65 +107,86 @@ class AgenticArchitectureLLMProvider:
         raise AssertionError(system_prompt)
 
 
-def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> None:
-    settings = Settings(
-        apps_dir=PROJECT_ROOT / "apps",
-        data_dir=PROJECT_ROOT / "data",
-        template_dir=PROJECT_ROOT / "template",
-    )
-    application = FileApplicationRegistry(settings).get("software-factory")
+class TodoArchitectureLLMProvider:
+    name = "todo-architecture-llm"
+    model = "todo-json-v1"
 
-    result = generate_architecture_sheet(
-        "Eine Django-App zur Verwaltung von Kunden, Angeboten, Freigabeprozessen und PDF-Exporten.",
-        application,
-    )
-    payload = result.to_dict()
-    sheet = payload["architecture_sheet"]
-
-    assert payload["validation"] == {"valid": True, "missing_fields": []}
-    assert payload["schema_id"].endswith("/architecture-sheet.schema.json")
-    assert payload["sources"][0]["location"] == "architecture-method/arc42_architecture_sheet.md"
-    assert sheet["schema_version"] == "1.0.0"
-    assert sheet["artifact_type"] == "django-application"
-    assert sheet["artifact_name"] == "Verwaltung Kunden"
-    assert sheet["input_summary"].startswith("Eine Django-App")
-    assert sheet["architecture_drivers"]
-    assert sheet["architecture_decisions"]
-    assert sheet["acceptance_criteria"]
-    assert sheet["readiness"]["status"] == "ready-for-review"
-    assert any(block["name"] == "Approval Workflow" for block in sheet["building_blocks"])
-    assert any(block["name"] == "Document Export" for block in sheet["building_blocks"])
-    assert any(scenario["name"] == "Freigabe durchfuehren" for scenario in sheet["runtime_scenarios"])
-    assert any(scenario["name"] == "PDF exportieren" for scenario in sheet["runtime_scenarios"])
-    assert "generated_django_architecture_sheet" in payload["trace"]
-    assert payload["generation"]["mode"] == "deterministic"
-
-
-def test_generate_architecture_sheet_can_merge_llm_json() -> None:
-    settings = Settings(
-        apps_dir=PROJECT_ROOT / "apps",
-        data_dir=PROJECT_ROOT / "data",
-        template_dir=PROJECT_ROOT / "template",
-    )
-    application = FileApplicationRegistry(settings).get("software-factory")
-
-    result = generate_architecture_sheet(
-        "Eine Django-App fuer Angebote und Freigaben.",
-        application,
-        llm_provider=FakeArchitectureLLMProvider(),
-        generation_mode="legacy_llm_enrichment",
-    )
-    payload = result.to_dict()
-    sheet = payload["architecture_sheet"]
-
-    assert payload["validation"]["valid"] is True
-    assert payload["generation"]["mode"] == "llm-assisted"
-    assert payload["generation"]["llm_provider"] == "fake-architecture-llm"
-    assert sheet["artifact_name"] == "LLM Angebotsplattform"
-    assert sheet["schema_version"] == "1.0.0"
-    assert sheet["architecture_decisions"][0]["id"] == "ADR-LLM-001"
-    assert sheet["quality_goals"]
-    assert "generated_llm_architecture_sheet" in payload["trace"]
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Requirement Analyst" in system_prompt:
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Teammitglieder verwalten eine gemeinsam sichtbare Liste einfacher Aufgaben.",
+                "roles": [{"name": "Teammitglieder", "description": "Sehen und bearbeiten die gemeinsame Aufgabenliste."}],
+                "core_entities": [
+                    {"name": "Aufgabe", "description": "Ein Satz Beschreibung plus Status."},
+                    {"name": "Aufgabenstatus", "description": "offen, in Bearbeitung oder fertig."},
+                ],
+                "workflows": [
+                    {"name": "Aufgabe erfassen", "description": "Ein Teammitglied gibt eine Aufgabenbeschreibung in einem Satz ein."},
+                    {"name": "Aufgabenliste anzeigen", "description": "Alle Teammitglieder sehen die gespeicherten Aufgaben."},
+                    {"name": "Status aendern", "description": "Ein Teammitglied setzt offen, in Bearbeitung oder fertig."},
+                ],
+                "current_interfaces": [
+                    {"name": "Gemeinsame Aufgabenliste", "type": "web-ui", "description": "Oeffentliche Teamansicht ohne Login."}
+                ],
+                "future_interfaces": [],
+                "quality_goals": [
+                    {
+                        "name": "Testabdeckung",
+                        "description": "Unit- und Medium-Tests erreichen mindestens 98 Prozent Coverage.",
+                    }
+                ],
+                "constraints": [{"description": "Kein Login-Bereich."}],
+                "explicitly_not_needed": [{"description": "Login und Authentifizierung sind nicht erforderlich."}],
+                "risks": [
+                    {
+                        "description": "Statuswerte koennen inkonsistent gespeichert werden.",
+                        "mitigation": "Status als feste Enumeration modellieren und testen.",
+                    }
+                ],
+                "assumptions": [{"description": "Die Liste ist fuer das Team innerhalb der Laufzeitumgebung sichtbar."}],
+                "open_questions": [{"description": "Muessen Aufgaben geloescht oder nur erledigt markiert werden?"}],
+            }
+        if "Architecture Synthesizer" in system_prompt:
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Eine einfache gemeinsame Aufgabenliste fuer Teammitglieder.",
+                "stakeholders": [{"name": "Teammitglieder", "description": "Nutzen die Aufgabenliste gemeinsam."}],
+                "context": {
+                    "users": [{"name": "Teammitglieder", "description": "Greifen ohne Login auf die Liste zu."}],
+                    "external_systems": [],
+                    "interfaces": [
+                        {"name": "Gemeinsame Aufgabenliste", "type": "web-ui", "description": "Web UI ohne Login."}
+                    ],
+                },
+                "building_blocks": [
+                    {
+                        "name": "Aufgabenliste",
+                        "responsibility": "Aufgaben speichern und fuer alle Teammitglieder anzeigen.",
+                        "django_mapping": "Django app `tasks` with Task model, list/create/update views.",
+                    },
+                    {
+                        "name": "Statusverwaltung",
+                        "responsibility": "Statuswerte offen, in Bearbeitung und fertig validieren.",
+                        "django_mapping": "Task.status as TextChoices enum with unit tests.",
+                    },
+                ],
+                "runtime_scenarios": [
+                    {
+                        "name": "Aufgabe erstellen",
+                        "steps": ["Beschreibung eingeben.", "System speichert Aufgabe mit Status offen."],
+                    },
+                    {
+                        "name": "Status aendern",
+                        "steps": ["Aufgabe auswaehlen.", "Status auf offen, in Bearbeitung oder fertig setzen."],
+                    },
+                ],
+                "security_view": "Kein Login-Bereich. Eingaben werden validiert; es gibt keine Accounts-App.",
+                "test_strategy": "Unit- und Medium-Tests mit mindestens 98 Prozent Coverage.",
+            }
+        if "Architecture Reviewer" in system_prompt:
+            return {"passes": True, "findings": [], "required_corrections": []}
+        raise AssertionError(system_prompt)
 
 
 def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
@@ -289,7 +256,23 @@ def test_generate_architecture_sheet_can_skip_agentic_review() -> None:
     assert "reviewed_architecture_sheet" not in payload["trace"]
 
 
-def test_generate_architecture_sheet_focuses_on_work_time_domain() -> None:
+def test_generate_architecture_sheet_requires_structured_llm_provider() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    try:
+        generate_architecture_sheet("Eine einfache Todo Liste.", application)
+    except ArchitectureSheetGenerationError as error:
+        assert "requires a structured LLM provider" in str(error)
+    else:
+        raise AssertionError("Architecture sheet generation must not fall back to a generic sheet.")
+
+
+def test_generate_architecture_sheet_preserves_explicit_no_login_requirement() -> None:
     settings = Settings(
         apps_dir=PROJECT_ROOT / "apps",
         data_dir=PROJECT_ROOT / "data",
@@ -298,64 +281,25 @@ def test_generate_architecture_sheet_focuses_on_work_time_domain() -> None:
     application = FileApplicationRegistry(settings).get("software-factory")
 
     result = generate_architecture_sheet(
-        (
-            "Erstelle ein Architecture Sheet fuer eine Django-Webanwendung zur Erfassung "
-            "und Auswertung von Arbeitszeiten. Mitarbeitende loggen Datum, Startzeit, "
-            "Endzeit, Pause, Projekt, Taetigkeitsbeschreibung und Notizen. Fuehrungskraefte "
-            "pruefen Monatsuebersichten und geben Eintraege frei oder zur Korrektur zurueck. "
-            "Administratoren verwalten Nutzer, Teams, Projekte, Feiertage und Arbeitszeitmodelle. "
-            "Monatsberichte sollen als CSV exportiert werden. Spaeter koennte eine REST API "
-            "fuer mobile Apps ergaenzt werden."
-        ),
+        "Einfache Todo Liste fuer Teammitglieder ohne Login.",
         application,
+        llm_provider=TodoArchitectureLLMProvider(),
+        generation_mode="agentic_with_review",
     )
     payload = result.to_dict()
     sheet = payload["architecture_sheet"]
     block_names = {block["name"] for block in sheet["building_blocks"]}
-    scenario_names = {scenario["name"] for scenario in sheet["runtime_scenarios"]}
-    interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
+    all_text = json.dumps(sheet, ensure_ascii=False).lower()
 
     assert payload["validation"]["valid"] is True
-    assert sheet["artifact_name"] == "Arbeitszeiterfassung"
-    assert "Time Entries" in block_names
-    assert "Working Time Rules" in block_names
-    assert "Month Closing and Approval" in block_names
-    assert "Core Domain" not in block_names
-    assert "Arbeitszeit erfassen" in scenario_names
-    assert "Monat abschliessen" in scenario_names
-    assert "Teamzeiten freigeben" in scenario_names
-    assert "rest-api" not in interface_types
-    assert "TimeEntry" in sheet["data_view"]
-    assert "Soll-Ist" in sheet["test_strategy"]
-
-
-def test_llm_generation_keeps_work_time_domain_focus() -> None:
-    settings = Settings(
-        apps_dir=PROJECT_ROOT / "apps",
-        data_dir=PROJECT_ROOT / "data",
-        template_dir=PROJECT_ROOT / "template",
-    )
-    application = FileApplicationRegistry(settings).get("software-factory")
-
-    result = generate_architecture_sheet(
-        (
-            "Django-Webanwendung zur Erfassung von Arbeitszeiten mit Zeiteintraegen, "
-            "Pausen, Projekten, Monatsabschluss und spaeterer REST API."
-        ),
-        application,
-        llm_provider=GenericArchitectureLLMProvider(),
-        generation_mode="legacy_llm_enrichment",
-    )
-    payload = result.to_dict()
-    sheet = payload["architecture_sheet"]
-    block_names = {block["name"] for block in sheet["building_blocks"]}
-    interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
-
-    assert payload["generation"]["mode"] == "llm-assisted"
-    assert sheet["artifact_name"] == "Arbeitszeiterfassung"
-    assert "Time Entries" in block_names
-    assert "Core Domain" not in block_names
-    assert "rest-api" not in interface_types
+    assert sheet["artifact_name"] == "Team-Todo-Liste"
+    assert "Aufgabenliste" in block_names
+    assert "Statusverwaltung" in block_names
+    assert "Accounts and Permissions" not in block_names
+    assert "core domain" not in all_text
+    assert "kein login" in all_text
+    assert "accounts-app" in all_text
+    assert "98 Prozent Coverage".lower() in all_text
 
 
 def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
@@ -386,25 +330,14 @@ def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        response = request.urlopen(architecture_request, timeout=2)
-        payload = json.loads(response.read().decode("utf-8"))
-
-        assert response.status == 200
-        assert payload["validation"]["valid"] is True
-        assert payload["architecture_sheet"]["artifact_type"] == "django-application"
-        assert payload["architecture_sheet"]["schema_version"] == "1.0.0"
-        assert payload["architecture_sheet"]["context"]["interfaces"][-1]["type"] == "rest-api"
-        assert payload["architecture_sheet"]["architecture_decisions"]
-        assert payload["architecture_sheet"]["acceptance_criteria"]
-        assert payload["architecture_sheet"]["open_questions"]
-        assert payload["generation"]["llm_provider"] == "none"
-        assert payload["trace"] == [
-            "validated_description",
-            "loaded_architecture_sheet_schema",
-            "loaded_architecture_method_sources",
-            "generated_django_architecture_sheet",
-            "validated_architecture_sheet_contract",
-        ]
+        try:
+            request.urlopen(architecture_request, timeout=2)
+        except HTTPError as error:
+            payload = json.loads(error.read().decode("utf-8"))
+            assert error.status == 400
+            assert "requires a structured LLM provider" in payload["error"]
+        else:
+            raise AssertionError("Endpoint must fail without a structured LLM provider.")
     finally:
         server.shutdown()
         server.server_close()
