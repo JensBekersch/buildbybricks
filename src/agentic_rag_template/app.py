@@ -19,6 +19,7 @@ from agentic_rag_template.ingestion import discover_collections, ingest_data, lo
 from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
+from agentic_rag_template.software_factory import generate_architecture_sheet
 from agentic_rag_template.template_config import load_application_profile
 
 
@@ -130,6 +131,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_chat_response(application)
             return
 
+        if app_route and app_route["remainder"] == "/architecture-sheet":
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_architecture_sheet_response(application)
+            return
+
         if app_route:
             documents_collection = self._parse_collection_documents_route(app_route["remainder"])
             if documents_collection is not None:
@@ -150,6 +160,29 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             return
 
         self._send_chat_response(self._default_application())
+
+    def _send_architecture_sheet_response(self, application: ApplicationInstance) -> None:
+        if application.id != "software-factory":
+            self._send_json(
+                {"error": "architecture-sheet is only available for the software-factory app"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        payload = self._read_json_body()
+        description = str(payload.get("description", "")).strip()
+
+        if not description:
+            self._send_json({"error": "description is required"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            result = generate_architecture_sheet(description, application)
+        except FileNotFoundError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json(result.to_dict())
 
     def _send_chat_response(self, application: ApplicationInstance) -> None:
         payload = self._read_json_body()
