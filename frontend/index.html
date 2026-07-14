@@ -92,6 +92,10 @@
             </select>
 
             <button id="generate-architecture" type="submit">Architecture Job anlegen</button>
+            <div class="architecture-actions">
+              <button id="cancel-architecture-job" type="button" disabled>Abbrechen</button>
+              <button id="retry-architecture-job" type="button" disabled>Erneut starten</button>
+            </div>
             <p id="architecture-status" class="form-status" role="status"></p>
           </form>
         </aside>
@@ -153,6 +157,19 @@
               <span id="architecture-source-count">0</span>
             </div>
             <ol id="architecture-sources" class="support-list"></ol>
+          </section>
+
+          <section class="review-section">
+            <div class="section-heading">
+              <h2>Jobs</h2>
+              <button id="refresh-architecture-jobs" class="ghost-button" type="button">Aktualisieren</button>
+            </div>
+            <ol id="architecture-job-list" class="job-list"></ol>
+          </section>
+
+          <section class="review-section">
+            <h2>Logs</h2>
+            <ol id="architecture-job-logs" class="support-list compact"></ol>
           </section>
 
           <section class="review-section">

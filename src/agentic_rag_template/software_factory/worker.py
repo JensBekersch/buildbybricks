@@ -14,11 +14,16 @@ from agentic_rag_template.software_factory.job_store import PostgresArchitecture
 from agentic_rag_template.software_factory.jobs import (
     ArchitectureGenerationEvent,
     ArchitectureGenerationJob,
+    JOB_STATUS_CANCELED,
     apply_architecture_generation_event,
 )
 
 
 SOFTWARE_FACTORY_APP_ID = "software-factory"
+
+
+class ArchitectureJobCanceled(RuntimeError):
+    """Raised internally when a job was canceled while the worker was running."""
 
 
 class ArchitectureGenerationWorker:
@@ -56,6 +61,9 @@ class ArchitectureGenerationWorker:
     def process_job(self, job: ArchitectureGenerationJob) -> ArchitectureGenerationJob:
         """Run one claimed architecture generation job to a terminal state."""
         try:
+            if self._is_canceled(job.id):
+                return self.job_store.get(job.id) or job
+
             application = FileApplicationRegistry(self.settings).get(job.app_id)
             llm_provider = self.llm_provider_factory(self.settings)
             job.llm_provider = getattr(llm_provider, "name", "none")
@@ -63,6 +71,8 @@ class ArchitectureGenerationWorker:
             self.job_store.save(job)
 
             def persist_event(event: ArchitectureGenerationEvent) -> None:
+                if self._is_canceled(job.id):
+                    raise ArchitectureJobCanceled("Job wurde abgebrochen.")
                 apply_architecture_generation_event(job, event)
                 self.job_store.save(job)
 
@@ -73,13 +83,23 @@ class ArchitectureGenerationWorker:
                 generation_mode=job.generation_mode,
                 event_handler=persist_event,
             )
+            if self._is_canceled(job.id):
+                return self.job_store.get(job.id) or job
             job.complete(result.to_dict())
             self.job_store.save(job)
+        except ArchitectureJobCanceled:
+            return self.job_store.get(job.id) or job
         except Exception as error:
+            if self._is_canceled(job.id):
+                return self.job_store.get(job.id) or job
             job.fail(str(error))
             self.job_store.save(job)
 
         return job
+
+    def _is_canceled(self, job_id: str) -> bool:
+        current_job = self.job_store.get(job_id)
+        return current_job is not None and current_job.status == JOB_STATUS_CANCELED
 
 
 def main() -> None:

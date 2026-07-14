@@ -26,6 +26,7 @@ from agentic_rag_template.software_factory import (
     JOB_STATUS_CANCELED,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
+    TERMINAL_JOB_STATUSES,
     PostgresArchitectureGenerationJobStore,
 )
 from agentic_rag_template.template_config import load_application_profile
@@ -163,6 +164,22 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_architecture_job_created_response(application)
             return
 
+        architecture_job_action = self._parse_architecture_job_action_route(
+            app_route["remainder"] if app_route else ""
+        )
+        if architecture_job_action is not None:
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_architecture_job_action_response(
+                application,
+                architecture_job_action["job_id"],
+                architecture_job_action["action"],
+            )
+            return
+
         if app_route:
             documents_collection = self._parse_collection_documents_route(app_route["remainder"])
             if documents_collection is not None:
@@ -259,6 +276,70 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         self._send_json({"job": job.to_dict()})
 
+    def _send_architecture_job_action_response(
+        self,
+        application: ApplicationInstance,
+        job_id: str,
+        action: str,
+    ) -> None:
+        if application.id != "software-factory":
+            self._send_json(
+                {"error": "architecture-sheet jobs are only available for the software-factory app"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        try:
+            job = self._architecture_job_store().get(job_id)
+        except ArchitectureGenerationJobStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        if job is None or job.app_id != application.id:
+            self._send_json({"error": "architecture generation job not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        try:
+            if action == "cancel":
+                if not job.can_cancel():
+                    self._send_json(
+                        {"error": "architecture generation job is already finished"},
+                        status=HTTPStatus.CONFLICT,
+                    )
+                    return
+                job.cancel("Job wurde durch den Benutzer abgebrochen.")
+                self._architecture_job_store().save(job)
+                self._send_json({"job": job.to_dict()})
+                return
+
+            if action == "retry":
+                if not job.can_retry():
+                    self._send_json(
+                        {"error": "only failed or canceled jobs can be retried"},
+                        status=HTTPStatus.CONFLICT,
+                    )
+                    return
+                llm_provider = create_llm_provider(self.settings)
+                retry_job = ArchitectureGenerationJob.create(
+                    description=job.description,
+                    generation_mode=job.generation_mode,
+                    app_id=application.id,
+                    llm_provider=getattr(llm_provider, "name", "none"),
+                    llm_model=getattr(llm_provider, "model", "none"),
+                )
+                retry_job.add_log(f"Retry von Job {job.id}.")
+                self._architecture_job_store().save(retry_job)
+                self._send_json({"job": retry_job.to_dict(), "source_job_id": job.id}, status=HTTPStatus.ACCEPTED)
+                return
+        except ValueError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.CONFLICT)
+            return
+        except ArchitectureGenerationJobStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_json({"error": "unsupported architecture job action"}, status=HTTPStatus.NOT_FOUND)
+
     def _send_architecture_job_events_response(self, application: ApplicationInstance, job_id: str) -> None:
         if application.id != "software-factory":
             self._send_json(
@@ -294,7 +375,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                     self.close_connection = True
                     return
 
-            if job.status in {JOB_STATUS_COMPLETED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED}:
+            if job.status in TERMINAL_JOB_STATUSES:
                 self.close_connection = True
                 return
 
@@ -611,6 +692,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             and parts[3] == "events"
         ):
             return parts[2]
+
+        return None
+
+    def _parse_architecture_job_action_route(self, remainder: str) -> Optional[Dict[str, str]]:
+        parts = remainder.strip("/").split("/")
+
+        if (
+            len(parts) == 4
+            and parts[0] == "architecture-sheet"
+            and parts[1] == "jobs"
+            and parts[2]
+            and parts[3] in {"cancel", "retry"}
+        ):
+            return {"job_id": parts[2], "action": parts[3]}
 
         return None
 

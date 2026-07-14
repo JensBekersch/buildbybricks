@@ -20,6 +20,9 @@ const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
 const architectureGenerationMode = document.querySelector("#architecture-generation-mode");
 const generateArchitectureButton = document.querySelector("#generate-architecture");
+const cancelArchitectureJobButton = document.querySelector("#cancel-architecture-job");
+const retryArchitectureJobButton = document.querySelector("#retry-architecture-job");
+const refreshArchitectureJobsButton = document.querySelector("#refresh-architecture-jobs");
 const architectureStatus = document.querySelector("#architecture-status");
 const architectureProgress = document.querySelector("#architecture-progress");
 const architectureProgressLabel = document.querySelector("#architecture-progress-label");
@@ -39,12 +42,15 @@ const architectureProvider = document.querySelector("#architecture-provider");
 const architecturePipeline = document.querySelector("#architecture-pipeline");
 const architectureSourceCount = document.querySelector("#architecture-source-count");
 const architectureSources = document.querySelector("#architecture-sources");
+const architectureJobList = document.querySelector("#architecture-job-list");
+const architectureJobLogs = document.querySelector("#architecture-job-logs");
 const architectureTrace = document.querySelector("#architecture-trace");
 
 let applications = [];
 let activeAppId = "default";
 let activeCollection = "";
 let activeArchitectureJobId = "";
+let activeArchitectureJob = null;
 let architectureEventSource = null;
 let architecturePollingTimer = null;
 
@@ -80,6 +86,19 @@ async function postJson(url, body) {
   }
 
   return payload;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function selectedApplication() {
@@ -280,6 +299,7 @@ function formatElapsedTime(startedAt, finishedAt = "") {
 }
 
 function renderArchitectureJob(job) {
+  activeArchitectureJob = job;
   architectureProgress.hidden = false;
   architectureProgressSteps.replaceChildren();
 
@@ -294,6 +314,8 @@ function renderArchitectureJob(job) {
 
   architectureProgressLabel.textContent = statusText[job.status] || job.status;
   architectureProgressElapsed.textContent = formatElapsedTime(job.started_at || job.created_at, job.finished_at);
+  cancelArchitectureJobButton.disabled = !["queued", "running"].includes(job.status);
+  retryArchitectureJobButton.disabled = !["failed", "canceled"].includes(job.status);
 
   (job.steps || []).forEach((step) => {
     const item = document.createElement("li");
@@ -312,6 +334,8 @@ function renderArchitectureJob(job) {
   if (job.result) {
     renderArchitectureResult(job.result);
   }
+
+  renderArchitectureJobLogs(job.logs || []);
 }
 
 function isTerminalArchitectureJob(job) {
@@ -344,6 +368,72 @@ function completeArchitectureJobUi(job) {
   setRuntimeStatus(job.error || "Job beendet", job.status === "failed" ? "error" : "neutral");
 }
 
+function renderArchitectureJobLogs(logs) {
+  architectureJobLogs.replaceChildren();
+
+  if (!logs || logs.length === 0) {
+    architectureJobLogs.append(createElement("li", "", "Noch keine Logs"));
+    return;
+  }
+
+  logs.slice(-14).reverse().forEach((log) => {
+    const item = document.createElement("li");
+    item.dataset.level = log.level || "info";
+    item.append(createElement("strong", "", log.message || "Log"));
+    item.append(createElement("span", "", `${formatDateTime(log.created_at)} · ${log.step || "Job"}`));
+    architectureJobLogs.append(item);
+  });
+}
+
+function renderArchitectureJobs(jobs) {
+  architectureJobList.replaceChildren();
+
+  if (!jobs || jobs.length === 0) {
+    architectureJobList.append(createElement("li", "empty-state", "Noch keine Jobs"));
+    return;
+  }
+
+  jobs.forEach((job) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const title = createElement("strong", "", job.description || job.id);
+    const meta = createElement("span", "", `${job.status} · ${formatDateTime(job.updated_at || job.created_at)}`);
+
+    button.type = "button";
+    button.className = "job-list-button";
+    button.dataset.active = job.id === activeArchitectureJobId ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => openArchitectureJob(job.id));
+    item.append(button);
+    architectureJobList.append(item);
+  });
+}
+
+async function loadArchitectureJobs() {
+  const payload = await getJson(appPath("software-factory", "architecture-sheet", "jobs"));
+  renderArchitectureJobs(payload.jobs || []);
+}
+
+async function openArchitectureJob(jobId) {
+  stopArchitectureJobUpdates();
+  const payload = await getJson(appPath("software-factory", "architecture-sheet", "jobs", jobId));
+  const job = payload.job;
+
+  activeArchitectureJobId = job.id;
+  renderArchitectureJob(job);
+  renderArchitectureJobs((await getJson(appPath("software-factory", "architecture-sheet", "jobs"))).jobs || []);
+
+  if (isTerminalArchitectureJob(job)) {
+    completeArchitectureJobUi(job);
+    return;
+  }
+
+  generateArchitectureButton.disabled = true;
+  generateArchitectureButton.textContent = "Generierung laeuft...";
+  setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+  subscribeArchitectureJob(job.id);
+}
+
 async function pollArchitectureJob(jobId) {
   try {
     const payload = await getJson(appPath("software-factory", "architecture-sheet", "jobs", jobId));
@@ -358,6 +448,7 @@ async function pollArchitectureJob(jobId) {
     if (isTerminalArchitectureJob(job)) {
       stopArchitectureJobUpdates();
       completeArchitectureJobUi(job);
+      loadArchitectureJobs().catch((error) => setRuntimeStatus(error.message, "error"));
       return;
     }
 
@@ -404,6 +495,7 @@ function subscribeArchitectureJob(jobId) {
     if (isTerminalArchitectureJob(job)) {
       stopArchitectureJobUpdates();
       completeArchitectureJobUi(job);
+      loadArchitectureJobs().catch((error) => setRuntimeStatus(error.message, "error"));
     }
   });
 
@@ -416,6 +508,45 @@ function subscribeArchitectureJob(jobId) {
     architectureEventSource = null;
     startArchitectureJobPolling(jobId);
   });
+}
+
+async function cancelArchitectureJob() {
+  if (!activeArchitectureJobId || cancelArchitectureJobButton.disabled) {
+    return;
+  }
+
+  cancelArchitectureJobButton.disabled = true;
+  architectureStatus.textContent = "Job wird abgebrochen.";
+
+  const payload = await postJson(
+    appPath("software-factory", "architecture-sheet", "jobs", activeArchitectureJobId, "cancel"),
+    {}
+  );
+  renderArchitectureJob(payload.job);
+  stopArchitectureJobUpdates();
+  completeArchitectureJobUi(payload.job);
+  await loadArchitectureJobs();
+}
+
+async function retryArchitectureJob() {
+  if (!activeArchitectureJobId || retryArchitectureJobButton.disabled) {
+    return;
+  }
+
+  retryArchitectureJobButton.disabled = true;
+  architectureStatus.textContent = "Retry-Job wird angelegt.";
+
+  const payload = await postJson(
+    appPath("software-factory", "architecture-sheet", "jobs", activeArchitectureJobId, "retry"),
+    {}
+  );
+  activeArchitectureJobId = payload.job.id;
+  renderArchitectureJob(payload.job);
+  await loadArchitectureJobs();
+  generateArchitectureButton.disabled = true;
+  generateArchitectureButton.textContent = "Generierung laeuft...";
+  setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+  subscribeArchitectureJob(payload.job.id);
 }
 
 function valueText(value) {
@@ -586,7 +717,9 @@ async function generateArchitectureSheet() {
       generation_mode: architectureGenerationMode.value,
     });
 
+    activeArchitectureJobId = payload.job.id;
     renderArchitectureJob(payload.job);
+    await loadArchitectureJobs();
     generateArchitectureButton.textContent = "Generierung laeuft...";
     setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
     subscribeArchitectureJob(payload.job.id);
@@ -606,6 +739,7 @@ async function initialize() {
     setRuntimeStatus("Verbinden...");
     await loadApplications();
     await loadCollections();
+    await loadArchitectureJobs();
     setRuntimeStatus("Bereit", "ok");
   } catch (error) {
     setRuntimeStatus(error.message || "API nicht erreichbar", "error");
@@ -625,6 +759,7 @@ modeTabs.forEach((button) => {
     ) {
       try {
         await setActiveApplication("software-factory");
+        await loadArchitectureJobs();
         setRuntimeStatus("Bereit", "ok");
       } catch (error) {
         setRuntimeStatus(error.message, "error");
@@ -659,6 +794,39 @@ refreshCollectionsButton.addEventListener("click", async () => {
     setRuntimeStatus("Aktualisiert", "ok");
   } catch (error) {
     setRuntimeStatus(error.message, "error");
+  }
+});
+
+refreshArchitectureJobsButton.addEventListener("click", async () => {
+  try {
+    await loadArchitectureJobs();
+    setRuntimeStatus("Jobs aktualisiert", "ok");
+  } catch (error) {
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+cancelArchitectureJobButton.addEventListener("click", async () => {
+  try {
+    await cancelArchitectureJob();
+  } catch (error) {
+    setRuntimeStatus(error.message, "error");
+    architectureStatus.textContent = error.message;
+    if (activeArchitectureJob) {
+      renderArchitectureJob(activeArchitectureJob);
+    }
+  }
+});
+
+retryArchitectureJobButton.addEventListener("click", async () => {
+  try {
+    await retryArchitectureJob();
+  } catch (error) {
+    setRuntimeStatus(error.message, "error");
+    architectureStatus.textContent = error.message;
+    if (activeArchitectureJob) {
+      renderArchitectureJob(activeArchitectureJob);
+    }
   }
 });
 
