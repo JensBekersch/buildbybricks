@@ -555,3 +555,45 @@ def test_architecture_sheet_job_endpoints_create_list_and_get_job() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_architecture_sheet_job_events_streams_current_job_snapshot() -> None:
+    settings = Settings(
+        frontend_dir=PROJECT_ROOT / "frontend",
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+        host="127.0.0.1",
+        port=0,
+        job_stream_poll_seconds=0.01,
+    )
+    store = FakeArchitectureJobStore()
+    job = ArchitectureGenerationJob.create(
+        "Eine Django-Anwendung fuer Kundenverwaltung.",
+        generation_mode="agentic",
+        job_id="stream-job",
+    )
+    job.complete({"architecture_sheet": {"artifact_name": "Kundenverwaltung"}})
+    store.save(job)
+    server = create_server(settings, architecture_job_store=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs/stream-job/events",
+            timeout=2,
+        ) as response:
+            body = response.read().decode("utf-8")
+
+        assert response.status == 200
+        assert response.headers["Content-Type"] == "text/event-stream; charset=utf-8"
+        assert "event: job" in body
+        assert '"id": "stream-job"' in body
+        assert '"status": "completed"' in body
+        assert '"artifact_name": "Kundenverwaltung"' in body
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

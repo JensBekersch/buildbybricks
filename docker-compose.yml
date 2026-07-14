@@ -24,6 +24,7 @@ services:
       AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
       AGENTIC_RAG_DATABASE_URL: "${AGENTIC_RAG_DATABASE_URL:-postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag}"
       AGENTIC_RAG_WORKER_POLL_SECONDS: "${AGENTIC_RAG_WORKER_POLL_SECONDS:-2}"
+      AGENTIC_RAG_JOB_STREAM_POLL_SECONDS: "${AGENTIC_RAG_JOB_STREAM_POLL_SECONDS:-1}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,6 +55,7 @@ services:
       AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
       AGENTIC_RAG_DATABASE_URL: "${AGENTIC_RAG_DATABASE_URL:-postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag}"
       AGENTIC_RAG_WORKER_POLL_SECONDS: "${AGENTIC_RAG_WORKER_POLL_SECONDS:-2}"
+      AGENTIC_RAG_JOB_STREAM_POLL_SECONDS: "${AGENTIC_RAG_JOB_STREAM_POLL_SECONDS:-1}"
     depends_on:
       postgres:
         condition: service_healthy

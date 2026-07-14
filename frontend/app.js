@@ -44,6 +44,9 @@ const architectureTrace = document.querySelector("#architecture-trace");
 let applications = [];
 let activeAppId = "default";
 let activeCollection = "";
+let activeArchitectureJobId = "";
+let architectureEventSource = null;
+let architecturePollingTimer = null;
 
 function appPath(appId, ...segments) {
   return ["/apps", appId, ...segments]
@@ -311,6 +314,110 @@ function renderArchitectureJob(job) {
   }
 }
 
+function isTerminalArchitectureJob(job) {
+  return ["completed", "failed", "canceled"].includes(job.status);
+}
+
+function stopArchitectureJobUpdates() {
+  if (architectureEventSource) {
+    architectureEventSource.close();
+    architectureEventSource = null;
+  }
+
+  if (architecturePollingTimer) {
+    window.clearTimeout(architecturePollingTimer);
+    architecturePollingTimer = null;
+  }
+}
+
+function completeArchitectureJobUi(job) {
+  generateArchitectureButton.disabled = false;
+  generateArchitectureButton.textContent = "Architecture Job anlegen";
+
+  if (job.status === "completed") {
+    architectureStatus.textContent = `Job ${job.id} ist abgeschlossen.`;
+    setRuntimeStatus("Architecture Sheet erstellt", "ok");
+    return;
+  }
+
+  architectureStatus.textContent = `Job ${job.id} wurde beendet.`;
+  setRuntimeStatus(job.error || "Job beendet", job.status === "failed" ? "error" : "neutral");
+}
+
+async function pollArchitectureJob(jobId) {
+  try {
+    const payload = await getJson(appPath("software-factory", "architecture-sheet", "jobs", jobId));
+    const job = payload.job;
+
+    if (job.id !== activeArchitectureJobId) {
+      return;
+    }
+
+    renderArchitectureJob(job);
+
+    if (isTerminalArchitectureJob(job)) {
+      stopArchitectureJobUpdates();
+      completeArchitectureJobUi(job);
+      return;
+    }
+
+    architecturePollingTimer = window.setTimeout(() => pollArchitectureJob(jobId), 2000);
+  } catch (error) {
+    architectureProgressLabel.textContent = error.message || "Job-Status konnte nicht geladen werden.";
+    setRuntimeStatus(error.message || "Job-Status nicht erreichbar", "error");
+    architecturePollingTimer = window.setTimeout(() => pollArchitectureJob(jobId), 4000);
+  }
+}
+
+function startArchitectureJobPolling(jobId) {
+  if (architecturePollingTimer) {
+    window.clearTimeout(architecturePollingTimer);
+  }
+
+  architectureStatus.textContent = `Job ${jobId} laeuft. Live-Stream nicht verfuegbar, nutze Status-Polling.`;
+  architecturePollingTimer = window.setTimeout(() => pollArchitectureJob(jobId), 1000);
+}
+
+function subscribeArchitectureJob(jobId) {
+  stopArchitectureJobUpdates();
+  activeArchitectureJobId = jobId;
+
+  if (!window.EventSource) {
+    startArchitectureJobPolling(jobId);
+    return;
+  }
+
+  const eventSource = new EventSource(appPath("software-factory", "architecture-sheet", "jobs", jobId, "events"));
+  architectureEventSource = eventSource;
+  architectureStatus.textContent = `Job ${jobId} laeuft. Live-Status verbunden.`;
+
+  eventSource.addEventListener("job", (event) => {
+    const payload = JSON.parse(event.data);
+    const job = payload.job;
+
+    if (!job || job.id !== activeArchitectureJobId) {
+      return;
+    }
+
+    renderArchitectureJob(job);
+
+    if (isTerminalArchitectureJob(job)) {
+      stopArchitectureJobUpdates();
+      completeArchitectureJobUi(job);
+    }
+  });
+
+  eventSource.addEventListener("error", (event) => {
+    if (architectureEventSource !== eventSource) {
+      return;
+    }
+
+    eventSource.close();
+    architectureEventSource = null;
+    startArchitectureJobPolling(jobId);
+  });
+}
+
 function valueText(value) {
   if (value === null || value === undefined || value === "") {
     return "";
@@ -480,17 +587,17 @@ async function generateArchitectureSheet() {
     });
 
     renderArchitectureJob(payload.job);
-    architectureStatus.textContent = `Job ${payload.job.id} wurde angelegt.`;
-    setRuntimeStatus("Bereit", "ok");
+    generateArchitectureButton.textContent = "Generierung laeuft...";
+    setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+    subscribeArchitectureJob(payload.job.id);
   } catch (error) {
     architectureProgress.hidden = false;
     architectureProgressLabel.textContent = error.message || "Job konnte nicht angelegt werden.";
     architectureProgressElapsed.textContent = "0s";
     architectureProgressSteps.replaceChildren();
-    throw error;
-  } finally {
     generateArchitectureButton.disabled = false;
     generateArchitectureButton.textContent = "Architecture Job anlegen";
+    throw error;
   }
 }
 
