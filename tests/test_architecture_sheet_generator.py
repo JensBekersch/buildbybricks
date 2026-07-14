@@ -207,6 +207,92 @@ class FailingRequirementsLLMProvider:
         raise AssertionError(system_prompt)
 
 
+class CorrectableReviewLLMProvider:
+    name = "correctable-review-llm"
+    model = "correctable-json-v1"
+
+    def __init__(self) -> None:
+        self.review_calls = 0
+        self.correction_calls = 0
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Requirement Analyst" in system_prompt:
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Teammitglieder verwalten gemeinsam einfache Aufgaben mit Status.",
+                "roles": [{"name": "Teammitglieder", "description": "Sehen und bearbeiten die gemeinsame Liste."}],
+                "core_entities": [{"name": "Aufgabe", "description": "Aufgabenbeschreibung und Bearbeitungsstatus."}],
+                "workflows": [{"name": "Aufgabe pflegen", "description": "Aufgabe erfassen, anzeigen und Status setzen."}],
+                "current_interfaces": [{"name": "Aufgabenliste", "type": "web-ui", "description": "Gemeinsame Weboberflaeche."}],
+                "quality_goals": [{"name": "Testabdeckung", "description": "Mindestens 98 Prozent Coverage."}],
+                "constraints": [{"description": "Kein Login-Bereich."}],
+                "risks": [{"description": "Statuswerte koennen falsch gesetzt werden.", "mitigation": "Enum validieren."}],
+                "assumptions": [],
+                "open_questions": [],
+            }
+        if "Architecture Synthesizer" in system_prompt:
+            return {
+                "artifact_name": "Team Todo List Architecture Sheet",
+                "business_goal": "Enable teams to manage shared task lists.",
+                "quality_goals": [{"goal": "Test Coverage", "target": "98%", "priority": "High"}],
+            }
+        if "Architecture Reviewer" in system_prompt:
+            self.review_calls += 1
+            if self.review_calls == 1:
+                return {
+                    "passes": False,
+                    "findings": ["Das Sheet enthaelt englische fachliche Inhalte."],
+                    "required_corrections": ["Alle fachlichen Texte auf Deutsch umformulieren."],
+                }
+            return {"passes": True, "findings": [], "required_corrections": []}
+        if "Architecture Corrector" in system_prompt:
+            self.correction_calls += 1
+            assert "Alle fachlichen Texte auf Deutsch umformulieren." in user_prompt
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Teammitglieder koennen eine gemeinsame Aufgabenliste pflegen und den Status jeder Aufgabe nachvollziehen.",
+                "quality_goals": [
+                    {
+                        "name": "Testabdeckung",
+                        "scenario": "Unit- und Medium-Tests erreichen mindestens 98 Prozent Coverage.",
+                        "priority": "high",
+                    }
+                ],
+            }
+        raise AssertionError(system_prompt)
+
+
+class MalformedArchitectureLLMProvider:
+    name = "malformed-architecture-llm"
+    model = "malformed-json-v1"
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        if "Requirement Analyst" in system_prompt:
+            return {
+                "artifact_name": "Team-Todo-Liste",
+                "business_goal": "Teammitglieder verwalten gemeinsam einfache Aufgaben.",
+                "roles": ["Teammitglieder"],
+                "core_entities": ["Aufgabe"],
+                "workflows": ["Aufgabe erfassen"],
+                "current_interfaces": ["Aufgabenliste"],
+                "quality_goals": ["Testabdeckung"],
+                "constraints": ["Kein Login"],
+                "risks": [{"risk": "Unzureichende Testabdeckung", "mitigation": "Coverage pruefen."}],
+            }
+        if "Architecture Synthesizer" in system_prompt:
+            return {
+                "artifact_type": "Architecture Decision Record",
+                "architecture_drivers": [{"driver": "Testbarkeit", "impact": "98 Prozent Coverage."}],
+                "quality_goals": [{"goal": "Testabdeckung", "target": "98 Prozent", "priority": "High"}],
+                "risks": [{"risk": "Statusfehler", "mitigation": "Status als Enum modellieren."}],
+                "acceptance_criteria": [{"criterion": "Status offen ist verfuegbar", "testable": True}],
+                "readiness": "ready-for-review",
+            }
+        if "Architecture Reviewer" in system_prompt:
+            return {"passes": True, "findings": [], "required_corrections": []}
+        raise AssertionError(system_prompt)
+
+
 class FakeArchitectureJobStore:
     def __init__(self) -> None:
         self.jobs = {}
@@ -462,6 +548,67 @@ def test_generate_architecture_sheet_preserves_explicit_no_login_requirement() -
     assert "kein login" in all_text
     assert "accounts-app" in all_text
     assert "98 Prozent Coverage".lower() in all_text
+
+
+def test_generate_architecture_sheet_corrects_failed_review_once() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+    provider = CorrectableReviewLLMProvider()
+
+    result = generate_architecture_sheet(
+        "Eine einfache Todo Liste fuer Teammitglieder ohne Login.",
+        application,
+        llm_provider=provider,
+        generation_mode="agentic_with_review",
+    )
+    payload = result.to_dict()
+    review = payload["generation"]["architecture_review"]
+
+    assert provider.review_calls == 2
+    assert provider.correction_calls == 1
+    assert review["passes"] is True
+    assert review["correction_attempts"][0]["passes"] is False
+    assert payload["architecture_sheet"]["artifact_name"] == "Team-Todo-Liste"
+    assert "gemeinsame Aufgabenliste" in payload["architecture_sheet"]["business_goal"]
+
+
+def test_generate_architecture_sheet_normalizes_malformed_llm_contract_shapes() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    result = generate_architecture_sheet(
+        "Eine einfache Todo Liste fuer Teammitglieder ohne Login.",
+        application,
+        llm_provider=MalformedArchitectureLLMProvider(),
+        generation_mode="agentic_with_review",
+    )
+    sheet = result.to_dict()["architecture_sheet"]
+
+    assert sheet["artifact_type"] == "django-application"
+    assert sheet["architecture_drivers"][0] == {
+        "name": "Testbarkeit",
+        "description": "98 Prozent Coverage.",
+        "impact": "98 Prozent Coverage.",
+    }
+    assert sheet["quality_goals"][0] == {
+        "name": "Testabdeckung",
+        "scenario": "98 Prozent",
+        "priority": "high",
+    }
+    assert sheet["risks"][0] == {
+        "description": "Statusfehler",
+        "mitigation": "Status als Enum modellieren.",
+    }
+    assert sheet["acceptance_criteria"][0]["description"] == "Status offen ist verfuegbar"
+    assert sheet["readiness"]["status"] == "ready-for-review"
 
 
 def test_architecture_sheet_endpoint_is_removed() -> None:

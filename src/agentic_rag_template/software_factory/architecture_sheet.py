@@ -20,6 +20,7 @@ from agentic_rag_template.software_factory.jobs import (
 
 
 ArchitectureGenerationEventHandler = Callable[[ArchitectureGenerationEvent], None]
+MAX_REVIEW_CORRECTION_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -307,20 +308,18 @@ def _try_generate_agentic_architecture_sheet(
         if include_review:
             current_step = "review_architecture"
             _emit_started(event_handler, "review_architecture", "Architecture Reviewer wird aufgerufen.")
-            raw_review = _call_generate_json_with_metrics(
+            review = _review_and_correct_architecture_sheet(
                 generate_json=generate_json,
                 llm_provider=llm_provider,
                 event_handler=event_handler,
-                step="review_architecture",
-                llm_step="architecture_reviewer",
-                system_prompt=_build_architecture_reviewer_system_prompt(),
-                user_prompt=_build_architecture_reviewer_user_prompt(
-                    description=description,
-                    requirement_analysis=analysis,
-                    sheet=reviewed_sheet,
-                ),
+                description=description,
+                requirement_analysis=analysis,
+                base_sheet=base_sheet,
+                schema=schema,
+                method_sources=method_sources,
+                initial_sheet=reviewed_sheet,
             )
-            review = _normalize_architecture_review(raw_review)
+            reviewed_sheet = review["sheet"]
             warning = "" if review.get("passes") else "Architecture reviewer found issues."
             if warning:
                 _emit_failed(event_handler, "review_architecture", warning)
@@ -344,6 +343,91 @@ def _try_generate_agentic_architecture_sheet(
             "review": {},
             "warning": f"Agentic architecture pipeline failed: {error}",
         }
+
+
+def _review_and_correct_architecture_sheet(
+    generate_json: Callable[..., Dict[str, Any]],
+    llm_provider: LLMProvider,
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    description: str,
+    requirement_analysis: Dict[str, Any],
+    base_sheet: Dict[str, Any],
+    schema: Dict[str, Any],
+    method_sources: List[Dict[str, Any]],
+    initial_sheet: Dict[str, Any],
+) -> Dict[str, Any]:
+    sheet = initial_sheet
+    reviews: List[Dict[str, Any]] = []
+
+    for attempt in range(MAX_REVIEW_CORRECTION_ATTEMPTS + 1):
+        raw_review = _call_generate_json_with_metrics(
+            generate_json=generate_json,
+            llm_provider=llm_provider,
+            event_handler=event_handler,
+            step="review_architecture",
+            llm_step="architecture_reviewer",
+            system_prompt=_build_architecture_reviewer_system_prompt(),
+            user_prompt=_build_architecture_reviewer_user_prompt(
+                description=description,
+                requirement_analysis=requirement_analysis,
+                sheet=sheet,
+            ),
+        )
+        review = _normalize_architecture_review(raw_review)
+        review["attempt"] = attempt + 1
+        reviews.append(review)
+
+        if review["passes"]:
+            review["sheet"] = sheet
+            review["correction_attempts"] = reviews[:-1]
+            return review
+
+        if attempt >= MAX_REVIEW_CORRECTION_ATTEMPTS:
+            review["sheet"] = sheet
+            review["correction_attempts"] = reviews[:-1]
+            return review
+
+        _emit_log(
+            event_handler,
+            "review_architecture",
+            f"Architecture Review fordert Korrekturlauf {attempt + 1}.",
+            level="warning",
+            metadata={
+                "kind": "architecture_correction",
+                "attempt": attempt + 1,
+                "findings": review["findings"],
+                "required_corrections": review["required_corrections"],
+            },
+        )
+        raw_correction = _call_generate_json_with_metrics(
+            generate_json=generate_json,
+            llm_provider=llm_provider,
+            event_handler=event_handler,
+            step="synthesize_architecture",
+            llm_step="architecture_correction",
+            system_prompt=_build_architecture_correction_system_prompt(),
+            user_prompt=_build_architecture_correction_user_prompt(
+                description=description,
+                requirement_analysis=requirement_analysis,
+                base_sheet=base_sheet,
+                current_sheet=sheet,
+                review=review,
+                schema=_compact_schema_contract(schema),
+                method_sources=method_sources,
+            ),
+        )
+        candidate_sheet = raw_correction.get("architecture_sheet", raw_correction)
+        if not isinstance(candidate_sheet, dict):
+            raise ArchitectureSheetGenerationError("Architecture correction did not return a JSON object.")
+        sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema)
+
+    return {
+        "passes": False,
+        "findings": ["Architecture Review konnte nicht abgeschlossen werden."],
+        "required_corrections": ["Sheet manuell pruefen."],
+        "sheet": sheet,
+        "correction_attempts": reviews,
+    }
 
 
 def _call_generate_json_with_metrics(
@@ -443,10 +527,13 @@ def _build_requirements_analyst_system_prompt() -> str:
         [
             "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
             "Erzeuge ausschliesslich valides JSON.",
+            "Schreibe alle fachlichen Inhalte ausnahmslos auf Deutsch.",
+            "Englische Bezeichnungen sind nur erlaubt, wenn es sich um etablierte technische Eigennamen handelt, z. B. Django, REST oder API.",
             "Analysiere die Beschreibung, ohne Architektur zu erfinden.",
             "Trenne aktuellen Scope strikt von spaeteren, optionalen oder unklaren Erweiterungen.",
             "Extrahiere konkrete Rollen, Kernobjekte, Workflows, Schnittstellen, Qualitaetsziele, Risiken, Annahmen und offene Fragen.",
             "Verwende die Begriffe aus der Nutzerbeschreibung, keine generischen Platzhalter.",
+            "Formuliere Beschreibungen so konkret, dass ein Architektur-Agent daraus Bausteine und Tests ableiten kann.",
         ]
     )
 
@@ -463,7 +550,8 @@ def _build_requirements_analyst_user_prompt(
                 "Gib JSON mit diesen Feldern zurueck: artifact_name, business_goal, roles, "
                 "core_entities, workflows, current_interfaces, future_interfaces, quality_goals, "
                 "constraints, explicitly_not_needed, risks, assumptions, open_questions. "
-                "Array-Eintraege sollen konkrete Strings oder Objekte mit name/description sein."
+                "Array-Eintraege sollen konkrete Strings oder Objekte mit name/description sein. "
+                "Alle Werte muessen in deutscher Sprache formuliert sein."
             ),
         ]
     )
@@ -474,9 +562,13 @@ def _build_architecture_synthesizer_system_prompt() -> str:
         [
             "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
             "Erzeuge ausschliesslich valides JSON.",
+            "Schreibe alle beschreibenden Texte konsequent auf Deutsch.",
+            "Verwende keine englischen Platzhalter wie Team Members, High, Medium, Core Functionality oder Project Shell.",
             "Erzeuge ein vollstaendiges Architecture Sheet nach Schema.",
             "Nutze die Requirement-Analyse als fuehrende Quelle.",
             "Alle Bausteine, Szenarien, Datenmodelle und Tests muessen zur beschriebenen Anwendung passen.",
+            "Beschreibungen duerfen nicht duenn sein: business_goal, solution_strategy, data_view, security_view, test_strategy und deployment_view sollen jeweils mehrere konkrete Saetze enthalten.",
+            "Array-Eintraege sollen spezifisch und verwertbar sein, nicht nur Buzzwords oder Prioritaetswoerter.",
             "Zukuenftige oder optionale Schnittstellen gehoeren nur in assumptions/open_questions oder external_systems, nicht in current_interfaces.",
         ]
     )
@@ -496,7 +588,11 @@ def _build_architecture_synthesizer_user_prompt(
             f"Schema-Vertrag:\n{json.dumps(schema, ensure_ascii=True)}",
             f"Methodenhinweise:\n{json.dumps(_compact_method_sources(method_sources), ensure_ascii=True)}",
             f"Schema-kompatible Baseline:\n{json.dumps(base_sheet, ensure_ascii=True)}",
-            "Gib nur das vollstaendige Architecture-Sheet-JSON zurueck.",
+            (
+                "Gib nur das vollstaendige Architecture-Sheet-JSON zurueck. "
+                "Alle Freitexte muessen deutsch sein. Verwende die Baseline als Mindestniveau und reichere sie fachlich aus, "
+                "ohne Scope-fremde Features zu erfinden."
+            ),
         ]
     )
 
@@ -507,7 +603,8 @@ def _build_architecture_reviewer_system_prompt() -> str:
             "Du bist der Architecture Reviewer einer agentischen Django-Softwarefabrik.",
             "Erzeuge ausschliesslich valides JSON.",
             "Pruefe, ob das Architecture Sheet fachlich zur Beschreibung und Requirement-Analyse passt.",
-            "Markiere generische Platzhalter, erfundene Features, Scope-Verletzungen und fehlende Kernobjekte.",
+            "Markiere generische Platzhalter, englische fachliche Inhalte, erfundene Features, Scope-Verletzungen, fehlende Kernobjekte und zu duenne Beschreibungen.",
+            "Ein Sheet besteht den Review nur, wenn es konsequent deutsch, konkret und fuer Folgeagenten verwendbar ist.",
             "Gib passes, findings und required_corrections zurueck.",
         ]
     )
@@ -526,6 +623,45 @@ def _build_architecture_reviewer_user_prompt(
             (
                 "Bewerte streng als JSON: "
                 "{\"passes\": boolean, \"findings\": [string], \"required_corrections\": [string]}"
+            ),
+        ]
+    )
+
+
+def _build_architecture_correction_system_prompt() -> str:
+    return "\n".join(
+        [
+            "Du bist der Architecture Corrector einer agentischen Django-Softwarefabrik.",
+            "Erzeuge ausschliesslich valides JSON.",
+            "Korrigiere ein Architecture Sheet anhand der Review-Hinweise.",
+            "Schreibe alle beschreibenden Texte konsequent auf Deutsch.",
+            "Erhalte fachlich richtige Inhalte, entferne Scope-fremde Features und ergaenze fehlende oder zu duenne Abschnitte.",
+            "Gib ein vollstaendiges Architecture-Sheet-JSON nach Schema zurueck.",
+        ]
+    )
+
+
+def _build_architecture_correction_user_prompt(
+    description: str,
+    requirement_analysis: Dict[str, Any],
+    base_sheet: Dict[str, Any],
+    current_sheet: Dict[str, Any],
+    review: Dict[str, Any],
+    schema: Dict[str, Any],
+    method_sources: List[Dict[str, Any]],
+) -> str:
+    return "\n\n".join(
+        [
+            f"Beschreibung:\n{description}",
+            f"Requirement-Analyse:\n{json.dumps(requirement_analysis, ensure_ascii=True)}",
+            f"Aktuelles Architecture Sheet:\n{json.dumps(current_sheet, ensure_ascii=True)}",
+            f"Review-Befunde:\n{json.dumps(review, ensure_ascii=True)}",
+            f"Schema-Vertrag:\n{json.dumps(schema, ensure_ascii=True)}",
+            f"Methodenhinweise:\n{json.dumps(_compact_method_sources(method_sources), ensure_ascii=True)}",
+            f"Schema-kompatible Baseline:\n{json.dumps(base_sheet, ensure_ascii=True)}",
+            (
+                "Korrigiere alle required_corrections. "
+                "Gib nur das vollstaendige korrigierte Architecture-Sheet-JSON zurueck."
             ),
         ]
     )
@@ -627,9 +763,10 @@ def _build_sheet_from_requirements_analysis(
             "interfaces": analysis["current_interfaces"],
         },
         "solution_strategy": (
-            "Die Anwendung wird als modulare Django-Applikation aufgebaut. Kernobjekte werden als "
-            "Django Models und Services geschnitten; Workflows werden ueber Views, Forms, Berechtigungen "
-            "und Integrationstests abgesichert."
+            "Die Anwendung wird als modulare Django-Applikation aufgebaut. Die fachlichen Kernobjekte "
+            "werden als Django-Models mit klaren Validierungsregeln modelliert und durch Services oder "
+            "Forms von der Darstellung getrennt. Die zentralen Workflows werden ueber serverseitige Views "
+            "und Templates abgebildet, damit die erste Ausbaustufe einfach betreibbar und gut testbar bleibt."
         ),
         "architecture_decisions": [
             {
@@ -648,14 +785,23 @@ def _build_sheet_from_requirements_analysis(
         "building_blocks": _analysis_building_blocks(analysis),
         "runtime_scenarios": _analysis_runtime_scenarios(analysis),
         "deployment_view": (
-            "Startpunkt ist ein containerisierbares Django-Deployment mit Webprozess, relationaler Datenbank "
-            "und getrennten Konfigurationen fuer lokale Entwicklung, Test und Produktion."
+            "Startpunkt ist ein containerisierbares Django-Deployment mit einem Webprozess und einer "
+            "relationalen Datenbank. Lokale Entwicklung, Test und Produktion verwenden getrennte "
+            "Konfigurationen, aber denselben fachlichen Codepfad. Statische Dateien und Migrationslaeufe "
+            "werden im Deployment explizit beruecksichtigt."
         ),
-        "data_view": f"Zentrale Django Models werden aus den Kernobjekten abgeleitet: {', '.join(entity_names)}.",
+        "data_view": (
+            f"Zentrale Django-Models werden aus den Kernobjekten abgeleitet: {', '.join(entity_names)}. "
+            "Fachliche Statuswerte und Pflichtfelder werden direkt am Modell oder in dedizierten "
+            "Validierungsfunktionen abgesichert. Beziehungen werden nur eingefuehrt, wenn sie aus der "
+            "Requirement-Analyse ableitbar sind."
+        ),
         "security_view": _analysis_security_view(analysis, role_names),
         "test_strategy": (
-            "Automatisierte Tests umfassen Model- und Service-Tests fuer Kernobjekte, Permission-Tests fuer Rollen, "
-            "Workflow-Tests fuer zentrale Szenarien und Export/API-Tests nur fuer Schnittstellen im aktuellen Scope."
+            "Automatisierte Tests umfassen Model- und Service-Tests fuer Kernobjekte sowie Medium-Tests "
+            "fuer die zentralen Workflows. Rollen- oder Berechtigungstests werden nur erzeugt, wenn die "
+            "Requirement-Analyse Rollen mit unterschiedlichen Rechten vorgibt. Export- oder API-Tests "
+            "werden nur fuer Schnittstellen im aktuellen Scope erstellt."
         ),
         "acceptance_criteria": _analysis_acceptance_criteria(analysis),
         "risks": analysis["risks"]
@@ -681,15 +827,83 @@ def _merge_known_schema_fields(
 ) -> Dict[str, Any]:
     known_fields = set(schema.get("properties", {}).keys())
     merged = dict(base_sheet)
+    normalized_candidate = _normalize_candidate_sheet(candidate_sheet)
 
     for field in known_fields:
-        value = candidate_sheet.get(field)
+        value = normalized_candidate.get(field)
 
         if value not in (None, "", [], {}):
             merged[field] = value
 
     merged["schema_version"] = "1.0.0"
     return merged
+
+
+def _normalize_candidate_sheet(candidate_sheet: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "schema_version": "1.0.0",
+        "artifact_name": _string_value(candidate_sheet.get("artifact_name")),
+        "artifact_type": _normalize_artifact_type(candidate_sheet.get("artifact_type")),
+        "input_summary": _string_value(candidate_sheet.get("input_summary")),
+        "business_goal": _string_value(candidate_sheet.get("business_goal")),
+        "stakeholders": _list_of_named_items(candidate_sheet.get("stakeholders")),
+        "architecture_drivers": _list_of_architecture_drivers(candidate_sheet.get("architecture_drivers")),
+        "quality_goals": _list_of_quality_goals(candidate_sheet.get("quality_goals")),
+        "constraints": _list_of_text_items(candidate_sheet.get("constraints")),
+        "context": _normalize_context(candidate_sheet.get("context")),
+        "solution_strategy": _string_value(candidate_sheet.get("solution_strategy")),
+        "architecture_decisions": _list_of_architecture_decisions(candidate_sheet.get("architecture_decisions")),
+        "building_blocks": _list_of_building_blocks(candidate_sheet.get("building_blocks")),
+        "runtime_scenarios": _list_of_runtime_scenarios(candidate_sheet.get("runtime_scenarios")),
+        "deployment_view": _string_value(candidate_sheet.get("deployment_view")),
+        "data_view": _string_value(candidate_sheet.get("data_view")),
+        "security_view": _string_value(candidate_sheet.get("security_view")),
+        "test_strategy": _string_value(candidate_sheet.get("test_strategy")),
+        "acceptance_criteria": _list_of_acceptance_criteria(candidate_sheet.get("acceptance_criteria")),
+        "risks": _list_of_risk_items(candidate_sheet.get("risks")),
+        "open_questions": _list_of_text_items(candidate_sheet.get("open_questions")),
+        "assumptions": _list_of_text_items(candidate_sheet.get("assumptions")),
+        "readiness": _normalize_readiness(candidate_sheet.get("readiness")),
+    }
+
+
+def _normalize_artifact_type(value: Any) -> str:
+    artifact_type = _string_value(value).lower()
+    if artifact_type in {"django-application", "django-service", "django-app-module", "unknown"}:
+        return artifact_type
+    if "service" in artifact_type:
+        return "django-service"
+    if "module" in artifact_type or "modul" in artifact_type:
+        return "django-app-module"
+    if artifact_type:
+        return "django-application"
+    return ""
+
+
+def _normalize_context(value: Any) -> Dict[str, List[Dict[str, str]]]:
+    if not isinstance(value, dict):
+        return {}
+
+    external_systems = value.get("external_systems")
+    if isinstance(external_systems, dict):
+        external_systems = (
+            _list_value(external_systems.get("systems"))
+            + _list_value(external_systems.get("current_interfaces"))
+            + _list_value(external_systems.get("future_interfaces"))
+        )
+
+    interfaces = value.get("interfaces")
+    if not interfaces:
+        interfaces = value.get("current_interfaces")
+
+    context = {
+        "users": _list_of_named_items(value.get("users") or value.get("actors")),
+        "external_systems": _list_of_named_items(external_systems),
+        "interfaces": _list_of_interface_items(interfaces),
+    }
+    if not any(context.values()):
+        return {}
+    return context
 
 
 def _infer_artifact_name(description: str) -> str:
@@ -733,8 +947,21 @@ def _list_of_named_items(value: Any) -> List[Dict[str, str]]:
 
     for entry in _list_value(value):
         if isinstance(entry, dict):
-            name = _string_value(entry.get("name") or entry.get("title") or entry.get("role"))
-            description = _string_value(entry.get("description") or entry.get("scenario") or entry.get("responsibility"))
+            name = _string_value(
+                entry.get("name")
+                or entry.get("title")
+                or entry.get("role")
+                or entry.get("goal")
+                or entry.get("driver")
+                or entry.get("type")
+            )
+            description = _string_value(
+                entry.get("description")
+                or entry.get("scenario")
+                or entry.get("responsibility")
+                or entry.get("target")
+                or entry.get("impact")
+            )
         else:
             name = _string_value(entry)
             description = ""
@@ -743,6 +970,62 @@ def _list_of_named_items(value: Any) -> List[Dict[str, str]]:
             items.append({"name": name, "description": description or name})
 
     return items
+
+
+def _list_of_architecture_drivers(value: Any) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+
+    for entry in _list_value(value):
+        if isinstance(entry, dict):
+            name = _string_value(entry.get("name") or entry.get("driver") or entry.get("title"))
+            description = _string_value(entry.get("description") or entry.get("scenario") or entry.get("reason"))
+            impact = _string_value(entry.get("impact") or entry.get("consequence") or entry.get("target"))
+        else:
+            name = _string_value(entry)
+            description = name
+            impact = "Dieser Treiber muss bei Bausteinschnitt, Datenmodell und Tests beruecksichtigt werden."
+
+        if name:
+            items.append(
+                {
+                    "name": name,
+                    "description": description or impact or name,
+                    "impact": impact
+                    or "Dieser Treiber muss bei Bausteinschnitt, Datenmodell und Tests beruecksichtigt werden.",
+                }
+            )
+
+    return items
+
+
+def _list_of_quality_goals(value: Any) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+
+    for entry in _list_value(value):
+        if isinstance(entry, dict):
+            name = _string_value(entry.get("name") or entry.get("goal") or entry.get("title"))
+            scenario = _string_value(entry.get("scenario") or entry.get("description") or entry.get("target"))
+            priority = _normalize_priority(entry.get("priority"))
+        else:
+            name = _string_value(entry)
+            scenario = name
+            priority = "high"
+
+        if name:
+            items.append({"name": name, "scenario": scenario or name, "priority": priority})
+
+    return items
+
+
+def _normalize_priority(value: Any) -> str:
+    priority = _string_value(value).lower()
+    if priority in {"high", "hoch"}:
+        return "high"
+    if priority in {"medium", "mittel"}:
+        return "medium"
+    if priority in {"low", "niedrig"}:
+        return "low"
+    return "high"
 
 
 def _list_of_text_items(value: Any) -> List[Dict[str, str]]:
@@ -754,6 +1037,117 @@ def _list_of_text_items(value: Any) -> List[Dict[str, str]]:
             items.append({"description": description})
 
     return items
+
+
+def _list_of_architecture_decisions(value: Any) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+
+    for index, entry in enumerate(_list_value(value), start=1):
+        if isinstance(entry, dict):
+            decision = _string_value(entry.get("decision") or entry.get("name") or entry.get("description"))
+            rationale = _string_value(entry.get("rationale") or entry.get("reason") or entry.get("impact"))
+            status = _string_value(entry.get("status")).lower()
+        else:
+            decision = _string_value(entry)
+            rationale = ""
+            status = "proposed"
+
+        if status not in {"proposed", "accepted", "rejected", "superseded"}:
+            status = "proposed"
+        if decision:
+            items.append(
+                {
+                    "id": (_string_value(entry.get("id")) if isinstance(entry, dict) else "") or f"ADR-{index:03d}",
+                    "decision": decision,
+                    "rationale": rationale or "Die Entscheidung ist aus der Requirement-Analyse abzuleiten.",
+                    "status": status,
+                }
+            )
+
+    return items
+
+
+def _list_of_building_blocks(value: Any) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+
+    for entry in _list_value(value):
+        if isinstance(entry, dict):
+            name = _string_value(entry.get("name") or entry.get("title"))
+            responsibility = _string_value(entry.get("responsibility") or entry.get("description"))
+            django_mapping = _string_value(entry.get("django_mapping") or entry.get("mapping"))
+        else:
+            name = _string_value(entry)
+            responsibility = name
+            django_mapping = ""
+
+        if name:
+            items.append(
+                {
+                    "name": name,
+                    "responsibility": responsibility or name,
+                    "django_mapping": django_mapping or "Django-App, Service oder Modul mit passenden Tests.",
+                }
+            )
+
+    return items
+
+
+def _list_of_runtime_scenarios(value: Any) -> List[Dict[str, List[str]]]:
+    items: List[Dict[str, List[str]]] = []
+
+    for entry in _list_value(value):
+        if isinstance(entry, dict):
+            name = _string_value(entry.get("name") or entry.get("title"))
+            steps = [_string_value(step) for step in _list_value(entry.get("steps")) if _string_value(step)]
+            description = _string_value(entry.get("description"))
+        else:
+            name = _string_value(entry)
+            steps = []
+            description = ""
+
+        if name:
+            if description and description not in steps:
+                steps.insert(0, description)
+            items.append({"name": name, "steps": steps or [name]})
+
+    return items
+
+
+def _list_of_acceptance_criteria(value: Any) -> List[Dict[str, str]]:
+    items: List[Dict[str, str]] = []
+
+    for entry in _list_value(value):
+        if isinstance(entry, dict):
+            description = _string_value(entry.get("description") or entry.get("criterion") or entry.get("name"))
+            verification = _string_value(entry.get("verification") or entry.get("test") or entry.get("target"))
+        else:
+            description = _string_value(entry)
+            verification = ""
+
+        if description:
+            items.append(
+                {
+                    "description": description,
+                    "verification": verification or "Automatisiert oder im Review pruefen.",
+                }
+            )
+
+    return items
+
+
+def _normalize_readiness(value: Any) -> Dict[str, str]:
+    if isinstance(value, dict):
+        status = _string_value(value.get("status"))
+        summary = _string_value(value.get("summary") or value.get("description"))
+    else:
+        status = _string_value(value)
+        summary = ""
+
+    if status not in {"draft", "needs-clarification", "ready-for-review", "approved"}:
+        status = "ready-for-review" if status else ""
+    if not status:
+        return {}
+    return {"status": status, "summary": summary or "Das Sheet wurde fuer den naechsten Review-Schritt vorbereitet."}
 
 
 def _list_of_risk_items(value: Any) -> List[Dict[str, str]]:
@@ -862,9 +1256,9 @@ def _analysis_external_systems(analysis: Dict[str, Any]) -> List[Dict[str, str]]
 def _analysis_building_blocks(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
     blocks = [
         {
-            "name": "Django Project Shell",
+            "name": "Django-Projektgrundlage",
             "responsibility": "Settings, URL-Routing, ASGI/WSGI, Deployment-Konfiguration und Umgebungsprofile.",
-            "django_mapping": "Django project package with settings modules, root urls.py and deployment entrypoints.",
+            "django_mapping": "Django-Projektpaket mit Settings-Modulen, zentraler urls.py und Deployment-Einstiegspunkten.",
         }
     ]
 
@@ -874,7 +1268,7 @@ def _analysis_building_blocks(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
             {
                 "name": entity["name"],
                 "responsibility": entity["description"],
-                "django_mapping": f"Django app or module `{slug}` with models, services, forms/views and tests.",
+                "django_mapping": f"Django-App oder Modul `{slug}` mit Models, Services, Forms/Views und Tests.",
             }
         )
 
