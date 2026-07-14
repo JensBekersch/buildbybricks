@@ -211,6 +211,8 @@ Der Chat-Endpunkt `POST /chat` ruft diesen deterministischen Agenten auf und gib
 
 ## Embedding-Konfiguration
 
+Eine ausfuehrlichere Uebersicht steht in [CONFIGURATION.md](CONFIGURATION.md).
+
 Der aktuelle Stand nutzt standardmaessig einen lokalen Dummy-Provider:
 
 ```text
@@ -230,6 +232,24 @@ AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
 ```
 
 `ollama`, `openai` und andere Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
+
+## LLM-Konfiguration
+
+Die LLM-Konfiguration ist vorbereitet und kann ueber `.env` gesteuert werden. Der aktuelle Agent nutzt aber noch den deterministischen lokalen Antwort-Composer.
+
+```text
+AGENTIC_RAG_LLM_PROVIDER=deterministic
+AGENTIC_RAG_LLM_MODEL=local-deterministic-v1
+AGENTIC_RAG_LLM_API_BASE_URL=http://host.docker.internal:11434
+```
+
+Spaeter kann Ollama so konfiguriert werden:
+
+```text
+AGENTIC_RAG_LLM_PROVIDER=ollama
+AGENTIC_RAG_LLM_MODEL=llama3.1
+AGENTIC_RAG_LLM_API_BASE_URL=http://host.docker.internal:11434
+```
 
 ## Lokal Starten
 
