@@ -18,6 +18,12 @@ STEP_STATUS_COMPLETED = "completed"
 STEP_STATUS_FAILED = "failed"
 STEP_STATUS_SKIPPED = "skipped"
 
+EVENT_STEP_STARTED = "step_started"
+EVENT_STEP_COMPLETED = "step_completed"
+EVENT_STEP_FAILED = "step_failed"
+EVENT_STEP_SKIPPED = "step_skipped"
+EVENT_LOG = "log"
+
 
 @dataclass(frozen=True)
 class ArchitectureGenerationStepDefinition:
@@ -48,6 +54,28 @@ def timestamp(value: Optional[datetime]) -> Optional[str]:
     if value is None:
         return None
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+@dataclass(frozen=True)
+class ArchitectureGenerationEvent:
+    """Event emitted by the architecture generation pipeline."""
+
+    type: str
+    step: str = ""
+    message: str = ""
+    level: str = "info"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=utc_now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": self.type,
+            "step": self.step,
+            "message": self.message,
+            "level": self.level,
+            "metadata": self.metadata,
+            "created_at": timestamp(self.created_at),
+        }
 
 
 def parse_timestamp(value: Any) -> Optional[datetime]:
@@ -321,3 +349,31 @@ class ArchitectureGenerationJob:
 
     def _touch(self) -> None:
         self.updated_at = utc_now()
+
+
+def apply_architecture_generation_event(
+    job: ArchitectureGenerationJob,
+    event: ArchitectureGenerationEvent,
+) -> None:
+    """Apply one pipeline event to a job lifecycle object."""
+    if event.type == EVENT_STEP_STARTED:
+        job.start_step(event.step, event.message)
+        return
+
+    if event.type == EVENT_STEP_COMPLETED:
+        job.complete_step(event.step, event.message)
+        return
+
+    if event.type == EVENT_STEP_FAILED:
+        job.fail_step(event.step, event.message)
+        return
+
+    if event.type == EVENT_STEP_SKIPPED:
+        job.skip_step(event.step, event.message)
+        return
+
+    if event.type == EVENT_LOG:
+        job.add_log(event.message, level=event.level, step=event.step)
+        return
+
+    raise ValueError(f"Unknown architecture generation event type: {event.type}")

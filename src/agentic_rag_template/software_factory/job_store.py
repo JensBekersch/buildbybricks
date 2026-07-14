@@ -2,7 +2,10 @@
 
 from typing import Any, Callable, Dict, List, Optional
 
-from agentic_rag_template.software_factory.jobs import ArchitectureGenerationJob
+from agentic_rag_template.software_factory.jobs import (
+    JOB_STATUS_QUEUED,
+    ArchitectureGenerationJob,
+)
 
 
 class ArchitectureGenerationJobStoreError(RuntimeError):
@@ -64,62 +67,43 @@ class PostgresArchitectureGenerationJobStore:
 
     def save(self, job: ArchitectureGenerationJob) -> None:
         """Insert or update a job snapshot."""
-        payload = job.to_dict()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                self._save_with_cursor(cursor, job)
+
+    def claim_next(self, app_id: Optional[str] = None) -> Optional[ArchitectureGenerationJob]:
+        """Atomically reserve the oldest queued job for one worker."""
+        where_clause = "status = %(status)s"
+        params = {"status": JOB_STATUS_QUEUED}
+
+        if app_id:
+            where_clause += " AND app_id = %(app_id)s"
+            params["app_id"] = app_id
+
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
-                    INSERT INTO architecture_generation_jobs (
-                        id,
-                        app_id,
-                        status,
-                        current_step,
-                        description,
-                        generation_mode,
-                        llm_provider,
-                        llm_model,
-                        error,
-                        payload,
-                        result,
-                        created_at,
-                        updated_at,
-                        started_at,
-                        finished_at
-                    )
-                    VALUES (
-                        %(id)s,
-                        %(app_id)s,
-                        %(status)s,
-                        %(current_step)s,
-                        %(description)s,
-                        %(generation_mode)s,
-                        %(llm_provider)s,
-                        %(llm_model)s,
-                        %(error)s,
-                        %(payload)s,
-                        %(result)s,
-                        %(created_at)s,
-                        %(updated_at)s,
-                        %(started_at)s,
-                        %(finished_at)s
-                    )
-                    ON CONFLICT (id) DO UPDATE SET
-                        app_id = EXCLUDED.app_id,
-                        status = EXCLUDED.status,
-                        current_step = EXCLUDED.current_step,
-                        description = EXCLUDED.description,
-                        generation_mode = EXCLUDED.generation_mode,
-                        llm_provider = EXCLUDED.llm_provider,
-                        llm_model = EXCLUDED.llm_model,
-                        error = EXCLUDED.error,
-                        payload = EXCLUDED.payload,
-                        result = EXCLUDED.result,
-                        updated_at = EXCLUDED.updated_at,
-                        started_at = EXCLUDED.started_at,
-                        finished_at = EXCLUDED.finished_at
+                    f"""
+                    SELECT payload
+                    FROM architecture_generation_jobs
+                    WHERE {where_clause}
+                    ORDER BY created_at ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT 1
                     """,
-                    self._job_params(job, payload),
+                    params,
                 )
+                row = cursor.fetchone()
+
+                if row is None:
+                    return None
+
+                payload = row[0] if not isinstance(row, dict) else row["payload"]
+                job = ArchitectureGenerationJob.from_dict(payload)
+                job.mark_running("Worker hat den Job uebernommen.")
+                self._save_with_cursor(cursor, job)
+
+        return job
 
     def get(self, job_id: str) -> Optional[ArchitectureGenerationJob]:
         """Load one job by id."""
@@ -198,3 +182,59 @@ class PostgresArchitectureGenerationJobStore:
             "started_at": job.started_at,
             "finished_at": job.finished_at,
         }
+
+    def _save_with_cursor(self, cursor: Any, job: ArchitectureGenerationJob) -> None:
+        payload = job.to_dict()
+        cursor.execute(
+            """
+            INSERT INTO architecture_generation_jobs (
+                id,
+                app_id,
+                status,
+                current_step,
+                description,
+                generation_mode,
+                llm_provider,
+                llm_model,
+                error,
+                payload,
+                result,
+                created_at,
+                updated_at,
+                started_at,
+                finished_at
+            )
+            VALUES (
+                %(id)s,
+                %(app_id)s,
+                %(status)s,
+                %(current_step)s,
+                %(description)s,
+                %(generation_mode)s,
+                %(llm_provider)s,
+                %(llm_model)s,
+                %(error)s,
+                %(payload)s,
+                %(result)s,
+                %(created_at)s,
+                %(updated_at)s,
+                %(started_at)s,
+                %(finished_at)s
+            )
+            ON CONFLICT (id) DO UPDATE SET
+                app_id = EXCLUDED.app_id,
+                status = EXCLUDED.status,
+                current_step = EXCLUDED.current_step,
+                description = EXCLUDED.description,
+                generation_mode = EXCLUDED.generation_mode,
+                llm_provider = EXCLUDED.llm_provider,
+                llm_model = EXCLUDED.llm_model,
+                error = EXCLUDED.error,
+                payload = EXCLUDED.payload,
+                result = EXCLUDED.result,
+                updated_at = EXCLUDED.updated_at,
+                started_at = EXCLUDED.started_at,
+                finished_at = EXCLUDED.finished_at
+            """,
+            self._job_params(job, payload),
+        )
