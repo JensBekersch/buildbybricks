@@ -19,7 +19,12 @@ const views = document.querySelectorAll(".view");
 const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
 const architectureGenerationMode = document.querySelector("#architecture-generation-mode");
+const generateArchitectureButton = document.querySelector("#generate-architecture");
 const architectureStatus = document.querySelector("#architecture-status");
+const architectureProgress = document.querySelector("#architecture-progress");
+const architectureProgressLabel = document.querySelector("#architecture-progress-label");
+const architectureProgressElapsed = document.querySelector("#architecture-progress-elapsed");
+const architectureProgressSteps = document.querySelector("#architecture-progress-steps");
 const architectureEmpty = document.querySelector("#architecture-empty");
 const architectureResult = document.querySelector("#architecture-result");
 const architectureTitle = document.querySelector("#architecture-title");
@@ -39,6 +44,30 @@ const architectureTrace = document.querySelector("#architecture-trace");
 let applications = [];
 let activeAppId = "default";
 let activeCollection = "";
+let architectureProgressTimer = null;
+let architectureProgressStartedAt = 0;
+let architectureProgressStepIndex = 0;
+
+const architectureProgressMessages = [
+  "Ich pruefe die Beschreibung und sammle Anforderungen.",
+  "Ich trenne Fachziel, Nutzer, Funktionen und Randbedingungen.",
+  "Ich gleiche die Vorgabe mit der Architecture-Sheet-Struktur ab.",
+  "Ich entwerfe Architecture Drivers und Qualitaetsziele.",
+  "Ich denke ueber Kontext, Schnittstellen und Django-Bausteine nach.",
+  "Ich formuliere Laufzeitszenarien, Risiken und offene Fragen.",
+  "Ich lasse das Sheet fachlich gegen die Vorgabe pruefen.",
+  "Ich validiere die Struktur und bereite die Anzeige vor.",
+];
+
+const architectureProgressStepsTemplate = [
+  { id: "validated_message", label: "Beschreibung pruefen" },
+  { id: "loaded_architecture_sheet_schema", label: "Schema laden" },
+  { id: "loaded_architecture_method_sources", label: "Methodenwissen lesen" },
+  { id: "analyzed_requirements", label: "Anforderungen analysieren" },
+  { id: "synthesized_architecture_sheet", label: "Architecture Sheet erzeugen" },
+  { id: "reviewed_architecture_sheet", label: "Architecture Review ausfuehren" },
+  { id: "validated_architecture_sheet_contract", label: "Schema validieren" },
+];
 
 function appPath(appId, ...segments) {
   return ["/apps", appId, ...segments]
@@ -253,6 +282,83 @@ function createElement(tagName, className, text = "") {
   return element;
 }
 
+function formatElapsedTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function renderArchitectureProgressSteps(activeIndex = 0, completedTrace = []) {
+  const completed = new Set(completedTrace);
+  architectureProgressSteps.replaceChildren();
+
+  architectureProgressStepsTemplate.forEach((step, index) => {
+    const item = document.createElement("li");
+    const isDone = completed.has(step.id) || index < activeIndex;
+    const isActive = !isDone && index === activeIndex;
+
+    item.dataset.state = isDone ? "done" : isActive ? "active" : "waiting";
+    item.textContent = step.label;
+    architectureProgressSteps.append(item);
+  });
+}
+
+function updateArchitectureProgress() {
+  const elapsed = Date.now() - architectureProgressStartedAt;
+  const messageIndex = Math.min(
+    architectureProgressMessages.length - 1,
+    Math.floor(elapsed / 15000)
+  );
+  const stepIndex = Math.min(
+    architectureProgressStepsTemplate.length - 1,
+    Math.floor(elapsed / 30000)
+  );
+
+  architectureProgressStepIndex = Math.max(architectureProgressStepIndex, stepIndex);
+  architectureProgressLabel.textContent = architectureProgressMessages[messageIndex];
+  architectureProgressElapsed.textContent = formatElapsedTime(elapsed);
+  renderArchitectureProgressSteps(architectureProgressStepIndex);
+}
+
+function startArchitectureProgress() {
+  stopArchitectureProgress();
+  architectureProgressStartedAt = Date.now();
+  architectureProgressStepIndex = 0;
+  architectureProgress.hidden = false;
+  updateArchitectureProgress();
+  architectureProgressTimer = window.setInterval(updateArchitectureProgress, 1000);
+}
+
+function stopArchitectureProgress() {
+  if (architectureProgressTimer) {
+    window.clearInterval(architectureProgressTimer);
+    architectureProgressTimer = null;
+  }
+}
+
+function completeArchitectureProgress(trace = []) {
+  stopArchitectureProgress();
+  architectureProgressLabel.textContent = "Architecture Sheet ist erstellt.";
+  architectureProgressElapsed.textContent = formatElapsedTime(Date.now() - architectureProgressStartedAt);
+  renderArchitectureProgressSteps(0, trace);
+}
+
+function failArchitectureProgress(message) {
+  stopArchitectureProgress();
+  architectureProgress.hidden = false;
+  architectureProgressLabel.textContent = message || "Generierung abgebrochen.";
+  architectureProgressElapsed.textContent = architectureProgressStartedAt
+    ? formatElapsedTime(Date.now() - architectureProgressStartedAt)
+    : "0s";
+  renderArchitectureProgressSteps(architectureProgressStepIndex);
+}
+
 function valueText(value) {
   if (value === null || value === undefined || value === "") {
     return "";
@@ -410,17 +516,29 @@ async function generateArchitectureSheet() {
     return;
   }
 
-  architectureStatus.textContent = "Generator laeuft...";
+  architectureStatus.textContent = "Generator laeuft. Das kann mit lokalem Ollama mehrere Minuten dauern.";
+  generateArchitectureButton.disabled = true;
+  generateArchitectureButton.textContent = "Generator arbeitet...";
+  startArchitectureProgress();
   setRuntimeStatus("Generiert...", "neutral");
 
-  const payload = await postJson(appPath("software-factory", "architecture-sheet"), {
-    description,
-    generation_mode: architectureGenerationMode.value,
-  });
+  try {
+    const payload = await postJson(appPath("software-factory", "architecture-sheet"), {
+      description,
+      generation_mode: architectureGenerationMode.value,
+    });
 
-  renderArchitectureResult(payload);
-  architectureStatus.textContent = "Architecture Sheet erstellt.";
-  setRuntimeStatus("Bereit", "ok");
+    renderArchitectureResult(payload);
+    completeArchitectureProgress(payload.trace || []);
+    architectureStatus.textContent = "Architecture Sheet erstellt.";
+    setRuntimeStatus("Bereit", "ok");
+  } catch (error) {
+    failArchitectureProgress(error.message || "Architecture Sheet konnte nicht erstellt werden.");
+    throw error;
+  } finally {
+    generateArchitectureButton.disabled = false;
+    generateArchitectureButton.textContent = "Architecture Sheet erstellen";
+  }
 }
 
 async function initialize() {

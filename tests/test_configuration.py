@@ -3,9 +3,11 @@ from agentic_rag_template.config import Settings
 
 def test_settings_default_llm_timeout_allows_local_agentic_runs(monkeypatch) -> None:
     monkeypatch.delenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("AGENTIC_RAG_LLM_MAX_TOKENS", raising=False)
     settings = Settings.from_env()
 
     assert settings.llm_timeout_seconds == 1200
+    assert settings.llm_max_tokens == 4096
 
 
 def test_settings_reads_llm_configuration_from_environment(monkeypatch) -> None:

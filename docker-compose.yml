@@ -21,7 +21,7 @@ services:
       AGENTIC_RAG_LLM_API_BASE_URL: "${AGENTIC_RAG_LLM_API_BASE_URL:-http://ollama:11434}"
       AGENTIC_RAG_LLM_API_KEY: "${AGENTIC_RAG_LLM_API_KEY:-}"
       AGENTIC_RAG_LLM_TIMEOUT_SECONDS: "${AGENTIC_RAG_LLM_TIMEOUT_SECONDS:-1200}"
-      AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-160}"
+      AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
     volumes:
       - ./data:/app/data
       - ./template:/app/template:ro
@@ -31,6 +31,10 @@ services:
     image: ollama/ollama:latest
     profiles:
       - ollama
+    environment:
+      OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-12}"
+      OLLAMA_NUM_PARALLEL: "${OLLAMA_NUM_PARALLEL:-1}"
+      OLLAMA_MAX_LOADED_MODELS: "${OLLAMA_MAX_LOADED_MODELS:-1}"
     ports:
       - "11434:11434"
     volumes:
