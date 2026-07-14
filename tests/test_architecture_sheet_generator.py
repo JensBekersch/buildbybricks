@@ -30,8 +30,14 @@ def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> 
     assert payload["validation"] == {"valid": True, "missing_fields": []}
     assert payload["schema_id"].endswith("/architecture-sheet.schema.json")
     assert payload["sources"][0]["location"] == "architecture-method/arc42_architecture_sheet.md"
+    assert sheet["schema_version"] == "1.0.0"
     assert sheet["artifact_type"] == "django-application"
     assert sheet["artifact_name"] == "Verwaltung Kunden"
+    assert sheet["input_summary"].startswith("Eine Django-App")
+    assert sheet["architecture_drivers"]
+    assert sheet["architecture_decisions"]
+    assert sheet["acceptance_criteria"]
+    assert sheet["readiness"]["status"] == "ready-for-review"
     assert any(block["name"] == "Approval Workflow" for block in sheet["building_blocks"])
     assert any(block["name"] == "Document Export" for block in sheet["building_blocks"])
     assert any(scenario["name"] == "Freigabe durchfuehren" for scenario in sheet["runtime_scenarios"])
@@ -73,7 +79,10 @@ def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
         assert response.status == 200
         assert payload["validation"]["valid"] is True
         assert payload["architecture_sheet"]["artifact_type"] == "django-application"
+        assert payload["architecture_sheet"]["schema_version"] == "1.0.0"
         assert payload["architecture_sheet"]["context"]["interfaces"][-1]["type"] == "rest-api"
+        assert payload["architecture_sheet"]["architecture_decisions"]
+        assert payload["architecture_sheet"]["acceptance_criteria"]
         assert payload["architecture_sheet"]["open_questions"]
         assert payload["trace"] == [
             "validated_description",

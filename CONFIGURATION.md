@@ -132,6 +132,10 @@ It returns a schema-shaped `architecture_sheet`, validation metadata, method
 sources, and trace steps. The current generator is deterministic so local tests
 remain stable.
 
+The current architecture-sheet contract is `schema_version` `1.0.0`. It includes
+architecture drivers, explicit architecture decisions, acceptance criteria, and a
+readiness status so later workorder agents can consume the sheet predictably.
+
 ## Embedding Providers
 
 Embeddings convert chunks into vectors for retrieval.

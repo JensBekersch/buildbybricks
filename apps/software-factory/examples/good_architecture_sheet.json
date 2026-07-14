@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_name": "Angebotsverwaltung",
+  "artifact_type": "django-application",
+  "input_summary": "Django-App zur Verwaltung von Kunden, Angeboten, Freigabeprozessen und PDF-Exporten.",
+  "business_goal": "Angebote koennen strukturiert erstellt, geprueft, freigegeben und exportiert werden.",
+  "stakeholders": [
+    {
+      "name": "Vertrieb",
+      "description": "Erstellt und bearbeitet Angebote."
+    }
+  ],
+  "architecture_drivers": [
+    {
+      "name": "Nachvollziehbare Freigaben",
+      "description": "Freigaben muessen spaeter auditierbar sein.",
+      "impact": "Workflow-Status, Entscheider und Zeitstempel werden als Kernmodell behandelt."
+    }
+  ],
+  "quality_goals": [
+    {
+      "name": "Nachvollziehbarkeit",
+      "scenario": "Eine Freigabeentscheidung kann spaeter mit Nutzer und Zeitpunkt rekonstruiert werden.",
+      "priority": "high"
+    }
+  ],
+  "constraints": [
+    {
+      "description": "Umsetzung als Django-Applikation."
+    }
+  ],
+  "context": {
+    "users": [
+      {
+        "name": "Authentifizierte Nutzer",
+        "description": "Arbeiten rollenbasiert mit Angeboten."
+      }
+    ],
+    "external_systems": [],
+    "interfaces": [
+      {
+        "name": "Web UI",
+        "type": "web-ui",
+        "description": "Oberflaeche fuer Angebotserstellung und Freigabe."
+      }
+    ]
+  },
+  "solution_strategy": "Modularer Django-Schnitt mit getrennten Apps fuer Kunden, Angebote und Freigaben.",
+  "architecture_decisions": [
+    {
+      "id": "ADR-001",
+      "decision": "Freigaben werden als eigene Django App modelliert.",
+      "rationale": "Der Workflow ist fachlich eigenstaendig und braucht eigene Tests.",
+      "status": "proposed"
+    }
+  ],
+  "building_blocks": [
+    {
+      "name": "Offers",
+      "responsibility": "Angebote verwalten.",
+      "django_mapping": "Django app `offers` with models, services and views."
+    }
+  ],
+  "runtime_scenarios": [
+    {
+      "name": "Angebot freigeben",
+      "steps": [
+        "Vertrieb reicht Angebot ein.",
+        "Management entscheidet.",
+        "System speichert Entscheidung im Audit-Trail."
+      ]
+    }
+  ],
+  "deployment_view": "Containerisierte Django-App mit relationaler Datenbank.",
+  "data_view": "Kunden, Angebote, Freigaben und Audit-Eintraege als Django Models.",
+  "security_view": "Django Auth mit rollenbasierten Berechtigungen.",
+  "test_strategy": "Model-, Service-, Permission- und Workflow-Tests.",
+  "acceptance_criteria": [
+    {
+      "description": "Freigabe-Workflow ist als Runtime-Szenario beschrieben.",
+      "verification": "Sheet enthaelt ein Szenario mit Freigabeschritten."
+    }
+  ],
+  "risks": [
+    {
+      "description": "Rollenmatrix ist noch unklar.",
+      "mitigation": "Rollen vor Workorder-Erzeugung klaeren."
+    }
+  ],
+  "open_questions": [
+    {
+      "description": "Welche Freigabestufen gibt es?"
+    }
+  ],
+  "assumptions": [
+    {
+      "description": "Eine relationale Datenbank ist ausreichend."
+    }
+  ],
+  "readiness": {
+    "status": "ready-for-review",
+    "summary": "Strukturell vollstaendig, aber noch nicht fachlich freigegeben."
+  }
+}

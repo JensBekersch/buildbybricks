@@ -42,6 +42,7 @@ def test_software_factory_architecture_sheet_schema_has_required_contract() -> N
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
     assert schema["title"] == "Software Factory Architecture Sheet"
+    assert schema["properties"]["schema_version"]["const"] == "1.0.0"
     assert "additionalProperties" in schema
     assert schema["additionalProperties"] is False
     assert schema["properties"]["artifact_type"]["enum"] == [
@@ -51,14 +52,34 @@ def test_software_factory_architecture_sheet_schema_has_required_contract() -> N
         "unknown",
     ]
     assert set(schema["required"]) >= {
+        "schema_version",
         "artifact_name",
         "artifact_type",
+        "input_summary",
         "business_goal",
+        "architecture_drivers",
         "quality_goals",
         "context",
+        "architecture_decisions",
         "building_blocks",
         "runtime_scenarios",
+        "acceptance_criteria",
         "risks",
         "open_questions",
         "assumptions",
+        "readiness",
     }
+
+
+def test_software_factory_examples_document_good_and_bad_outputs() -> None:
+    examples_dir = PROJECT_ROOT / "apps" / "software-factory" / "examples"
+    good_example = json.loads(
+        (examples_dir / "good_architecture_sheet.json").read_text(encoding="utf-8")
+    )
+    bad_example = (examples_dir / "bad_architecture_sheet.md").read_text(encoding="utf-8")
+
+    assert good_example["schema_version"] == "1.0.0"
+    assert good_example["architecture_decisions"]
+    assert good_example["acceptance_criteria"]
+    assert good_example["readiness"]["status"] == "ready-for-review"
+    assert "kein maschinenlesbares JSON" in bad_example
