@@ -54,5 +54,6 @@ def test_study_agent_uses_tools_and_returns_sources(tmp_path: Path) -> None:
         "validated_message",
         "searched_knowledge_base",
         "read_top_source",
+        "deterministic_answer_composed",
         "composed_answer",
     ]

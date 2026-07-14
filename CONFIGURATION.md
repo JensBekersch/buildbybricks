@@ -11,7 +11,7 @@ The current implementation is fully local and deterministic:
 - Data: files under `data/<collection>/`
 - App profile and evaluation cases: files under `template/`
 
-Ollama, OpenAI, and other LLM providers are not implemented yet. The configuration surface is prepared so those providers can be added behind the existing interfaces.
+Ollama is implemented as an LLM provider. OpenAI and Ollama embeddings are not implemented yet. The configuration surface is prepared so those providers can be added behind the existing interfaces.
 
 ## Using `.env`
 
@@ -56,7 +56,7 @@ docker compose --profile ollama exec ollama ollama pull llama3.1
 docker compose --profile ollama exec ollama ollama pull nomic-embed-text
 ```
 
-The app does not yet call Ollama directly. The service is available so the next implementation step can add `OllamaLLMProvider` and `OllamaEmbeddingProvider` behind the existing provider settings.
+The app can call Ollama for chat answers when `AGENTIC_RAG_LLM_PROVIDER=ollama` is set. Ollama embeddings are still a separate future adapter.
 
 ## Data and Template Files
 
@@ -98,7 +98,7 @@ Use `http://ollama:11434` when Ollama runs as the second Compose service. Use `h
 
 ## LLM Providers
 
-LLM configuration is prepared, but only the deterministic answer composer exists today.
+LLM configuration supports the deterministic answer composer and Ollama chat generation.
 
 Current default:
 
@@ -107,13 +107,23 @@ AGENTIC_RAG_LLM_PROVIDER=deterministic
 AGENTIC_RAG_LLM_MODEL=local-deterministic-v1
 ```
 
-Planned Ollama chat configuration:
+Ollama chat configuration:
 
 ```env
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=300
+AGENTIC_RAG_LLM_MAX_TOKENS=160
 ```
+
+Large local models can need longer on the first request because Ollama has to load
+the model into memory. Increase `AGENTIC_RAG_LLM_TIMEOUT_SECONDS` when first
+requests time out during model startup.
+
+On CPU-only Docker runs, generation can also be slow. Lower
+`AGENTIC_RAG_LLM_MAX_TOKENS` for live tests when a large model takes too long to
+finish.
 
 Planned OpenAI-style configuration:
 
@@ -126,13 +136,11 @@ AGENTIC_RAG_LLM_API_KEY=...
 
 ## What Is Still Missing For Ollama
 
-To actually use Ollama as the LLM, we still need to implement:
+Ollama chat is implemented. Still missing:
 
-- an `LLMProvider` interface
-- an `OllamaLLMProvider`
 - optional `OllamaEmbeddingProvider`
-- agent wiring that calls the configured LLM provider instead of the deterministic answer composer
-- tests that can run without requiring Ollama, plus optional integration tests when Ollama is available
+- optional integration tests that require a live Ollama service and pulled models
+- model management helpers for pulling/checking required models
 
 The ingestion, retrieval, sources, evaluation, Docker runtime, and `.env` configuration surface are already in place.
 

@@ -231,11 +231,11 @@ AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
 AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
 ```
 
-`ollama`, `openai` und andere Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
+`ollama`, `openai` und andere Embedding-Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
 
 ## LLM-Konfiguration
 
-Die LLM-Konfiguration ist vorbereitet und kann ueber `.env` gesteuert werden. Der aktuelle Agent nutzt aber noch den deterministischen lokalen Antwort-Composer.
+Die LLM-Konfiguration kann ueber `.env` gesteuert werden. Der aktuelle Agent nutzt standardmaessig den deterministischen lokalen Antwort-Composer, kann aber fuer Chat-Antworten auf Ollama umgestellt werden.
 
 ```text
 AGENTIC_RAG_LLM_PROVIDER=deterministic
@@ -243,12 +243,14 @@ AGENTIC_RAG_LLM_MODEL=local-deterministic-v1
 AGENTIC_RAG_LLM_API_BASE_URL=http://host.docker.internal:11434
 ```
 
-Spaeter kann Ollama so konfiguriert werden:
+Ollama kann so konfiguriert werden:
 
 ```text
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=300
+AGENTIC_RAG_LLM_MAX_TOKENS=160
 ```
 
 Ollama kann optional als zweiter Compose-Service gestartet werden:

@@ -33,6 +33,7 @@ class AnswerDraft:
     answer: str
     citations: List[Citation] = field(default_factory=list)
     uncertainty: str = ""
+    trace: List[str] = field(default_factory=list)
 
     @property
     def sources(self) -> List[SourceReference]:
