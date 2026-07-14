@@ -40,6 +40,7 @@ const architectureReviewStatus = document.querySelector("#architecture-review-st
 const architectureSchema = document.querySelector("#architecture-schema");
 const architectureProvider = document.querySelector("#architecture-provider");
 const architecturePipeline = document.querySelector("#architecture-pipeline");
+const architectureArtifact = document.querySelector("#architecture-artifact");
 const architectureSourceCount = document.querySelector("#architecture-source-count");
 const architectureSources = document.querySelector("#architecture-sources");
 const architectureJobList = document.querySelector("#architecture-job-list");
@@ -662,6 +663,7 @@ function renderArchitectureResult(payload) {
   const sheet = payload.architecture_sheet || {};
   const validation = payload.validation || {};
   const generation = payload.generation || {};
+  const artifact = payload.artifact || {};
   const sources = payload.sources || [];
   const trace = payload.trace || [];
   const provider =
@@ -686,6 +688,9 @@ function renderArchitectureResult(payload) {
   architectureSchema.textContent = payload.schema_id || "-";
   architectureProvider.textContent = model ? `${provider} · ${model}` : provider;
   architecturePipeline.textContent = generation.pipeline || generation.requested_mode || generation.mode || "-";
+  architectureArtifact.textContent = artifact.json_path
+    ? `${artifact.json_path} · ${artifact.markdown_path || "Markdown offen"}`
+    : "-";
   architectureSourceCount.textContent = String(sources.length);
 
   renderArchitectureSections(sheet);

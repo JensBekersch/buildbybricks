@@ -65,6 +65,8 @@ GET  /apps/software-factory/architecture-sheet/jobs/{job_id}
 GET  /apps/software-factory/architecture-sheet/jobs/{job_id}/events
 POST /apps/software-factory/architecture-sheet/jobs/{job_id}/cancel
 POST /apps/software-factory/architecture-sheet/jobs/{job_id}/retry
+GET  /apps/software-factory/architecture-sheets
+GET  /apps/software-factory/architecture-sheets/{artifact_id}
 ```
 
 Create-Beispiel:
@@ -82,7 +84,10 @@ Ausfuehrung laeuft im separaten Worker-Service. Das Frontend kann Job-Updates
 per Server-Sent Events ueber den `/events`-Endpunkt live verfolgen und bei
 Stream-Problemen auf REST-Polling zurueckfallen. Queued und running Jobs koennen
 abgebrochen werden; fehlgeschlagene oder abgebrochene Jobs koennen als neuer Job
-erneut gestartet werden. Die Architecture-Sheet-Pipeline emittiert echte Events wie
+erneut gestartet werden. Erfolgreiche Jobs schreiben ein versioniertes JSON- und
+Markdown-Artefakt unter `data/software-factory/architecture-sheets/`; diese
+Artefakte sind der spaetere Uebergabepunkt fuer Workorder-Agenten. Die
+Architecture-Sheet-Pipeline emittiert echte Events wie
 `step_started`, `step_completed`, `step_failed` und `step_skipped`; diese Events
 koennen direkt auf den persistenten Job angewendet werden. Der Generator
 unterstuetzt zwei sichtbare Modi:
