@@ -91,6 +91,32 @@
               <option value="agentic">Agentic</option>
             </select>
 
+            <section class="runtime-config-card" aria-label="LLM Konfiguration">
+              <h3>LLM Runtime</h3>
+              <dl>
+                <div>
+                  <dt>Provider</dt>
+                  <dd id="llm-provider">-</dd>
+                </div>
+                <div>
+                  <dt>Modell</dt>
+                  <dd id="llm-model">-</dd>
+                </div>
+                <div>
+                  <dt>Timeout</dt>
+                  <dd id="llm-timeout">-</dd>
+                </div>
+                <div>
+                  <dt>Tokenbudget</dt>
+                  <dd id="llm-token-budget">-</dd>
+                </div>
+                <div>
+                  <dt>Modus</dt>
+                  <dd id="llm-pipeline-mode">-</dd>
+                </div>
+              </dl>
+            </section>
+
             <button id="generate-architecture" type="submit">Architecture Job anlegen</button>
             <div class="architecture-actions">
               <button id="cancel-architecture-job" type="button" disabled>Abbrechen</button>
@@ -147,6 +173,10 @@
               <div>
                 <dt>Pipeline</dt>
                 <dd id="architecture-pipeline">-</dd>
+              </div>
+              <div>
+                <dt>Artefakt</dt>
+                <dd id="architecture-artifact">-</dd>
               </div>
             </dl>
           </section>

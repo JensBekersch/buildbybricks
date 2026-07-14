@@ -25,6 +25,26 @@ class DummyProvider:
         raise NotImplementedError
 
 
+class DummyArtifact:
+    def to_dict(self):
+        return {
+            "id": "job-1",
+            "job_id": "job-1",
+            "title": "Team Todo",
+            "json_path": "architecture-sheets/team-todo-job-1.json",
+            "markdown_path": "architecture-sheets/team-todo-job-1.md",
+        }
+
+
+class DummyArtifactStore:
+    def __init__(self):
+        self.saved_results = []
+
+    def save_architecture_sheet(self, job, result):
+        self.saved_results.append((job.id, result))
+        return DummyArtifact()
+
+
 class DummyStore:
     def __init__(self, job=None):
         self.job = job
@@ -87,6 +107,7 @@ def test_architecture_worker_processes_claimed_job(monkeypatch) -> None:
         settings=Settings(),
         job_store=store,
         llm_provider_factory=lambda settings: DummyProvider(),
+        artifact_store_factory=lambda application: DummyArtifactStore(),
     )
 
     processed = worker.process_next()
@@ -94,6 +115,7 @@ def test_architecture_worker_processes_claimed_job(monkeypatch) -> None:
     assert processed is True
     assert job.status == JOB_STATUS_COMPLETED
     assert job.result["architecture_sheet"]["artifact_name"] == "Team Todo"
+    assert job.result["artifact"]["json_path"] == "architecture-sheets/team-todo-job-1.json"
     assert job.steps[0].status == "completed"
     assert any(snapshot["status"] == JOB_STATUS_RUNNING for snapshot in store.saved_jobs)
     assert store.saved_jobs[-1]["status"] == JOB_STATUS_COMPLETED
@@ -105,6 +127,7 @@ def test_architecture_worker_returns_false_without_queued_job() -> None:
         settings=Settings(),
         job_store=store,
         llm_provider_factory=lambda settings: DummyProvider(),
+        artifact_store_factory=lambda application: DummyArtifactStore(),
     )
 
     assert worker.process_next() is False
@@ -129,6 +152,7 @@ def test_architecture_worker_marks_job_failed_on_error(monkeypatch) -> None:
         settings=Settings(),
         job_store=store,
         llm_provider_factory=lambda settings: DummyProvider(),
+        artifact_store_factory=lambda application: DummyArtifactStore(),
     )
 
     processed = worker.process_next()
@@ -160,6 +184,7 @@ def test_architecture_worker_does_not_complete_canceled_job(monkeypatch) -> None
         settings=Settings(),
         job_store=store,
         llm_provider_factory=lambda settings: DummyProvider(),
+        artifact_store_factory=lambda application: DummyArtifactStore(),
     )
 
     processed = worker.process_next()

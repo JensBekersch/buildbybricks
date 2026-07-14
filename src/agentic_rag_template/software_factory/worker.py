@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from typing import Callable, Optional
 
-from agentic_rag_template.applications import FileApplicationRegistry
+from agentic_rag_template.applications import ApplicationInstance, FileApplicationRegistry
 from agentic_rag_template.config import Settings
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.llm.models import LLMProvider
+from agentic_rag_template.software_factory.artifacts import FileArchitectureArtifactStore
 from agentic_rag_template.software_factory.architecture_sheet import generate_architecture_sheet
 from agentic_rag_template.software_factory.job_store import PostgresArchitectureGenerationJobStore
 from agentic_rag_template.software_factory.jobs import (
@@ -34,11 +35,13 @@ class ArchitectureGenerationWorker:
         settings: Settings,
         job_store: Optional[PostgresArchitectureGenerationJobStore] = None,
         llm_provider_factory: Optional[Callable[[Settings], LLMProvider]] = None,
+        artifact_store_factory: Optional[Callable[[ApplicationInstance], FileArchitectureArtifactStore]] = None,
         poll_seconds: float = 2.0,
     ) -> None:
         self.settings = settings
         self.job_store = job_store or PostgresArchitectureGenerationJobStore(settings.database_url)
         self.llm_provider_factory = llm_provider_factory or create_llm_provider
+        self.artifact_store_factory = artifact_store_factory or FileArchitectureArtifactStore
         self.poll_seconds = poll_seconds
 
     def run_forever(self) -> None:
@@ -85,7 +88,10 @@ class ArchitectureGenerationWorker:
             )
             if self._is_canceled(job.id):
                 return self.job_store.get(job.id) or job
-            job.complete(result.to_dict())
+            result_payload = result.to_dict()
+            artifact = self.artifact_store_factory(application).save_architecture_sheet(job, result_payload)
+            result_payload["artifact"] = artifact.to_dict()
+            job.complete(result_payload)
             self.job_store.save(job)
         except ArchitectureJobCanceled:
             return self.job_store.get(job.id) or job

@@ -23,6 +23,7 @@ from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, 
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
     ArchitectureGenerationJobStoreError,
+    FileArchitectureArtifactStore,
     JOB_STATUS_CANCELED,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
@@ -56,6 +57,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if parsed_url.path == "/health":
             self._send_json({"status": "ok", "app": self.settings.app_name})
+            return
+
+        if parsed_url.path == "/runtime/config":
+            self._send_json(self.settings.runtime_config())
             return
 
         if parsed_url.path == "/collections":
@@ -101,6 +106,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/architecture-sheet/jobs":
                 self._send_json(self._list_architecture_jobs(application))
+                return
+
+            if app_route["remainder"] == "/architecture-sheets":
+                self._send_json(self._list_architecture_sheet_artifacts(application))
+                return
+
+            architecture_artifact_id = self._parse_architecture_sheet_artifact_route(app_route["remainder"])
+            if architecture_artifact_id is not None:
+                self._send_architecture_sheet_artifact_response(application, architecture_artifact_id)
                 return
 
             architecture_events_job_id = self._parse_architecture_job_events_route(app_route["remainder"])
@@ -218,7 +232,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         generation_mode = str(payload.get("generation_mode") or "").strip()
         if not generation_mode:
-            generation_mode = "agentic_with_review"
+            generation_mode = self.settings.architecture_generation_mode
         llm_provider = create_llm_provider(self.settings)
 
         try:
@@ -255,6 +269,32 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 if job.app_id == application.id
             ]
         }
+
+    def _list_architecture_sheet_artifacts(self, application: ApplicationInstance) -> Dict[str, Any]:
+        if application.id != "software-factory":
+            return {"error": "architecture sheets are only available for the software-factory app"}
+
+        artifacts = FileArchitectureArtifactStore(application).list_architecture_sheets()
+        return {"artifacts": [artifact.to_dict() for artifact in artifacts]}
+
+    def _send_architecture_sheet_artifact_response(
+        self,
+        application: ApplicationInstance,
+        artifact_id: str,
+    ) -> None:
+        if application.id != "software-factory":
+            self._send_json(
+                {"error": "architecture sheets are only available for the software-factory app"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        payload = FileArchitectureArtifactStore(application).load_architecture_sheet_payload(artifact_id)
+        if payload is None:
+            self._send_json({"error": "architecture sheet artifact not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        self._send_json(payload)
 
     def _send_architecture_job_response(self, application: ApplicationInstance, job_id: str) -> None:
         if application.id != "software-factory":
@@ -678,6 +718,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if len(parts) == 3 and parts[0] == "architecture-sheet" and parts[1] == "jobs" and parts[2]:
             return parts[2]
+
+        return None
+
+    def _parse_architecture_sheet_artifact_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 2 and parts[0] == "architecture-sheets" and parts[1]:
+            return parts[1]
 
         return None
 

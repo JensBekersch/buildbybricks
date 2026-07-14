@@ -23,6 +23,11 @@ const generateArchitectureButton = document.querySelector("#generate-architectur
 const cancelArchitectureJobButton = document.querySelector("#cancel-architecture-job");
 const retryArchitectureJobButton = document.querySelector("#retry-architecture-job");
 const refreshArchitectureJobsButton = document.querySelector("#refresh-architecture-jobs");
+const llmProvider = document.querySelector("#llm-provider");
+const llmModel = document.querySelector("#llm-model");
+const llmTimeout = document.querySelector("#llm-timeout");
+const llmTokenBudget = document.querySelector("#llm-token-budget");
+const llmPipelineMode = document.querySelector("#llm-pipeline-mode");
 const architectureStatus = document.querySelector("#architecture-status");
 const architectureProgress = document.querySelector("#architecture-progress");
 const architectureProgressLabel = document.querySelector("#architecture-progress-label");
@@ -40,6 +45,7 @@ const architectureReviewStatus = document.querySelector("#architecture-review-st
 const architectureSchema = document.querySelector("#architecture-schema");
 const architectureProvider = document.querySelector("#architecture-provider");
 const architecturePipeline = document.querySelector("#architecture-pipeline");
+const architectureArtifact = document.querySelector("#architecture-artifact");
 const architectureSourceCount = document.querySelector("#architecture-source-count");
 const architectureSources = document.querySelector("#architecture-sources");
 const architectureJobList = document.querySelector("#architecture-job-list");
@@ -47,6 +53,7 @@ const architectureJobLogs = document.querySelector("#architecture-job-logs");
 const architectureTrace = document.querySelector("#architecture-trace");
 
 let applications = [];
+let runtimeConfig = null;
 let activeAppId = "default";
 let activeCollection = "";
 let activeArchitectureJobId = "";
@@ -183,6 +190,29 @@ async function loadApplications() {
   const payload = await getJson("/apps");
   applications = payload.applications || [];
   renderApplications();
+}
+
+async function loadRuntimeConfig() {
+  runtimeConfig = await getJson("/runtime/config");
+  renderRuntimeConfig(runtimeConfig);
+}
+
+function renderRuntimeConfig(config) {
+  const llm = config.llm || {};
+  const architecturePipeline = (config.pipelines || {}).architecture_sheet || {};
+
+  llmProvider.textContent = llm.provider || "-";
+  llmModel.textContent = llm.model || "-";
+  llmTimeout.textContent = llm.timeout_seconds ? `${llm.timeout_seconds}s` : "-";
+  llmTokenBudget.textContent = llm.max_tokens ? `${llm.max_tokens} Tokens` : "-";
+  llmPipelineMode.textContent = architecturePipeline.mode || "-";
+
+  if (
+    architecturePipeline.mode &&
+    Array.from(architectureGenerationMode.options).some((option) => option.value === architecturePipeline.mode)
+  ) {
+    architectureGenerationMode.value = architecturePipeline.mode;
+  }
 }
 
 async function loadCollections() {
@@ -662,6 +692,7 @@ function renderArchitectureResult(payload) {
   const sheet = payload.architecture_sheet || {};
   const validation = payload.validation || {};
   const generation = payload.generation || {};
+  const artifact = payload.artifact || {};
   const sources = payload.sources || [];
   const trace = payload.trace || [];
   const provider =
@@ -686,6 +717,9 @@ function renderArchitectureResult(payload) {
   architectureSchema.textContent = payload.schema_id || "-";
   architectureProvider.textContent = model ? `${provider} · ${model}` : provider;
   architecturePipeline.textContent = generation.pipeline || generation.requested_mode || generation.mode || "-";
+  architectureArtifact.textContent = artifact.json_path
+    ? `${artifact.json_path} · ${artifact.markdown_path || "Markdown offen"}`
+    : "-";
   architectureSourceCount.textContent = String(sources.length);
 
   renderArchitectureSections(sheet);
@@ -737,6 +771,7 @@ async function generateArchitectureSheet() {
 async function initialize() {
   try {
     setRuntimeStatus("Verbinden...");
+    await loadRuntimeConfig();
     await loadApplications();
     await loadCollections();
     await loadArchitectureJobs();

@@ -1,5 +1,9 @@
 """Software Factory workflows."""
 
+from agentic_rag_template.software_factory.artifacts import (
+    ArchitectureSheetArtifact,
+    FileArchitectureArtifactStore,
+)
 from agentic_rag_template.software_factory.architecture_sheet import (
     ArchitectureSheetGenerationError,
     ArchitectureSheetResult,
@@ -59,8 +63,10 @@ __all__ = [
     "ArchitectureGenerationLogEntry",
     "ArchitectureGenerationStep",
     "ArchitectureGenerationStepDefinition",
+    "ArchitectureSheetArtifact",
     "ArchitectureSheetGenerationError",
     "ArchitectureSheetResult",
+    "FileArchitectureArtifactStore",
     "PostgresArchitectureGenerationJobStore",
     "apply_architecture_generation_event",
     "generate_architecture_sheet",
