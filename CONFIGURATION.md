@@ -12,7 +12,9 @@ The current implementation is fully local and deterministic:
 - Configurable app instances: profiles under `apps/<app-id>/`, data under `data/<app-id>/<collection>/`
 - Legacy default app profile and evaluation cases: files under `template/`
 
-Ollama is implemented as an LLM provider. OpenAI and Ollama embeddings are not implemented yet. The configuration surface is prepared so those providers can be added behind the existing interfaces.
+Ollama is implemented as an LLM provider and as an embedding provider. OpenAI
+providers are not implemented yet. The configuration surface is prepared so
+additional providers can be added behind the existing interfaces.
 
 ## Using `.env`
 
@@ -57,7 +59,8 @@ docker compose --profile ollama exec ollama ollama pull llama3.1
 docker compose --profile ollama exec ollama ollama pull nomic-embed-text
 ```
 
-The app can call Ollama for chat answers when `AGENTIC_RAG_LLM_PROVIDER=ollama` is set. Ollama embeddings are still a separate future adapter.
+The app can call Ollama for chat answers when `AGENTIC_RAG_LLM_PROVIDER=ollama`
+is set and for embeddings when `AGENTIC_RAG_EMBEDDING_PROVIDER=ollama` is set.
 
 ## Data and Template Files
 
@@ -166,15 +169,24 @@ AGENTIC_RAG_EMBEDDING_MODEL=local-hash-v1
 AGENTIC_RAG_EMBEDDING_DIMENSION=64
 ```
 
-Planned Ollama embedding configuration:
+Ollama embedding configuration:
 
 ```env
 AGENTIC_RAG_EMBEDDING_PROVIDER=ollama
 AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
 AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://ollama:11434
+AGENTIC_RAG_EMBEDDING_DIMENSION=0
 ```
 
 Use `http://ollama:11434` when Ollama runs as the second Compose service. Use `http://host.docker.internal:11434` when Ollama runs directly on the host machine and only the app runs in Docker.
+
+Set `AGENTIC_RAG_EMBEDDING_DIMENSION=0` for Ollama unless you want to enforce a
+specific model dimension. The provider learns the dimension from the first
+embedding response. Pull the model before use:
+
+```bash
+docker compose --profile ollama exec ollama ollama pull nomic-embed-text
+```
 
 ## LLM Providers
 
@@ -220,7 +232,6 @@ AGENTIC_RAG_LLM_API_KEY=...
 
 Ollama chat is implemented. Still missing:
 
-- optional `OllamaEmbeddingProvider`
 - optional integration tests that require a live Ollama service and pulled models
 - model management helpers for pulling/checking required models
 

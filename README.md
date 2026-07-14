@@ -334,15 +334,19 @@ AGENTIC_RAG_EMBEDDING_DIMENSION=64
 
 Der Hash-Provider ist deterministisch und braucht keine API-Keys oder Modell-Downloads. Er ist nicht als semantisch guter Embedder gedacht, sondern als stabile lokale Implementierung fuer Tests, Docker und die Architekturstudie.
 
-Die Konfiguration ist bereits fuer spaetere Provider vorbereitet:
+Ollama Embeddings sind implementiert und koennen ueber dieselbe Schnittstelle
+aktiviert werden:
 
 ```text
 AGENTIC_RAG_EMBEDDING_PROVIDER=ollama
 AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
 AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
+AGENTIC_RAG_EMBEDDING_DIMENSION=0
 ```
 
-`ollama`, `openai` und andere Embedding-Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
+`AGENTIC_RAG_EMBEDDING_DIMENSION=0` bedeutet, dass die Dimension aus der ersten
+Ollama-Antwort uebernommen wird. Das Modell muss in Ollama vorhanden sein, z. B.
+mit `ollama pull nomic-embed-text`.
 
 ## LLM-Konfiguration
 
