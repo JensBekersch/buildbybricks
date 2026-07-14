@@ -32,6 +32,19 @@ class ArchitectureSheetResult:
         }
 
 
+@dataclass(frozen=True)
+class DomainAnalysis:
+    """Small deterministic domain analysis for the architecture baseline."""
+
+    kind: str
+    name: str
+    entities: List[str]
+    roles: List[str]
+    workflows: List[str]
+    current_interfaces: List[Dict[str, str]]
+    future_interfaces: List[Dict[str, str]]
+
+
 def generate_architecture_sheet(
     description: str,
     application: ApplicationInstance,
@@ -66,6 +79,7 @@ def generate_architecture_sheet(
 
     if llm_sheet["sheet"] is not None:
         sheet = _merge_known_schema_fields(base_sheet, llm_sheet["sheet"], schema)
+        sheet = _preserve_domain_focus(base_sheet, sheet, normalized_description)
         generation["mode"] = "llm-assisted"
         trace.append("generated_llm_architecture_sheet")
     elif llm_sheet["warning"]:
@@ -155,6 +169,9 @@ def _build_architecture_sheet_system_prompt() -> str:
             "Erzeuge ausschliesslich valides JSON.",
             "Halte dich an das bereitgestellte Architecture-Sheet-Schema.",
             "Erfinde keine unbekannten Fakten. Nutze assumptions und open_questions fuer Unsicherheit.",
+            "Jedes fachliche Feld muss konkrete Begriffe aus der Beschreibung verwenden.",
+            "Vermeide generische Platzhalter wie Core Domain, Fachobjekt oder Fachanwender, wenn konkrete Begriffe vorhanden sind.",
+            "Nimm zukuenftige oder optionale Schnittstellen nicht in den ersten Scope auf.",
             "Behalte schema_version 1.0.0 bei.",
         ]
     )
@@ -198,12 +215,56 @@ def _merge_known_schema_fields(
     return merged
 
 
+def _preserve_domain_focus(
+    base_sheet: Dict[str, Any],
+    candidate_sheet: Dict[str, Any],
+    description: str,
+) -> Dict[str, Any]:
+    analysis = _analyze_domain(description)
+
+    if analysis.kind != "time_tracking":
+        return candidate_sheet
+
+    focused = dict(candidate_sheet)
+    required_terms = ["arbeitszeit", "zeiteintrag", "timeentry", "monat", "pause"]
+    protected_fields = [
+        "artifact_name",
+        "stakeholders",
+        "architecture_drivers",
+        "quality_goals",
+        "context",
+        "building_blocks",
+        "runtime_scenarios",
+        "data_view",
+        "security_view",
+        "test_strategy",
+        "acceptance_criteria",
+        "risks",
+        "open_questions",
+    ]
+
+    for field in protected_fields:
+        value = json.dumps(focused.get(field), ensure_ascii=True).lower()
+        if not any(term in value for term in required_terms):
+            focused[field] = base_sheet[field]
+
+    if analysis.future_interfaces:
+        interfaces = focused.get("context", {}).get("interfaces", [])
+        if any(interface.get("type") == "rest-api" for interface in interfaces):
+            focused["context"] = base_sheet["context"]
+
+    focused["schema_version"] = "1.0.0"
+    return focused
+
+
 def _build_sheet(description: str) -> Dict[str, Any]:
-    artifact_name = _infer_artifact_name(description)
+    analysis = _analyze_domain(description)
+    artifact_name = analysis.name or _infer_artifact_name(description)
     lower_description = description.lower()
     has_pdf = "pdf" in lower_description
     has_approval = any(term in lower_description for term in ["freigabe", "approval", "genehmigung"])
-    has_api = "api" in lower_description or "schnittstelle" in lower_description
+    has_export = any(term in lower_description for term in ["export", "csv", "excel", "pdf"])
+    has_api = _has_current_api_requirement(lower_description)
 
     building_blocks = [
         {
@@ -213,15 +274,11 @@ def _build_sheet(description: str) -> Dict[str, Any]:
         },
         {
             "name": "Accounts and Permissions",
-            "responsibility": "Benutzer, Rollen, Berechtigungen und Zugriffsschutz fuer fachliche Workflows.",
+            "responsibility": _accounts_responsibility(analysis),
             "django_mapping": "Django app `accounts` using auth groups, permissions and policy checks.",
         },
-        {
-            "name": "Core Domain",
-            "responsibility": "Fachliche Kernobjekte aus der Artefaktbeschreibung modellieren und validieren.",
-            "django_mapping": "One or more Django domain apps with models, services, forms or serializers.",
-        },
     ]
+    building_blocks.extend(_domain_building_blocks(analysis))
 
     if has_approval:
         building_blocks.append(
@@ -240,8 +297,16 @@ def _build_sheet(description: str) -> Dict[str, Any]:
                 "django_mapping": "Django service module or background job for PDF rendering and file storage.",
             }
         )
+    elif has_export:
+        building_blocks.append(
+            {
+                "name": "Reporting and Export",
+                "responsibility": "Fachliche Berichte und CSV-Exporte aus validierten Daten erzeugen.",
+                "django_mapping": "Django app or service module `reports` for CSV generation and export tests.",
+            }
+        )
 
-    interfaces = [
+    interfaces = analysis.current_interfaces or [
         {
             "name": "Web UI",
             "type": "web-ui",
@@ -263,16 +328,23 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             }
         )
 
-    runtime_scenarios = [
+    external_systems = [
         {
-            "name": "Fachobjekt erfassen",
-            "steps": [
-                "Ein berechtigter Nutzer oeffnet die Django-Weboberflaeche.",
-                "Der Nutzer erfasst oder aktualisiert ein fachliches Objekt.",
-                "Die Anwendung validiert Eingaben und speichert Daten transaktional.",
-                "Das System zeigt den aktualisierten Zustand nachvollziehbar an.",
-            ],
+            "name": "Noch zu klaerende externe Systeme",
+            "description": "Integrationen wurden aus der Beschreibung noch nicht eindeutig abgeleitet.",
         }
+    ]
+    if analysis.future_interfaces:
+        external_systems.append(
+            {
+                "name": "Zukuenftige Integrationen",
+                "description": "Erwaehnte, aber nicht fuer den ersten Scope verbindliche Schnittstellen: "
+                + ", ".join(interface["name"] for interface in analysis.future_interfaces),
+            }
+        )
+
+    runtime_scenarios = [
+        *_domain_runtime_scenarios(analysis),
     ]
 
     if has_approval:
@@ -300,34 +372,28 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             }
         )
 
+    if has_export and not has_pdf:
+        runtime_scenarios.append(
+            {
+                "name": "Monatsbericht exportieren",
+                "steps": [
+                    "Ein berechtigter Nutzer waehlt Zeitraum, Team oder Projekt aus.",
+                    "Das System ermittelt freigegebene Eintraege und berechnet Summen.",
+                    "Die Anwendung erzeugt einen CSV-Export mit nachvollziehbaren Spalten.",
+                    "Der Export wird bereitgestellt und die Aktion optional protokolliert.",
+                ],
+            }
+        )
+
     return {
         "schema_version": "1.0.0",
         "artifact_name": artifact_name,
         "artifact_type": "django-application",
         "input_summary": description,
-        "business_goal": (
-            f"Das Softwareartefakt soll den beschriebenen fachlichen Prozess als Django-Applikation "
-            f"unterstuetzen: {description}"
-        ),
-        "stakeholders": [
-            {
-                "name": "Fachanwender",
-                "description": "Nutzen die Anwendung fuer die taeglichen fachlichen Workflows.",
-            },
-            {
-                "name": "Fachverantwortliche",
-                "description": "Definieren Regeln, Qualitaetsziele und Abnahmekriterien.",
-            },
-            {
-                "name": "Entwicklungsteam",
-                "description": "Implementiert Django-Code, Tests, Migrationen und Deployment-Artefakte.",
-            },
-            {
-                "name": "Betrieb",
-                "description": "Betreibt Anwendung, Datenbank, Backups, Monitoring und Releases.",
-            },
-        ],
+        "business_goal": _business_goal(description, analysis),
+        "stakeholders": _stakeholders(analysis),
         "architecture_drivers": [
+            *_domain_architecture_drivers(analysis),
             {
                 "name": "Django-first Umsetzung",
                 "description": "Die erste produktive Softwarefabrik spezialisiert sich auf Django-Applikationen.",
@@ -339,23 +405,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
                 "impact": "Alle zentralen Architekturentscheidungen, Risiken und offenen Fragen werden strukturiert abgelegt.",
             },
         ],
-        "quality_goals": [
-            {
-                "name": "Nachvollziehbarkeit",
-                "scenario": "Wichtige fachliche Entscheidungen und Datenveraenderungen koennen spaeter rekonstruiert werden.",
-                "priority": "high",
-            },
-            {
-                "name": "Aenderbarkeit",
-                "scenario": "Fachliche Regeln koennen in klar abgegrenzten Django-Apps angepasst werden.",
-                "priority": "high",
-            },
-            {
-                "name": "Testbarkeit",
-                "scenario": "Kernlogik, Berechtigungen und wichtige Workflows sind automatisiert testbar.",
-                "priority": "high",
-            },
-        ],
+        "quality_goals": _quality_goals(analysis),
         "constraints": [
             {
                 "description": "Der erste Implementierungsfokus liegt auf Django-Applikationen."
@@ -365,25 +415,11 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             },
         ],
         "context": {
-            "users": [
-                {
-                    "name": "Authentifizierte Nutzer",
-                    "description": "Interagieren rollenbasiert mit der Django-Weboberflaeche.",
-                }
-            ],
-            "external_systems": [
-                {
-                    "name": "Noch zu klaerende externe Systeme",
-                    "description": "Integrationen wurden aus der Beschreibung noch nicht eindeutig abgeleitet.",
-                }
-            ],
+            "users": _context_users(analysis),
+            "external_systems": external_systems,
             "interfaces": interfaces,
         },
-        "solution_strategy": (
-            "Die Anwendung wird als modular geschnittene Django-Applikation aufgebaut. "
-            "Fachliche Module werden als Django Apps gekapselt, zentrale Regeln liegen in Services, "
-            "Persistenz erfolgt ueber Django Models und kritische Workflows werden automatisiert getestet."
-        ),
+        "solution_strategy": _solution_strategy(analysis),
         "architecture_decisions": [
             {
                 "id": "ADR-001",
@@ -393,8 +429,8 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             },
             {
                 "id": "ADR-002",
-                "decision": "Fachliche Verantwortlichkeiten werden in getrennte Django Apps geschnitten.",
-                "rationale": "Modulare Django Apps erleichtern Workorder-Schnitt, Tests und spaetere Erweiterungen.",
+                "decision": _modular_decision(analysis),
+                "rationale": _modular_decision_rationale(analysis),
                 "status": "proposed",
             },
             {
@@ -410,19 +446,11 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             "Startpunkt ist ein containerisierbares Django-Deployment mit Webprozess, relationaler Datenbank "
             "und getrennten Konfigurationen fuer lokale Entwicklung, Test und Produktion."
         ),
-        "data_view": (
-            "Die fachlichen Kernobjekte werden als Django Models modelliert. Beziehungen, Statusfelder, "
-            "Zeitstempel und Audit-relevante Informationen werden frueh festgelegt und durch Migrationen versioniert."
-        ),
-        "security_view": (
-            "Authentifizierung basiert auf Django Auth. Autorisierung erfolgt rollen- und objektbezogen. "
-            "Kritische Aktionen benoetigen explizite Berechtigungen und sollten auditierbar sein."
-        ),
-        "test_strategy": (
-            "Automatisierte Tests umfassen Model- und Service-Tests, Permission-Tests, Workflow-Tests "
-            "und bei API-Anteilen API-Tests. Kritische Pfade werden als Integrationstests abgebildet."
-        ),
+        "data_view": _data_view(analysis),
+        "security_view": _security_view(analysis),
+        "test_strategy": _test_strategy(analysis, has_api),
         "acceptance_criteria": [
+            *_domain_acceptance_criteria(analysis),
             {
                 "description": "Alle Pflichtfelder des Architecture-Sheet-Schemas sind gefuellt.",
                 "verification": "Schema- und Contract-Validierung meldet keine fehlenden Felder.",
@@ -437,6 +465,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             },
         ],
         "risks": [
+            *_domain_risks(analysis),
             {
                 "description": "Fachliche Regeln und Rollen koennen in der Beschreibung noch unvollstaendig sein.",
                 "mitigation": "Offene Fragen vor der Workorder-Erzeugung klaeren und Annahmen versioniert dokumentieren.",
@@ -446,7 +475,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
                 "mitigation": "Fachliche Grenzen frueh pruefen und Module entlang stabiler Verantwortlichkeiten schneiden.",
             },
         ],
-        "open_questions": _build_open_questions(has_approval, has_pdf, has_api),
+        "open_questions": _build_open_questions(has_approval, has_pdf, has_api, analysis),
         "assumptions": [
             {
                 "description": "Die Anwendung wird primaer als serverseitige Django-Webapplikation umgesetzt."
@@ -454,6 +483,7 @@ def _build_sheet(description: str) -> Dict[str, Any]:
             {
                 "description": "Eine relationale Datenbank ist fuer die erste produktive Ausbaustufe ausreichend."
             },
+            *_domain_assumptions(analysis),
         ],
         "readiness": {
             "status": "ready-for-review",
@@ -480,6 +510,442 @@ def _infer_artifact_name(description: str) -> str:
     return "Django Softwareartefakt"
 
 
+def _analyze_domain(description: str) -> DomainAnalysis:
+    lower_description = description.lower()
+    has_time_tracking = any(
+        term in lower_description
+        for term in [
+            "arbeitszeit",
+            "arbeitszeiten",
+            "zeiteintrag",
+            "startzeit",
+            "endzeit",
+            "pause",
+            "soll-ist",
+        ]
+    )
+
+    if has_time_tracking:
+        current_interfaces = [
+            {
+                "name": "Web UI fuer Arbeitszeiterfassung",
+                "type": "web-ui",
+                "description": "Serverseitige Django-Oberflaeche fuer Zeiteintraege, Monatsuebersichten und Freigaben.",
+            },
+            {
+                "name": "Django Admin fuer Stammdaten",
+                "type": "admin-ui",
+                "description": "Administration von Nutzern, Teams, Projekten, Feiertagen und Arbeitszeitmodellen.",
+            },
+        ]
+        future_interfaces = []
+        if "api" in lower_description:
+            future_interfaces.append(
+                {
+                    "name": "Mobile REST API",
+                    "type": "rest-api",
+                    "description": "Spaetere API fuer mobile Apps; nicht Bestandteil des ersten serverseitigen Scopes.",
+                }
+            )
+
+        return DomainAnalysis(
+            kind="time_tracking",
+            name="Arbeitszeiterfassung",
+            entities=[
+                "Zeiteintrag",
+                "Projekt",
+                "Team",
+                "Monatsabschluss",
+                "Freigabeentscheidung",
+                "Feiertag",
+                "Arbeitszeitmodell",
+            ],
+            roles=["Mitarbeitende", "Fuehrungskraefte", "Administratoren"],
+            workflows=[
+                "taegliche Arbeitszeit erfassen",
+                "Monatsuebersicht pruefen",
+                "Arbeitszeiten freigeben oder zur Korrektur zurueckgeben",
+                "Monatsbericht exportieren",
+            ],
+            current_interfaces=current_interfaces,
+            future_interfaces=future_interfaces,
+        )
+
+    return DomainAnalysis(
+        kind="generic",
+        name=_infer_artifact_name(description),
+        entities=[],
+        roles=[],
+        workflows=[],
+        current_interfaces=[],
+        future_interfaces=[],
+    )
+
+
+def _has_current_api_requirement(lower_description: str) -> bool:
+    if "api" not in lower_description and "schnittstelle" not in lower_description:
+        return False
+
+    future_markers = ["spaeter", "später", "koennte", "könnte", "optional", "zukuenftig", "zukünftig"]
+    if any(marker in lower_description for marker in future_markers):
+        return False
+
+    return True
+
+
+def _business_goal(description: str, analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Die Anwendung soll Mitarbeitenden, Fuehrungskraeften und Administratoren eine "
+            "nachvollziehbare Erfassung, Pruefung, Freigabe und Auswertung von Arbeitszeiten "
+            "ermoeglichen. Im Mittelpunkt stehen korrekte Zeiteintraege, Monatsabschluesse, "
+            "Soll-Ist-Berechnungen und exportierbare Monatsberichte."
+        )
+
+    return (
+        f"Das Softwareartefakt soll den beschriebenen fachlichen Prozess als Django-Applikation "
+        f"unterstuetzen: {description}"
+    )
+
+
+def _stakeholders(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Mitarbeitende",
+                "description": "Erfassen und korrigieren eigene taegliche Arbeitszeiten bis zum Monatsabschluss.",
+            },
+            {
+                "name": "Fuehrungskraefte",
+                "description": "Pruefen Monatsuebersichten ihrer Teams und geben Eintraege frei oder zur Korrektur zurueck.",
+            },
+            {
+                "name": "Administratoren",
+                "description": "Verwalten Nutzer, Teams, Projekte, Feiertage und Arbeitszeitmodelle.",
+            },
+            {
+                "name": "Betrieb und Datenschutz",
+                "description": "Stellen sicheren Betrieb, Backups, Zugriffsschutz und datenschutzkonforme Protokollierung sicher.",
+            },
+        ]
+
+    return [
+        {
+            "name": "Fachanwender",
+            "description": "Nutzen die Anwendung fuer die taeglichen fachlichen Workflows.",
+        },
+        {
+            "name": "Fachverantwortliche",
+            "description": "Definieren Regeln, Qualitaetsziele und Abnahmekriterien.",
+        },
+        {
+            "name": "Entwicklungsteam",
+            "description": "Implementiert Django-Code, Tests, Migrationen und Deployment-Artefakte.",
+        },
+        {
+            "name": "Betrieb",
+            "description": "Betreibt Anwendung, Datenbank, Backups, Monitoring und Releases.",
+        },
+    ]
+
+
+def _context_users(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Mitarbeitende",
+                "description": "Sehen und bearbeiten eigene Zeiteintraege, solange der jeweilige Monat offen ist.",
+            },
+            {
+                "name": "Fuehrungskraefte",
+                "description": "Sehen Teamzeiten, pruefen Monatsuebersichten und treffen Freigabeentscheidungen.",
+            },
+            {
+                "name": "Administratoren",
+                "description": "Pflegen Stammdaten und organisatorische Regeln ueber Admin-Oberflaechen.",
+            },
+        ]
+
+    return [
+        {
+            "name": "Authentifizierte Nutzer",
+            "description": "Interagieren rollenbasiert mit der Django-Weboberflaeche.",
+        }
+    ]
+
+
+def _accounts_responsibility(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Login, Rollen und Berechtigungen fuer Mitarbeitende, Fuehrungskraefte und Administratoren "
+            "abbilden, inklusive teambezogener Sichtbarkeit."
+        )
+    return "Benutzer, Rollen, Berechtigungen und Zugriffsschutz fuer fachliche Workflows."
+
+
+def _domain_building_blocks(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Time Entries",
+                "responsibility": "Zeiteintraege mit Datum, Startzeit, Endzeit, Pause, Projekt, Taetigkeitsbeschreibung und Notizen erfassen, validieren und versioniert speichern.",
+                "django_mapping": "Django app `timesheets` with TimeEntry model, forms, validators and service functions for duration calculation.",
+            },
+            {
+                "name": "Projects and Teams",
+                "responsibility": "Projekte, Teams und Zuordnung von Mitarbeitenden zu Fuehrungskraeften verwalten.",
+                "django_mapping": "Django app `organization` with Project, Team and membership models.",
+            },
+            {
+                "name": "Working Time Rules",
+                "responsibility": "Arbeitszeitmodelle, Feiertage, Pausenregeln sowie Soll-Ist-Berechnung kapseln.",
+                "django_mapping": "Django app `working_time` with calendar models and pure service layer for calculations.",
+            },
+            {
+                "name": "Month Closing and Approval",
+                "responsibility": "Monatsabschluss, Freigabe, Rueckgabe zur Korrektur und Sperrung abgeschlossener Monate steuern.",
+                "django_mapping": "Django app `approvals` with MonthSummary, approval state machine and permission tests.",
+            },
+        ]
+
+    return [
+        {
+            "name": "Core Domain",
+            "responsibility": "Fachliche Kernobjekte aus der Artefaktbeschreibung modellieren und validieren.",
+            "django_mapping": "One or more Django domain apps with models, services, forms or serializers.",
+        }
+    ]
+
+
+def _domain_runtime_scenarios(analysis: DomainAnalysis) -> List[Dict[str, List[str]]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Arbeitszeit erfassen",
+                "steps": [
+                    "Ein Mitarbeitender oeffnet die eigene Tages- oder Wochenansicht.",
+                    "Der Mitarbeitende erfasst Datum, Startzeit, Endzeit, Pause, Projekt und Taetigkeitsbeschreibung.",
+                    "Das System validiert Zeitlogik, Monatsstatus und Pflichtfelder.",
+                    "Die Anwendung berechnet Nettoarbeitszeit und speichert den Zeiteintrag nachvollziehbar.",
+                ],
+            },
+            {
+                "name": "Monat abschliessen",
+                "steps": [
+                    "Ein Mitarbeitender prueft die Monatsuebersicht mit Soll-Ist-Zeiten.",
+                    "Das System weist auf fehlende oder unplausible Eintraege hin.",
+                    "Der Mitarbeitende reicht den Monat zur Pruefung ein.",
+                    "Die Anwendung sperrt weitere Aenderungen bis zur Freigabe oder Rueckgabe.",
+                ],
+            },
+            {
+                "name": "Teamzeiten freigeben",
+                "steps": [
+                    "Eine Fuehrungskraft oeffnet die Monatsuebersicht eines Teammitglieds.",
+                    "Das System zeigt Zeiteintraege, Summen, Abweichungen und Pruefhinweise.",
+                    "Die Fuehrungskraft gibt den Monat frei oder sendet ihn mit Kommentar zur Korrektur zurueck.",
+                    "Die Entscheidung wird mit Nutzer, Zeitstempel und Statuswechsel protokolliert.",
+                ],
+            },
+        ]
+
+    return [
+        {
+            "name": "Fachobjekt erfassen",
+            "steps": [
+                "Ein berechtigter Nutzer oeffnet die Django-Weboberflaeche.",
+                "Der Nutzer erfasst oder aktualisiert ein fachliches Objekt.",
+                "Die Anwendung validiert Eingaben und speichert Daten transaktional.",
+                "Das System zeigt den aktualisierten Zustand nachvollziehbar an.",
+            ],
+        }
+    ]
+
+
+def _domain_architecture_drivers(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Korrekte Arbeitszeitberechnung",
+                "description": "Pausen, Soll-Ist-Zeiten, Feiertage und Monatsgrenzen muessen fachlich korrekt berechnet werden.",
+                "impact": "Berechnungslogik wird in testbare Services ausgelagert und nicht in Views oder Templates versteckt.",
+            },
+            {
+                "name": "Rollen- und Team-Sichtbarkeit",
+                "description": "Mitarbeitende sehen eigene Daten, Fuehrungskraefte sehen Teamdaten, Administratoren verwalten Stammdaten.",
+                "impact": "Berechtigungen werden frueh modelliert und in Permission-Tests abgesichert.",
+            },
+        ]
+    return []
+
+
+def _quality_goals(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "name": "Berechnungskorrektheit",
+                "scenario": "Pausen, Nettoarbeitszeit, Monatsstunden und Soll-Ist-Abweichungen werden fuer relevante Arbeitszeitmodelle korrekt berechnet.",
+                "priority": "high",
+            },
+            {
+                "name": "Nachvollziehbarkeit",
+                "scenario": "Freigaben, Rueckgaben und Aenderungen an Zeiteintraegen koennen mit Nutzer, Zeitpunkt und Status rekonstruiert werden.",
+                "priority": "high",
+            },
+            {
+                "name": "Datenschutz",
+                "scenario": "Nutzer sehen nur die Arbeitszeitdaten, die ihrer Rolle und Teamzuordnung entsprechen.",
+                "priority": "high",
+            },
+            {
+                "name": "Testbarkeit",
+                "scenario": "Berechnungsregeln, Berechtigungen und Monatsabschluss-Workflows sind automatisiert testbar.",
+                "priority": "high",
+            },
+        ]
+
+    return [
+        {
+            "name": "Nachvollziehbarkeit",
+            "scenario": "Wichtige fachliche Entscheidungen und Datenveraenderungen koennen spaeter rekonstruiert werden.",
+            "priority": "high",
+        },
+        {
+            "name": "Aenderbarkeit",
+            "scenario": "Fachliche Regeln koennen in klar abgegrenzten Django-Apps angepasst werden.",
+            "priority": "high",
+        },
+        {
+            "name": "Testbarkeit",
+            "scenario": "Kernlogik, Berechtigungen und wichtige Workflows sind automatisiert testbar.",
+            "priority": "high",
+        },
+    ]
+
+
+def _solution_strategy(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Die erste Version wird als serverseitige Django-Anwendung mit Templates, Django Auth, "
+            "Django Admin und relationaler Datenbank umgesetzt. Die Fachlogik wird in klar getrennte "
+            "Apps fuer Zeiteintraege, Organisation, Arbeitszeitregeln, Monatsabschluss/Freigabe und "
+            "Reporting geschnitten. Berechnungen und Statuswechsel liegen in Services, damit Folgeagenten "
+            "gezielt Models, Views, Tests und Workorders ableiten koennen."
+        )
+
+    return (
+        "Die Anwendung wird als modular geschnittene Django-Applikation aufgebaut. "
+        "Fachliche Module werden als Django Apps gekapselt, zentrale Regeln liegen in Services, "
+        "Persistenz erfolgt ueber Django Models und kritische Workflows werden automatisiert getestet."
+    )
+
+
+def _modular_decision(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return "Arbeitszeiterfassung wird in fachliche Django Apps fuer Zeiten, Organisation, Regeln, Freigabe und Reporting geschnitten."
+    return "Fachliche Verantwortlichkeiten werden in getrennte Django Apps geschnitten."
+
+
+def _modular_decision_rationale(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return "Zeiterfassung, Stammdaten, Berechnungsregeln und Freigabe haben unterschiedliche Aenderungsgruende und Testprofile."
+    return "Modulare Django Apps erleichtern Workorder-Schnitt, Tests und spaetere Erweiterungen."
+
+
+def _data_view(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Zentrale Django Models sind TimeEntry, Project, Team, TeamMembership, WorkingTimeModel, "
+            "Holiday, MonthSummary und ApprovalDecision. TimeEntry enthaelt Datum, Startzeit, Endzeit, "
+            "Pause, Projekt, Taetigkeitsbeschreibung, Notizen, Besitzer und Statusbezug zum Monatsabschluss. "
+            "MonthSummary buendelt Soll-Ist-Werte und Freigabestatus je Nutzer und Monat."
+        )
+
+    return (
+        "Die fachlichen Kernobjekte werden als Django Models modelliert. Beziehungen, Statusfelder, "
+        "Zeitstempel und Audit-relevante Informationen werden frueh festgelegt und durch Migrationen versioniert."
+    )
+
+
+def _security_view(analysis: DomainAnalysis) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Authentifizierung basiert auf Django Auth. Mitarbeitende duerfen nur eigene Zeiten sehen und "
+            "nur offene Monate bearbeiten. Fuehrungskraefte duerfen Teamzeiten pruefen und freigeben. "
+            "Administratoren verwalten Stammdaten ueber Django Admin. Freigabeentscheidungen und Korrekturrueckgaben "
+            "werden auditierbar protokolliert."
+        )
+
+    return (
+        "Authentifizierung basiert auf Django Auth. Autorisierung erfolgt rollen- und objektbezogen. "
+        "Kritische Aktionen benoetigen explizite Berechtigungen und sollten auditierbar sein."
+    )
+
+
+def _test_strategy(analysis: DomainAnalysis, has_api: bool) -> str:
+    if analysis.kind == "time_tracking":
+        return (
+            "Automatisierte Tests umfassen Model- und Service-Tests fuer Pausen-, Nettozeit- und Soll-Ist-Berechnung, "
+            "Permission-Tests fuer Mitarbeitende, Fuehrungskraefte und Administratoren, Workflow-Tests fuer Monatsabschluss, "
+            "Freigabe und Rueckgabe sowie Export-Tests fuer CSV-Berichte. API-Tests werden erst relevant, wenn die spaetere "
+            "mobile API in den Scope aufgenommen wird."
+        )
+
+    api_part = " und bei API-Anteilen API-Tests" if has_api else ""
+    return (
+        f"Automatisierte Tests umfassen Model- und Service-Tests, Permission-Tests, Workflow-Tests{api_part}. "
+        "Kritische Pfade werden als Integrationstests abgebildet."
+    )
+
+
+def _domain_acceptance_criteria(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "description": "Zeiteintraege koennen mit Datum, Startzeit, Endzeit, Pause, Projekt und Beschreibung modelliert werden.",
+                "verification": "Das Sheet enthaelt dedizierte TimeEntry-Modelle und Validierungsregeln.",
+            },
+            {
+                "description": "Monatsabschluss, Freigabe und Rueckgabe zur Korrektur sind als Workflow beschrieben.",
+                "verification": "Runtime-Szenarien und Building Blocks enthalten Month Closing and Approval.",
+            },
+            {
+                "description": "Soll-Ist-Berechnung, Feiertage und Arbeitszeitmodelle sind architektonisch beruecksichtigt.",
+                "verification": "Data View und Teststrategie nennen WorkingTimeModel, Holiday und Berechnungstests.",
+            },
+        ]
+    return []
+
+
+def _domain_risks(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        return [
+            {
+                "description": "Arbeitszeitmodelle, Feiertagsregeln und Pausenregeln koennen je Organisation komplexer sein als im MVP beschrieben.",
+                "mitigation": "Berechnungsregeln in Services kapseln und mit parametrisierten Tests absichern.",
+            },
+            {
+                "description": "Team- und Rollenberechtigungen koennen zu Datenschutzfehlern fuehren.",
+                "mitigation": "Objektberechtigungen und Querysets fuer jede Rolle automatisiert testen.",
+            },
+        ]
+    return []
+
+
+def _domain_assumptions(analysis: DomainAnalysis) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        assumptions = [
+            {
+                "description": "Der erste Scope nutzt Django Templates und keine separate Single-Page-App."
+            },
+            {
+                "description": "Die erwaehnte mobile REST API ist eine spaetere Erweiterung und nicht Bestandteil der ersten Architektur."
+            },
+        ]
+        return assumptions if analysis.future_interfaces else assumptions[:1]
+    return []
+
+
 def _title_from_phrase(phrase: str) -> str:
     cleaned = phrase.strip(" .,:;")
     stop_words = {"eine", "einen", "ein", "der", "die", "das", "von"}
@@ -488,18 +954,39 @@ def _title_from_phrase(phrase: str) -> str:
     return title[:1].upper() + title[1:] if title else "Django Softwareartefakt"
 
 
-def _build_open_questions(has_approval: bool, has_pdf: bool, has_api: bool) -> List[Dict[str, str]]:
-    questions = [
-        {
-            "description": "Welche Rollen und Berechtigungen muessen im ersten Release verbindlich abgebildet werden?"
-        },
-        {
-            "description": "Welche fachlichen Kernobjekte und Statusuebergaenge sind fuer den MVP zwingend?"
-        },
-        {
-            "description": "Welche nichtfunktionalen Anforderungen gelten fuer Betrieb, Datenschutz und Performance?"
-        },
-    ]
+def _build_open_questions(
+    has_approval: bool,
+    has_pdf: bool,
+    has_api: bool,
+    analysis: DomainAnalysis,
+) -> List[Dict[str, str]]:
+    if analysis.kind == "time_tracking":
+        questions = [
+            {
+                "description": "Welche konkreten Arbeitszeitmodelle, Pausenregeln und Rundungsregeln gelten im ersten Release?"
+            },
+            {
+                "description": "Wann gilt ein Monat als abgeschlossen und wer darf ihn in welchen Faellen wieder oeffnen?"
+            },
+            {
+                "description": "Welche CSV-Spalten und Filter benoetigen Monatsberichte fuer Mitarbeitende, Teams und Projekte?"
+            },
+            {
+                "description": "Welche Datenschutz- und Aufbewahrungsregeln gelten fuer Arbeitszeitdaten und Audit-Logs?"
+            },
+        ]
+    else:
+        questions = [
+            {
+                "description": "Welche Rollen und Berechtigungen muessen im ersten Release verbindlich abgebildet werden?"
+            },
+            {
+                "description": "Welche fachlichen Kernobjekte und Statusuebergaenge sind fuer den MVP zwingend?"
+            },
+            {
+                "description": "Welche nichtfunktionalen Anforderungen gelten fuer Betrieb, Datenschutz und Performance?"
+            },
+        ]
 
     if has_approval:
         questions.append(
@@ -519,6 +1006,12 @@ def _build_open_questions(has_approval: bool, has_pdf: bool, has_api: bool) -> L
         questions.append(
             {
                 "description": "Welche externen Systeme konsumieren die API und welche Authentifizierung wird benoetigt?"
+            }
+        )
+    elif analysis.future_interfaces:
+        questions.append(
+            {
+                "description": "Wann soll die spaeter erwaehnte API in den Scope aufgenommen werden und welche Clients muessen sie nutzen?"
             }
         )
 

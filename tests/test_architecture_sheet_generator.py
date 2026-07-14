@@ -33,6 +33,41 @@ class FakeArchitectureLLMProvider:
         }
 
 
+class GenericArchitectureLLMProvider:
+    name = "generic-architecture-llm"
+    model = "generic-json-v1"
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        assert "Vermeide generische Platzhalter" in system_prompt
+        return {
+            "artifact_name": "Generische Fachanwendung",
+            "building_blocks": [
+                {
+                    "name": "Core Domain",
+                    "responsibility": "Generische Fachobjekte modellieren.",
+                    "django_mapping": "Django app `core`.",
+                }
+            ],
+            "runtime_scenarios": [
+                {
+                    "name": "Fachobjekt erfassen",
+                    "steps": ["Nutzer erfasst ein Objekt."],
+                }
+            ],
+            "context": {
+                "users": [{"name": "Fachanwender", "description": "Nutzen die Anwendung."}],
+                "external_systems": [],
+                "interfaces": [
+                    {
+                        "name": "Application API",
+                        "type": "rest-api",
+                        "description": "API fuer Clients.",
+                    }
+                ],
+            },
+        }
+
+
 def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> None:
     settings = Settings(
         apps_dir=PROJECT_ROOT / "apps",
@@ -91,6 +126,74 @@ def test_generate_architecture_sheet_can_merge_llm_json() -> None:
     assert sheet["architecture_decisions"][0]["id"] == "ADR-LLM-001"
     assert sheet["quality_goals"]
     assert "generated_llm_architecture_sheet" in payload["trace"]
+
+
+def test_generate_architecture_sheet_focuses_on_work_time_domain() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    result = generate_architecture_sheet(
+        (
+            "Erstelle ein Architecture Sheet fuer eine Django-Webanwendung zur Erfassung "
+            "und Auswertung von Arbeitszeiten. Mitarbeitende loggen Datum, Startzeit, "
+            "Endzeit, Pause, Projekt, Taetigkeitsbeschreibung und Notizen. Fuehrungskraefte "
+            "pruefen Monatsuebersichten und geben Eintraege frei oder zur Korrektur zurueck. "
+            "Administratoren verwalten Nutzer, Teams, Projekte, Feiertage und Arbeitszeitmodelle. "
+            "Monatsberichte sollen als CSV exportiert werden. Spaeter koennte eine REST API "
+            "fuer mobile Apps ergaenzt werden."
+        ),
+        application,
+    )
+    payload = result.to_dict()
+    sheet = payload["architecture_sheet"]
+    block_names = {block["name"] for block in sheet["building_blocks"]}
+    scenario_names = {scenario["name"] for scenario in sheet["runtime_scenarios"]}
+    interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
+
+    assert payload["validation"]["valid"] is True
+    assert sheet["artifact_name"] == "Arbeitszeiterfassung"
+    assert "Time Entries" in block_names
+    assert "Working Time Rules" in block_names
+    assert "Month Closing and Approval" in block_names
+    assert "Core Domain" not in block_names
+    assert "Arbeitszeit erfassen" in scenario_names
+    assert "Monat abschliessen" in scenario_names
+    assert "Teamzeiten freigeben" in scenario_names
+    assert "rest-api" not in interface_types
+    assert "TimeEntry" in sheet["data_view"]
+    assert "Soll-Ist" in sheet["test_strategy"]
+
+
+def test_llm_generation_keeps_work_time_domain_focus() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    result = generate_architecture_sheet(
+        (
+            "Django-Webanwendung zur Erfassung von Arbeitszeiten mit Zeiteintraegen, "
+            "Pausen, Projekten, Monatsabschluss und spaeterer REST API."
+        ),
+        application,
+        llm_provider=GenericArchitectureLLMProvider(),
+    )
+    payload = result.to_dict()
+    sheet = payload["architecture_sheet"]
+    block_names = {block["name"] for block in sheet["building_blocks"]}
+    interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
+
+    assert payload["generation"]["mode"] == "llm-assisted"
+    assert sheet["artifact_name"] == "Arbeitszeiterfassung"
+    assert "Time Entries" in block_names
+    assert "Core Domain" not in block_names
+    assert "rest-api" not in interface_types
 
 
 def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
