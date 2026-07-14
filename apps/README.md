@@ -16,3 +16,9 @@ data/<app_id>/<collection>/
 ```
 
 The legacy template remains available as the `default` application.
+
+## Current Instances
+
+- `agentic-rag-demo`: small demo instance for the generic RAG workflow.
+- `software-factory`: product direction for a multi-agent Django software
+  factory. Its first workflow is an arc42-oriented Architecture Sheet generator.

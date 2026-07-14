@@ -6,6 +6,12 @@ Dieses Repository entsteht als schlanke Vorlage fuer ein agentic-RAG-System, das
 
 Das Projekt soll eine wiederverwendbare Basis liefern fuer Anwendungen, die Dokumente oder Wissensquellen durchsuchen, relevante Informationen abrufen und mit einem Agenten kontrolliert weiterverarbeiten.
 
+Die produktive Zielrichtung ist eine mehragentenfaehige Softwarefabrik fuer
+Django-Applikationen. Sie soll aus fachlichen Beschreibungen zunaechst
+Architektur-Sheets erzeugen, diese spaeter in Workorders herunterbrechen, die
+Workorders ausfuehren, Tests erzeugen und Aenderungen nach GitHub committen
+koennen.
+
 Die Vorlage soll:
 
 - lokal startbar und testbar sein
@@ -14,6 +20,28 @@ Die Vorlage soll:
 - klare Austauschpunkte fuer Modelle, Vector Stores und Datenquellen haben
 - einfache Evaluations- und Debugging-Moeglichkeiten bieten
 - Schritt fuer Schritt zu einer produktnaeheren Architektur ausgebaut werden koennen
+
+## Software Factory Direction
+
+Die erste konkrete Produktinstanz ist `software-factory`. Sie fokussiert sich
+zunaechst auf Django-Applikationen und bildet den Anfang einer Softwarefabrik:
+
+1. Beschreibung eines Softwareartefakts aufnehmen.
+2. Daraus ein strukturiertes Architecture Sheet nach arc42-orientierten
+   Abschnitten erzeugen.
+3. Offene Fragen, Annahmen, Risiken und Qualitaetsziele explizit machen.
+4. Das Sheet spaeter als Input fuer Workorders, Implementierung, Tests und
+   GitHub-Aenderungen verwenden.
+
+Der erste Contract liegt unter:
+
+- `apps/software-factory/architecture_sheet.schema.json`
+- `apps/software-factory/app_profile.json`
+- `data/software-factory/architecture-method/arc42_architecture_sheet.md`
+
+Das Architecture Sheet ist bewusst ein maschinenlesbares Zwischenformat. Es ist
+kein vollstaendiges arc42-Dokument, sondern der spaetere Uebergabepunkt zwischen
+Architektur-Agent, Workorder-Agenten und Implementierungs-Agenten.
 
 ## Grundkonstrukt
 

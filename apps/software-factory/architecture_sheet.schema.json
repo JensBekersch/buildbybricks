@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://buildbybricks.local/schemas/software-factory/architecture-sheet.schema.json",
+  "title": "Software Factory Architecture Sheet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_name",
+    "artifact_type",
+    "business_goal",
+    "stakeholders",
+    "quality_goals",
+    "constraints",
+    "context",
+    "solution_strategy",
+    "building_blocks",
+    "runtime_scenarios",
+    "deployment_view",
+    "data_view",
+    "security_view",
+    "test_strategy",
+    "risks",
+    "open_questions",
+    "assumptions"
+  ],
+  "properties": {
+    "artifact_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifact_type": {
+      "type": "string",
+      "enum": [
+        "django-application",
+        "django-service",
+        "django-app-module",
+        "unknown"
+      ]
+    },
+    "business_goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stakeholders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/named_item"
+      }
+    },
+    "quality_goals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/quality_goal"
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text_item"
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "users",
+        "external_systems",
+        "interfaces"
+      ],
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "external_systems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/named_item"
+          }
+        },
+        "interfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interface_item"
+          }
+        }
+      }
+    },
+    "solution_strategy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "building_blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/building_block"
+      }
+    },
+    "runtime_scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/runtime_scenario"
+      }
+    },
+    "deployment_view": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data_view": {
+      "type": "string",
+      "minLength": 1
+    },
+    "security_view": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test_strategy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/risk"
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text_item"
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/text_item"
+      }
+    }
+  },
+  "$defs": {
+    "named_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "text_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "quality_goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "scenario",
+        "priority"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ]
+        }
+      }
+    },
+    "interface_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "web-ui",
+            "rest-api",
+            "admin-ui",
+            "background-job",
+            "database",
+            "external-api",
+            "file-export",
+            "unknown"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "building_block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "responsibility",
+        "django_mapping"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "responsibility": {
+          "type": "string",
+          "minLength": 1
+        },
+        "django_mapping": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "runtime_scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "steps"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "mitigation"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mitigation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
