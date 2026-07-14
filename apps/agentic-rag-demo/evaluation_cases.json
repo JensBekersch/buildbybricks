@@ -1,0 +1,19 @@
+[
+  {
+    "id": "demo-agentic-rag-basics",
+    "question": "Was ist Agentic RAG?",
+    "collection": "knowledge",
+    "expected_source_locations": [
+      "knowledge/agentic_rag_basics.md"
+    ],
+    "required_answer_terms": [
+      "Agentic RAG",
+      "Quellen"
+    ],
+    "required_tool_calls": [
+      "search_knowledge_base",
+      "read_source",
+      "answer_with_citations"
+    ]
+  }
+]

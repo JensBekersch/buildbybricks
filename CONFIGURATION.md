@@ -8,8 +8,9 @@ The current implementation is fully local and deterministic:
 
 - Embeddings: `hash`
 - Answer generation: `deterministic`
-- Data: files under `data/<collection>/`
-- App profile and evaluation cases: files under `template/`
+- Default app data: files under `data/<collection>/`
+- Configurable app instances: profiles under `apps/<app-id>/`, data under `data/<app-id>/<collection>/`
+- Legacy default app profile and evaluation cases: files under `template/`
 
 Ollama is implemented as an LLM provider. OpenAI and Ollama embeddings are not implemented yet. The configuration surface is prepared so those providers can be added behind the existing interfaces.
 
@@ -60,7 +61,7 @@ The app can call Ollama for chat answers when `AGENTIC_RAG_LLM_PROVIDER=ollama` 
 
 ## Data and Template Files
 
-Knowledge goes into `data/<collection>/`.
+The legacy `default` application uses `template/` and `data/<collection>/`.
 
 ```text
 data/
@@ -73,6 +74,32 @@ Application behavior goes into `template/`.
 
 - `template/app_profile.json`: app name, default collection, default top-k, answer policy, enabled tools
 - `template/evaluation_cases.json`: repeatable test questions and expected sources/tool calls
+
+Reusable application instances live under `apps/<app-id>/`:
+
+```text
+apps/
+└── policy-assistant/
+    ├── app_profile.json
+    └── evaluation_cases.json
+```
+
+Their knowledge lives under `data/<app-id>/<collection>/`:
+
+```text
+data/
+└── policy-assistant/
+    └── policies/
+        └── handbook.md
+```
+
+Runtime endpoints:
+
+- `GET /apps`
+- `GET /apps/{app_id}`
+- `GET /apps/{app_id}/collections`
+- `POST /apps/{app_id}/chat`
+- `GET /apps/{app_id}/evaluation/run`
 
 ## Embedding Providers
 
