@@ -203,7 +203,7 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
         assert evaluation_payload["provider"] == "hash"
         assert profile_payload["default_collection"] == "sample"
         assert runtime_config_payload["llm"]["provider"] == "deterministic"
-        assert runtime_config_payload["llm"]["timeout_seconds"] == 1200
+        assert runtime_config_payload["llm"]["timeout_seconds"] == 3600
         assert runtime_config_payload["llm"]["max_tokens"] == 4096
         assert runtime_config_payload["pipelines"]["architecture_sheet"]["mode"] == "agentic_with_review"
         assert "keine passende Quelle gefunden" in chat_payload["answer"]

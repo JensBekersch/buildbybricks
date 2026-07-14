@@ -7,7 +7,7 @@ def test_render_prometheus_metrics_includes_job_step_llm_and_error_metrics() -> 
     settings = Settings(
         llm_provider="ollama",
         llm_model="qwen3:14b",
-        llm_timeout_seconds=1200,
+        llm_timeout_seconds=3600,
         llm_max_tokens=4096,
         architecture_generation_mode="agentic_with_review",
     )
@@ -61,7 +61,7 @@ def test_render_prometheus_metrics_includes_job_step_llm_and_error_metrics() -> 
     payload = render_prometheus_metrics(settings, [completed, failed])
 
     assert 'buildbybricks_runtime_info{architecture_mode="agentic_with_review",llm_model="qwen3:14b",llm_provider="ollama"} 1' in payload
-    assert "buildbybricks_llm_timeout_seconds 1200" in payload
+    assert "buildbybricks_llm_timeout_seconds 3600" in payload
     assert "buildbybricks_llm_token_budget 4096" in payload
     assert 'buildbybricks_architecture_jobs{status="completed"} 1' in payload
     assert 'buildbybricks_architecture_jobs{status="failed"} 1' in payload

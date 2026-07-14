@@ -4,9 +4,9 @@ buildbybricks.buildbyspec.com {
 	reverse_proxy 127.0.0.1:8000 {
 		transport http {
 			dial_timeout 10s
-			response_header_timeout 1200s
-			read_timeout 1200s
-			write_timeout 1200s
+			response_header_timeout 3600s
+			read_timeout 3600s
+			write_timeout 3600s
 		}
 	}
 }

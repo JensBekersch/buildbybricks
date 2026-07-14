@@ -391,7 +391,7 @@ Ollama kann so konfiguriert werden:
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
-AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=3600
 AGENTIC_RAG_LLM_MAX_TOKENS=4096
 AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE=agentic_with_review
 ```
@@ -403,8 +403,8 @@ meldet nur, ob ein Key konfiguriert ist. Pro-App- und Pro-Pipeline-Overrides
 sind im Config-Shape vorbereitet, aber noch nicht aktiviert.
 
 Agentische Architecture-Sheet-Laeufe koennen mit lokalen Ollama-Modellen
-mehrere Minuten dauern. `AGENTIC_RAG_LLM_TIMEOUT_SECONDS=1200` gibt dem
-mehrstufigen Generator lokal bis zu 20 Minuten Zeit, bevor die API abbricht.
+mehrere Minuten dauern. `AGENTIC_RAG_LLM_TIMEOUT_SECONDS=3600` gibt dem
+mehrstufigen Generator lokal bis zu 60 Minuten Zeit, bevor die API abbricht.
 `AGENTIC_RAG_LLM_MAX_TOKENS=4096` gibt dem Generator genug Ausgabelaenge fuer
 strukturierte Architecture Sheets.
 
