@@ -98,6 +98,13 @@ unterstuetzt zwei sichtbare Modi:
 - `agentic_with_review`: zusaetzlich prueft ein Architecture Reviewer das Sheet
   auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
 
+Wenn der Reviewer fachliche oder sprachliche Maengel findet, startet die
+Pipeline bis zu zwei gezielte Korrekturlaeufe. Dabei werden die
+Review-Findings und `required_corrections` an einen Architecture Corrector
+gegeben, das Sheet erneut synthetisiert und danach wieder geprueft. Die
+Review-Historie wird in `generation.architecture_review.correction_attempts`
+gespeichert.
+
 `generation_mode` ist optional und faellt dann auf `agentic_with_review`
 zurueck, sofern `AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE` nicht anders gesetzt
 ist. Der Generator erzeugt kein deterministisches oder generisches

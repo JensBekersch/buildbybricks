@@ -616,8 +616,8 @@ function appendList(container, items) {
       );
       const meta = valueText(
         item.impact ||
-          item.status ||
-          item.priority ||
+          displayStatus(item.status) ||
+          displayPriority(item.priority) ||
           item.category ||
           item.django_mapping ||
           item.verification
@@ -658,7 +658,7 @@ function appendSection(title, content) {
 function renderArchitectureSections(sheet) {
   architectureSections.replaceChildren();
 
-  appendSection("Architecture Drivers", sheet.architecture_drivers || sheet.drivers || []);
+  appendSection("Architekturtreiber", sheet.architecture_drivers || sheet.drivers || []);
   appendSection("Qualitaetsziele", sheet.quality_goals || []);
   appendSection("Kontext & Schnittstellen", sheet.context || sheet.external_interfaces || []);
   appendSection("Bausteine", sheet.building_blocks || []);
@@ -669,6 +669,41 @@ function renderArchitectureSections(sheet) {
   appendSection("Offene Fragen", sheet.open_questions || []);
   appendSection("Akzeptanzkriterien", sheet.acceptance_criteria || []);
   appendSection("Teststrategie", sheet.test_strategy || []);
+}
+
+function displayPriority(priority) {
+  if (!priority) {
+    return "";
+  }
+  const normalized = String(priority).toLowerCase();
+  if (normalized === "high") {
+    return "hoch";
+  }
+  if (normalized === "medium") {
+    return "mittel";
+  }
+  if (normalized === "low") {
+    return "niedrig";
+  }
+  return priority;
+}
+
+function displayStatus(status) {
+  if (!status) {
+    return "";
+  }
+  const normalized = String(status).toLowerCase();
+  const labels = {
+    proposed: "vorgeschlagen",
+    accepted: "akzeptiert",
+    rejected: "verworfen",
+    superseded: "ersetzt",
+    draft: "Entwurf",
+    "needs-clarification": "Klaerungsbedarf",
+    "ready-for-review": "bereit fuer Review",
+    approved: "freigegeben"
+  };
+  return labels[normalized] || status;
 }
 
 function renderSupportList(element, items, emptyText, formatter) {
