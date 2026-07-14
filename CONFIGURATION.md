@@ -107,13 +107,23 @@ AGENTIC_RAG_LLM_PROVIDER=deterministic
 AGENTIC_RAG_LLM_MODEL=local-deterministic-v1
 ```
 
-Planned Ollama chat configuration:
+Ollama chat configuration:
 
 ```env
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=300
+AGENTIC_RAG_LLM_MAX_TOKENS=160
 ```
+
+Large local models can need longer on the first request because Ollama has to load
+the model into memory. Increase `AGENTIC_RAG_LLM_TIMEOUT_SECONDS` when first
+requests time out during model startup.
+
+On CPU-only Docker runs, generation can also be slow. Lower
+`AGENTIC_RAG_LLM_MAX_TOKENS` for live tests when a large model takes too long to
+finish.
 
 Planned OpenAI-style configuration:
 

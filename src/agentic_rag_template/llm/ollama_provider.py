@@ -18,12 +18,14 @@ class OllamaLLMProvider:
         model: str,
         api_base_url: str = "http://localhost:11434",
         api_key: str = "",
-        timeout_seconds: int = 120,
+        timeout_seconds: int = 300,
+        max_tokens: int = 160,
     ) -> None:
         self.model = model
         self.api_base_url = api_base_url.rstrip("/")
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self.max_tokens = max_tokens
 
     def generate_answer(self, request_payload: LLMRequest) -> LLMResponse:
         if not request_payload.retrieved_chunks:
@@ -36,7 +38,7 @@ class OllamaLLMProvider:
                 trace=["skipped_ollama_no_context"],
             )
 
-        response = self._post_chat(build_payload(request_payload, self.model))
+        response = self._post_chat(build_payload(request_payload, self.model, self.max_tokens))
         answer = str(response.get("message", {}).get("content", "")).strip()
 
         if not answer:
@@ -69,11 +71,15 @@ class OllamaLLMProvider:
             raise RuntimeError(f"Ollama request failed: {exc}") from exc
 
 
-def build_payload(request_payload: LLMRequest, model: str) -> Dict[str, Any]:
+def build_payload(request_payload: LLMRequest, model: str, max_tokens: int = 160) -> Dict[str, Any]:
     """Build an Ollama chat payload with local context and citation instructions."""
     return {
         "model": model,
         "stream": False,
+        "options": {
+            "temperature": 0.2,
+            "num_predict": max_tokens,
+        },
         "messages": [
             {
                 "role": "system",

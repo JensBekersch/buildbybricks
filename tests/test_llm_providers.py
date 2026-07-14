@@ -33,11 +33,15 @@ def test_llm_factory_creates_ollama_provider() -> None:
             llm_provider="ollama",
             llm_model="llama3.1",
             llm_api_base_url="http://ollama:11434",
+            llm_timeout_seconds=240,
+            llm_max_tokens=80,
         )
     )
 
     assert provider.name == "ollama"
     assert provider.model == "llama3.1"
+    assert provider.timeout_seconds == 240
+    assert provider.max_tokens == 80
 
 
 def test_deterministic_llm_provider_keeps_existing_grounded_answer_shape() -> None:
@@ -66,6 +70,7 @@ def test_ollama_payload_contains_context_and_citation_instructions() -> None:
 
     assert payload["model"] == "llama3.1"
     assert payload["stream"] is False
+    assert payload["options"]["num_predict"] == 160
     assert "Use only local sources." in payload["messages"][0]["content"]
     assert "sample/guide.md" in payload["messages"][1]["content"]
 
@@ -83,7 +88,7 @@ def test_ollama_provider_parses_chat_response(monkeypatch) -> None:
 
     def fake_urlopen(req, timeout):
         assert req.full_url == "http://ollama:11434/api/chat"
-        assert timeout == 120
+        assert timeout == 300
         return FakeHTTPResponse()
 
     monkeypatch.setattr("agentic_rag_template.llm.ollama_provider.request.urlopen", fake_urlopen)

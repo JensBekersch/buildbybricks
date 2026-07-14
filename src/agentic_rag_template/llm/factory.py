@@ -13,6 +13,8 @@ def config_from_settings(settings: Settings) -> LLMProviderConfig:
         model=settings.llm_model,
         api_base_url=settings.llm_api_base_url,
         api_key=settings.llm_api_key,
+        timeout_seconds=settings.llm_timeout_seconds,
+        max_tokens=settings.llm_max_tokens,
     )
 
 
@@ -29,6 +31,8 @@ def create_llm_provider(settings: Settings) -> LLMProvider:
             model=config.model,
             api_base_url=config.api_base_url,
             api_key=config.api_key,
+            timeout_seconds=config.timeout_seconds,
+            max_tokens=config.max_tokens,
         )
 
     raise ValueError(

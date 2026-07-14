@@ -42,3 +42,5 @@ class LLMProviderConfig:
     model: str = "local-deterministic-v1"
     api_base_url: str = "http://localhost:11434"
     api_key: str = ""
+    timeout_seconds: int = 300
+    max_tokens: int = 160

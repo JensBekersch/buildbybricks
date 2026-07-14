@@ -243,12 +243,14 @@ AGENTIC_RAG_LLM_MODEL=local-deterministic-v1
 AGENTIC_RAG_LLM_API_BASE_URL=http://host.docker.internal:11434
 ```
 
-Spaeter kann Ollama so konfiguriert werden:
+Ollama kann so konfiguriert werden:
 
 ```text
 AGENTIC_RAG_LLM_PROVIDER=ollama
 AGENTIC_RAG_LLM_MODEL=llama3.1
 AGENTIC_RAG_LLM_API_BASE_URL=http://ollama:11434
+AGENTIC_RAG_LLM_TIMEOUT_SECONDS=300
+AGENTIC_RAG_LLM_MAX_TOKENS=160
 ```
 
 Ollama kann optional als zweiter Compose-Service gestartet werden:
