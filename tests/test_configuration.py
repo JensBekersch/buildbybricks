@@ -6,7 +6,7 @@ def test_settings_default_llm_timeout_allows_local_agentic_runs(monkeypatch) -> 
     monkeypatch.delenv("AGENTIC_RAG_LLM_MAX_TOKENS", raising=False)
     settings = Settings.from_env()
 
-    assert settings.llm_timeout_seconds == 1200
+    assert settings.llm_timeout_seconds == 3600
     assert settings.llm_max_tokens == 4096
 
 

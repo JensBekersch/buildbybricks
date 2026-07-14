@@ -26,7 +26,7 @@ class Settings:
     llm_model: str = "local-deterministic-v1"
     llm_api_base_url: str = "http://localhost:11434"
     llm_api_key: str = ""
-    llm_timeout_seconds: int = 1200
+    llm_timeout_seconds: int = 3600
     llm_max_tokens: int = 4096
     architecture_generation_mode: str = "agentic_with_review"
     database_url: str = "postgresql://agentic_rag:agentic_rag@localhost:5432/agentic_rag"
@@ -60,7 +60,7 @@ class Settings:
                 "http://localhost:11434",
             ),
             llm_api_key=os.getenv("AGENTIC_RAG_LLM_API_KEY", ""),
-            llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "1200")),
+            llm_timeout_seconds=int(os.getenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "3600")),
             llm_max_tokens=int(os.getenv("AGENTIC_RAG_LLM_MAX_TOKENS", "4096")),
             architecture_generation_mode=os.getenv(
                 "AGENTIC_RAG_ARCHITECTURE_GENERATION_MODE",
