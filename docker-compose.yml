@@ -33,6 +33,9 @@ services:
       - ./data:/app/data
       - ./template:/app/template:ro
       - ./apps:/app/apps:ro
+    networks:
+      - default
+      - platform_proxy
 
   worker:
     build:
@@ -119,6 +122,14 @@ services:
       - grafana:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - default
+      - platform_proxy
+
+networks:
+  platform_proxy:
+    external: true
+    name: "${PLATFORM_PROXY_NETWORK:-platform_proxy}"
 
 volumes:
   ollama:
