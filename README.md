@@ -267,6 +267,12 @@ docker compose up --build
 
 Danach ist das Frontend unter `http://localhost:8000` erreichbar. Der Health-Check liegt unter `http://localhost:8000/health`; der Chat sendet Nachrichten an `POST /chat`.
 
+Ein kompletter Boot- und Smoke-Test-Aufbau ist in [TEST_SETUP.md](TEST_SETUP.md) beschrieben. Kurzform:
+
+```bash
+python3 scripts/smoke_test.py
+```
+
 Nuetzliche lokale Endpunkte:
 
 - `GET /collections` zeigt die erkannten Collections unter `data/`
