@@ -55,13 +55,16 @@ Architecture Decisions, Acceptance Criteria und einen Readiness-Status. Damit
 ist das Sheet nicht nur Dokumentation, sondern ein pruefbarer Arbeitsvertrag fuer
 Folgeagenten.
 
-Der erste Generator-Endpunkt ist:
+Die Generator-API ist job-basiert. Der synchrone Endpunkt wurde entfernt, damit
+Langlauf-Agenten nicht hinter einem blockierenden HTTP-Request versteckt werden.
 
 ```text
-POST /apps/software-factory/architecture-sheet
+POST /apps/software-factory/architecture-sheet/jobs
+GET  /apps/software-factory/architecture-sheet/jobs
+GET  /apps/software-factory/architecture-sheet/jobs/{job_id}
 ```
 
-Beispiel:
+Create-Beispiel:
 
 ```json
 {
@@ -70,8 +73,10 @@ Beispiel:
 }
 ```
 
-Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
-`generation`. Der Generator unterstuetzt zwei sichtbare Modi:
+Die Antwort enthaelt zunaechst einen persistenten Job mit `id`, `status`,
+`steps`, `logs`, Modellinformationen und spaeter `result`. Die eigentliche
+Ausfuehrung wird im Worker-Ausbauschritt an diese Jobs angebunden. Der Generator
+unterstuetzt zwei sichtbare Modi:
 
 - `agentic`: Requirement Analyst und Architecture Synthesizer laufen als
   strukturierte LLM-Schritte.
@@ -79,9 +84,8 @@ Die Antwort enthaelt `architecture_sheet`, `validation`, `sources`, `trace` und
   auf Scope-Fehler, Platzhalter und fehlende Kernobjekte.
 
 `generation_mode` ist optional und faellt dann auf `agentic_with_review`
-zurueck. Der Endpunkt erzeugt kein deterministisches oder generisches
-Fallback-Sheet. Wenn kein strukturierter LLM-Provider konfiguriert ist oder die
-agentische Pipeline fehlschlaegt, antwortet die API mit einem Fehler.
+zurueck. Der Generator erzeugt kein deterministisches oder generisches
+Fallback-Sheet.
 
 ## Grundkonstrukt
 

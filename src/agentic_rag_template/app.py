@@ -20,8 +20,9 @@ from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.software_factory import (
-    ArchitectureSheetGenerationError,
-    generate_architecture_sheet,
+    ArchitectureGenerationJob,
+    ArchitectureGenerationJobStoreError,
+    PostgresArchitectureGenerationJobStore,
 )
 from agentic_rag_template.template_config import load_application_profile
 
@@ -40,8 +41,9 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
     settings: Settings
 
-    def __init__(self, *args: Any, settings: Settings, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, settings: Settings, architecture_job_store: Any = None, **kwargs: Any) -> None:
         self.settings = settings
+        self.architecture_job_store = architecture_job_store
         super().__init__(*args, directory=str(settings.frontend_dir), **kwargs)
 
     def do_GET(self) -> None:
@@ -92,6 +94,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 self._send_json(self._run_evaluation(application))
                 return
 
+            if app_route["remainder"] == "/architecture-sheet/jobs":
+                self._send_json(self._list_architecture_jobs(application))
+                return
+
+            architecture_job_id = self._parse_architecture_job_route(app_route["remainder"])
+            if architecture_job_id is not None:
+                self._send_architecture_job_response(application, architecture_job_id)
+                return
+
         if parsed_url.path == "/apps":
             self._send_json(self._list_applications())
             return
@@ -134,13 +145,13 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_chat_response(application)
             return
 
-        if app_route and app_route["remainder"] == "/architecture-sheet":
+        if app_route and app_route["remainder"] == "/architecture-sheet/jobs":
             application = self._find_application(app_route["app_id"])
 
             if application is None:
                 return
 
-            self._send_architecture_sheet_response(application)
+            self._send_architecture_job_created_response(application)
             return
 
         if app_route:
@@ -164,10 +175,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         self._send_chat_response(self._default_application())
 
-    def _send_architecture_sheet_response(self, application: ApplicationInstance) -> None:
+    def _send_architecture_job_created_response(self, application: ApplicationInstance) -> None:
         if application.id != "software-factory":
             self._send_json(
-                {"error": "architecture-sheet is only available for the software-factory app"},
+                {"error": "architecture-sheet jobs are only available for the software-factory app"},
                 status=HTTPStatus.BAD_REQUEST,
             )
             return
@@ -185,20 +196,59 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         llm_provider = create_llm_provider(self.settings)
 
         try:
-            result = generate_architecture_sheet(
-                description,
-                application,
-                llm_provider=llm_provider,
+            job = ArchitectureGenerationJob.create(
+                description=description,
                 generation_mode=generation_mode,
+                app_id=application.id,
+                llm_provider=getattr(llm_provider, "name", "none"),
+                llm_model=getattr(llm_provider, "model", "none"),
             )
-        except FileNotFoundError as error:
-            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
-            return
-        except (ArchitectureSheetGenerationError, ValueError) as error:
+            self._architecture_job_store().save(job)
+        except ValueError as error:
             self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
             return
+        except ArchitectureGenerationJobStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
 
-        self._send_json(result.to_dict())
+        self._send_json({"job": job.to_dict()}, status=HTTPStatus.ACCEPTED)
+
+    def _list_architecture_jobs(self, application: ApplicationInstance) -> Dict[str, Any]:
+        if application.id != "software-factory":
+            return {"error": "architecture-sheet jobs are only available for the software-factory app"}
+
+        try:
+            jobs = self._architecture_job_store().list()
+        except ArchitectureGenerationJobStoreError as error:
+            return {"error": str(error)}
+
+        return {
+            "jobs": [
+                job.to_dict(include_result=False)
+                for job in jobs
+                if job.app_id == application.id
+            ]
+        }
+
+    def _send_architecture_job_response(self, application: ApplicationInstance, job_id: str) -> None:
+        if application.id != "software-factory":
+            self._send_json(
+                {"error": "architecture-sheet jobs are only available for the software-factory app"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        try:
+            job = self._architecture_job_store().get(job_id)
+        except ArchitectureGenerationJobStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        if job is None or job.app_id != application.id:
+            self._send_json({"error": "architecture generation job not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        self._send_json({"job": job.to_dict()})
 
     def _send_chat_response(self, application: ApplicationInstance) -> None:
         payload = self._read_json_body()
@@ -478,6 +528,22 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         return None
 
+    def _parse_architecture_job_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 3 and parts[0] == "architecture-sheet" and parts[1] == "jobs" and parts[2]:
+            return parts[2]
+
+        return None
+
+    def _architecture_job_store(self) -> Any:
+        if self.architecture_job_store is not None:
+            return self.architecture_job_store
+
+        self.architecture_job_store = PostgresArchitectureGenerationJobStore(self.settings.database_url)
+        self.architecture_job_store.initialize()
+        return self.architecture_job_store
+
     def _is_safe_collection_name(self, collection: str) -> bool:
         return bool(SAFE_COLLECTION_PATTERN.fullmatch(collection))
 
@@ -513,12 +579,16 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def create_server(settings: Optional[Settings] = None) -> ThreadingHTTPServer:
+def create_server(settings: Optional[Settings] = None, architecture_job_store: Any = None) -> ThreadingHTTPServer:
     """Create a local HTTP server for API and frontend requests."""
     active_settings = settings or create_app_settings()
     frontend_dir = Path(active_settings.frontend_dir)
     frontend_dir.mkdir(parents=True, exist_ok=True)
-    handler = partial(AgenticRagRequestHandler, settings=active_settings)
+    handler = partial(
+        AgenticRagRequestHandler,
+        settings=active_settings,
+        architecture_job_store=architecture_job_store,
+    )
     return ThreadingHTTPServer((active_settings.host, active_settings.port), handler)
 
 

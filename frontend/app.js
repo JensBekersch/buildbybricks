@@ -44,30 +44,6 @@ const architectureTrace = document.querySelector("#architecture-trace");
 let applications = [];
 let activeAppId = "default";
 let activeCollection = "";
-let architectureProgressTimer = null;
-let architectureProgressStartedAt = 0;
-let architectureProgressStepIndex = 0;
-
-const architectureProgressMessages = [
-  "Ich pruefe die Beschreibung und sammle Anforderungen.",
-  "Ich trenne Fachziel, Nutzer, Funktionen und Randbedingungen.",
-  "Ich gleiche die Vorgabe mit der Architecture-Sheet-Struktur ab.",
-  "Ich entwerfe Architecture Drivers und Qualitaetsziele.",
-  "Ich denke ueber Kontext, Schnittstellen und Django-Bausteine nach.",
-  "Ich formuliere Laufzeitszenarien, Risiken und offene Fragen.",
-  "Ich lasse das Sheet fachlich gegen die Vorgabe pruefen.",
-  "Ich validiere die Struktur und bereite die Anzeige vor.",
-];
-
-const architectureProgressStepsTemplate = [
-  { id: "validated_message", label: "Beschreibung pruefen" },
-  { id: "loaded_architecture_sheet_schema", label: "Schema laden" },
-  { id: "loaded_architecture_method_sources", label: "Methodenwissen lesen" },
-  { id: "analyzed_requirements", label: "Anforderungen analysieren" },
-  { id: "synthesized_architecture_sheet", label: "Architecture Sheet erzeugen" },
-  { id: "reviewed_architecture_sheet", label: "Architecture Review ausfuehren" },
-  { id: "validated_architecture_sheet_contract", label: "Schema validieren" },
-];
 
 function appPath(appId, ...segments) {
   return ["/apps", appId, ...segments]
@@ -282,8 +258,14 @@ function createElement(tagName, className, text = "") {
   return element;
 }
 
-function formatElapsedTime(milliseconds) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+function formatElapsedTime(startedAt, finishedAt = "") {
+  if (!startedAt) {
+    return "0s";
+  }
+
+  const start = new Date(startedAt).getTime();
+  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+  const totalSeconds = Math.max(0, Math.floor((end - start) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
 
@@ -294,69 +276,39 @@ function formatElapsedTime(milliseconds) {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-function renderArchitectureProgressSteps(activeIndex = 0, completedTrace = []) {
-  const completed = new Set(completedTrace);
+function renderArchitectureJob(job) {
+  architectureProgress.hidden = false;
   architectureProgressSteps.replaceChildren();
 
-  architectureProgressStepsTemplate.forEach((step, index) => {
-    const item = document.createElement("li");
-    const isDone = completed.has(step.id) || index < activeIndex;
-    const isActive = !isDone && index === activeIndex;
+  const activeStep = (job.steps || []).find((step) => step.key === job.current_step);
+  const statusText = {
+    queued: "Job wurde angelegt und wartet auf Ausfuehrung.",
+    running: activeStep ? activeStep.label : "Job wird ausgefuehrt.",
+    completed: "Architecture Sheet ist erstellt.",
+    failed: job.error || "Job ist fehlgeschlagen.",
+    canceled: job.error || "Job wurde abgebrochen.",
+  };
 
-    item.dataset.state = isDone ? "done" : isActive ? "active" : "waiting";
+  architectureProgressLabel.textContent = statusText[job.status] || job.status;
+  architectureProgressElapsed.textContent = formatElapsedTime(job.started_at || job.created_at, job.finished_at);
+
+  (job.steps || []).forEach((step) => {
+    const item = document.createElement("li");
+    item.dataset.state =
+      step.status === "completed"
+        ? "done"
+        : step.status === "running"
+          ? "active"
+          : step.status === "failed"
+            ? "failed"
+            : step.status || "waiting";
     item.textContent = step.label;
     architectureProgressSteps.append(item);
   });
-}
 
-function updateArchitectureProgress() {
-  const elapsed = Date.now() - architectureProgressStartedAt;
-  const messageIndex = Math.min(
-    architectureProgressMessages.length - 1,
-    Math.floor(elapsed / 15000)
-  );
-  const stepIndex = Math.min(
-    architectureProgressStepsTemplate.length - 1,
-    Math.floor(elapsed / 30000)
-  );
-
-  architectureProgressStepIndex = Math.max(architectureProgressStepIndex, stepIndex);
-  architectureProgressLabel.textContent = architectureProgressMessages[messageIndex];
-  architectureProgressElapsed.textContent = formatElapsedTime(elapsed);
-  renderArchitectureProgressSteps(architectureProgressStepIndex);
-}
-
-function startArchitectureProgress() {
-  stopArchitectureProgress();
-  architectureProgressStartedAt = Date.now();
-  architectureProgressStepIndex = 0;
-  architectureProgress.hidden = false;
-  updateArchitectureProgress();
-  architectureProgressTimer = window.setInterval(updateArchitectureProgress, 1000);
-}
-
-function stopArchitectureProgress() {
-  if (architectureProgressTimer) {
-    window.clearInterval(architectureProgressTimer);
-    architectureProgressTimer = null;
+  if (job.result) {
+    renderArchitectureResult(job.result);
   }
-}
-
-function completeArchitectureProgress(trace = []) {
-  stopArchitectureProgress();
-  architectureProgressLabel.textContent = "Architecture Sheet ist erstellt.";
-  architectureProgressElapsed.textContent = formatElapsedTime(Date.now() - architectureProgressStartedAt);
-  renderArchitectureProgressSteps(0, trace);
-}
-
-function failArchitectureProgress(message) {
-  stopArchitectureProgress();
-  architectureProgress.hidden = false;
-  architectureProgressLabel.textContent = message || "Generierung abgebrochen.";
-  architectureProgressElapsed.textContent = architectureProgressStartedAt
-    ? formatElapsedTime(Date.now() - architectureProgressStartedAt)
-    : "0s";
-  renderArchitectureProgressSteps(architectureProgressStepIndex);
 }
 
 function valueText(value) {
@@ -516,28 +468,29 @@ async function generateArchitectureSheet() {
     return;
   }
 
-  architectureStatus.textContent = "Generator laeuft. Das kann mit lokalem Ollama mehrere Minuten dauern.";
+  architectureStatus.textContent = "Job wird angelegt.";
   generateArchitectureButton.disabled = true;
-  generateArchitectureButton.textContent = "Generator arbeitet...";
-  startArchitectureProgress();
-  setRuntimeStatus("Generiert...", "neutral");
+  generateArchitectureButton.textContent = "Job wird angelegt...";
+  setRuntimeStatus("Job anlegen...", "neutral");
 
   try {
-    const payload = await postJson(appPath("software-factory", "architecture-sheet"), {
+    const payload = await postJson(appPath("software-factory", "architecture-sheet", "jobs"), {
       description,
       generation_mode: architectureGenerationMode.value,
     });
 
-    renderArchitectureResult(payload);
-    completeArchitectureProgress(payload.trace || []);
-    architectureStatus.textContent = "Architecture Sheet erstellt.";
+    renderArchitectureJob(payload.job);
+    architectureStatus.textContent = `Job ${payload.job.id} wurde angelegt.`;
     setRuntimeStatus("Bereit", "ok");
   } catch (error) {
-    failArchitectureProgress(error.message || "Architecture Sheet konnte nicht erstellt werden.");
+    architectureProgress.hidden = false;
+    architectureProgressLabel.textContent = error.message || "Job konnte nicht angelegt werden.";
+    architectureProgressElapsed.textContent = "0s";
+    architectureProgressSteps.replaceChildren();
     throw error;
   } finally {
     generateArchitectureButton.disabled = false;
-    generateArchitectureButton.textContent = "Architecture Sheet erstellen";
+    generateArchitectureButton.textContent = "Architecture Job anlegen";
   }
 }
 

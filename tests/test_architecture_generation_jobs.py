@@ -89,3 +89,16 @@ def test_architecture_generation_job_can_hide_result_in_summary() -> None:
 
     assert payload["status"] == JOB_STATUS_RUNNING
     assert "result" not in payload
+
+
+def test_architecture_generation_job_rejects_unknown_generation_mode() -> None:
+    try:
+        ArchitectureGenerationJob.create(
+            "Eine Django App fuer Aufgaben.",
+            generation_mode="fast",
+            job_id="job-5",
+        )
+    except ValueError as error:
+        assert "generation_mode" in str(error)
+    else:
+        raise AssertionError("Unknown generation modes must be rejected.")

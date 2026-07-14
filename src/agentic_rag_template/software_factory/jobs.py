@@ -181,12 +181,15 @@ class ArchitectureGenerationJob:
         normalized_description = " ".join(description.strip().split())
         if not normalized_description:
             raise ValueError("description is required")
+        normalized_generation_mode = (generation_mode or "agentic_with_review").strip().lower().replace("-", "_")
+        if normalized_generation_mode not in {"agentic", "agentic_with_review"}:
+            raise ValueError("generation_mode must be 'agentic' or 'agentic_with_review'")
 
         job = cls(
             id=job_id or uuid4().hex,
             app_id=app_id,
             description=normalized_description,
-            generation_mode=generation_mode,
+            generation_mode=normalized_generation_mode,
             llm_provider=llm_provider,
             llm_model=llm_model,
             steps=[

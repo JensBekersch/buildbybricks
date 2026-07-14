@@ -8,6 +8,7 @@ from agentic_rag_template.app import create_server
 from agentic_rag_template.applications import FileApplicationRegistry
 from agentic_rag_template.config import Settings
 from agentic_rag_template.software_factory import (
+    ArchitectureGenerationJob,
     ArchitectureSheetGenerationError,
     generate_architecture_sheet,
 )
@@ -189,6 +190,20 @@ class TodoArchitectureLLMProvider:
         raise AssertionError(system_prompt)
 
 
+class FakeArchitectureJobStore:
+    def __init__(self) -> None:
+        self.jobs = {}
+
+    def save(self, job: ArchitectureGenerationJob) -> None:
+        self.jobs[job.id] = job
+
+    def get(self, job_id: str):
+        return self.jobs.get(job_id)
+
+    def list(self):
+        return list(self.jobs.values())
+
+
 def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     settings = Settings(
         apps_dir=PROJECT_ROOT / "apps",
@@ -302,7 +317,7 @@ def test_generate_architecture_sheet_preserves_explicit_no_login_requirement() -
     assert "98 Prozent Coverage".lower() in all_text
 
 
-def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
+def test_architecture_sheet_endpoint_is_removed() -> None:
     settings = Settings(
         frontend_dir=PROJECT_ROOT / "frontend",
         apps_dir=PROJECT_ROOT / "apps",
@@ -317,7 +332,7 @@ def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
 
     try:
         host, port = server.server_address
-        architecture_request = request.Request(
+        old_request = request.Request(
             f"http://{host}:{port}/apps/software-factory/architecture-sheet",
             data=json.dumps(
                 {
@@ -331,13 +346,74 @@ def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
             method="POST",
         )
         try:
-            request.urlopen(architecture_request, timeout=2)
+            request.urlopen(old_request, timeout=2)
         except HTTPError as error:
-            payload = json.loads(error.read().decode("utf-8"))
-            assert error.status == 400
-            assert "requires a structured LLM provider" in payload["error"]
+            assert error.status == 404
         else:
-            raise AssertionError("Endpoint must fail without a structured LLM provider.")
+            raise AssertionError("Old synchronous architecture sheet endpoint must be removed.")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def test_architecture_sheet_job_endpoints_create_list_and_get_job() -> None:
+    settings = Settings(
+        frontend_dir=PROJECT_ROOT / "frontend",
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+        host="127.0.0.1",
+        port=0,
+        llm_provider="ollama",
+        llm_model="qwen3:14b",
+    )
+    store = FakeArchitectureJobStore()
+    server = create_server(settings, architecture_job_store=store)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        create_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs",
+            data=json.dumps(
+                {
+                    "description": "Eine Django-Anwendung fuer Kundenverwaltung.",
+                    "generation_mode": "agentic",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(create_request, timeout=2) as response:
+            assert response.status == 202
+            created = json.loads(response.read().decode("utf-8"))
+
+        job_id = created["job"]["id"]
+        assert created["job"]["status"] == "queued"
+        assert created["job"]["description"] == "Eine Django-Anwendung fuer Kundenverwaltung."
+        assert created["job"]["generation_mode"] == "agentic"
+        assert created["job"]["llm_provider"] == "ollama"
+        assert created["job"]["llm_model"] == "qwen3:14b"
+
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs",
+            timeout=2,
+        ) as response:
+            listed = json.loads(response.read().decode("utf-8"))
+
+        assert [job["id"] for job in listed["jobs"]] == [job_id]
+        assert "result" not in listed["jobs"][0]
+
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/architecture-sheet/jobs/{job_id}",
+            timeout=2,
+        ) as response:
+            loaded = json.loads(response.read().decode("utf-8"))
+
+        assert loaded["job"]["id"] == job_id
+        assert loaded["job"]["result"] is None
     finally:
         server.shutdown()
         server.server_close()
