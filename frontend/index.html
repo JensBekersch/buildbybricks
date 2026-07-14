@@ -74,6 +74,14 @@
           <div class="panel-kicker">Software Factory</div>
           <h2>Architecture Sheet</h2>
           <form id="architecture-form" class="architecture-form">
+            <div id="architecture-progress" class="architecture-progress" hidden aria-live="polite">
+              <div class="progress-head">
+                <span id="architecture-progress-label">Bereite Generator vor</span>
+                <span id="architecture-progress-elapsed">0s</span>
+              </div>
+              <ol id="architecture-progress-steps" class="progress-steps"></ol>
+            </div>
+
             <label for="architecture-description">Softwareartefakt</label>
             <textarea id="architecture-description" name="description" rows="13" placeholder="Beschreibe Ziel, Nutzer, Kernfunktionen, Integrationen, Qualitaetsanforderungen und Randbedingungen."></textarea>
 
@@ -154,6 +162,6 @@
         </aside>
       </section>
     </main>
-    <script src="app.js?v=architecture-workspace"></script>
+    <script src="app.js?v=architecture-progress"></script>
   </body>
 </html>
