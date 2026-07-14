@@ -5,7 +5,7 @@ from typing import Iterable, List, Optional
 
 from agentic_rag_template.ingestion.models import SourceDocument
 
-SUPPORTED_EXTENSIONS = {".md", ".txt"}
+SUPPORTED_EXTENSIONS = {".json", ".md", ".txt"}
 
 
 def discover_collections(data_dir: Path) -> List[str]:

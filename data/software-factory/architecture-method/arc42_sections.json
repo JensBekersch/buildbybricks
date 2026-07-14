@@ -1,0 +1,390 @@
+{
+  "schema_version": "1.0.0",
+  "source_note": "Paraphrasierte, fuer die BuildByBricks Software Factory operationalisierte arc42-Kapitelreferenz. Nicht als wortgetreue Kopie der arc42-Dokumentation verwenden.",
+  "language": "de",
+  "principles": [
+    "Alle Kapitel muessen aus input_summary, in_scope, core_facts oder explizit markierten Annahmen ableitbar sein.",
+    "Nicht belegte Features duerfen nicht als Architektur, Risiko, Qualitaetsziel oder Entscheidung erscheinen.",
+    "Out-of-scope-Inhalte duerfen nur in Abgrenzung, offenen Fragen oder expliziten Nicht-Zielen erscheinen.",
+    "Jedes Kapitel soll knapp genug fuer Review, aber konkret genug fuer nachgelagerte Workorders sein.",
+    "Deutsch ist die Standardsprache; technische Eigennamen wie Django, REST, API, PostgreSQL oder Docker duerfen unveraendert bleiben."
+  ],
+  "sections": [
+    {
+      "id": "1",
+      "key": "introduction_and_goals",
+      "title": "Einfuehrung und Ziele",
+      "content": "Beschreibt fachlichen Anlass, Zielbild, wichtigste Anforderungen, Stakeholder und priorisierte Qualitaetsziele.",
+      "motivation": "Alle Beteiligten sollen verstehen, warum das System gebaut wird, welchen Nutzen es liefert und welche Ziele Architekturentscheidungen treiben.",
+      "form": [
+        "kurze Zielbeschreibung",
+        "Stakeholderliste mit Erwartungen",
+        "Top-Qualitaetsziele mit Szenarien",
+        "Nicht-Ziele, wenn sie fuer Scope-Abgrenzung wichtig sind"
+      ],
+      "must_include": [
+        "fachliches Ziel in deutscher Sprache",
+        "Nutzer- oder Stakeholdergruppen aus der Anforderung",
+        "maximal drei bis fuenf priorisierte Qualitaetsziele",
+        "explizite Nicht-Ziele, sofern in der Anforderung ausgeschlossen"
+      ],
+      "must_not_include": [
+        "technische Loesungsdetails ohne Zielbezug",
+        "nicht geforderte Stakeholdergruppen",
+        "generische Ziele wie 'modern' oder 'skalierbar' ohne Szenario"
+      ],
+      "review_checks": [
+        "Sind Ziel und Stakeholder direkt aus input_summary oder in_scope ableitbar?",
+        "Sind Qualitaetsziele konkret genug, um spaeter getestet oder bewertet zu werden?",
+        "Wurden ausgeschlossene Anforderungen als Nicht-Ziele statt als Features behandelt?"
+      ],
+      "django_guidance": [
+        "Bei kleinen internen Anwendungen nicht automatisch Accounts, Teams oder Mandanten einfuehren.",
+        "Testabdeckung, Bedienbarkeit und Datenintegritaet als Qualitaetsziele nur aufnehmen, wenn sie gefordert oder plausibel begruendet sind."
+      ]
+    },
+    {
+      "id": "2",
+      "key": "constraints",
+      "title": "Randbedingungen",
+      "content": "Sammelt technische, organisatorische, rechtliche und betriebliche Vorgaben, die Architekturentscheidungen begrenzen.",
+      "motivation": "Randbedingungen sind oft nicht verhandelbar. Sie verhindern, dass der Generator Loesungen vorschlaegt, die zwar attraktiv, aber nicht zulaessig sind.",
+      "form": [
+        "Liste von Randbedingungen",
+        "je Randbedingung kurze Auswirkung",
+        "Trennung zwischen Fakt, Annahme und offener Frage"
+      ],
+      "must_include": [
+        "explizit genannte Technologien wie Django",
+        "explizit ausgeschlossene Funktionen wie kein Login",
+        "Test-, Betriebs- oder Deployment-Vorgaben aus der Anforderung"
+      ],
+      "must_not_include": [
+        "Cloud-, Skalierungs- oder Integrationseinschraenkungen ohne Beleg",
+        "Technologien, die nur typischerweise verwendet werden, aber nicht gefordert sind"
+      ],
+      "review_checks": [
+        "Ist jede Randbedingung belegt oder als Annahme markiert?",
+        "Widerspricht keine Randbedingung der Anforderung?",
+        "Sind Nicht-Ziele klar von technischen Entscheidungen getrennt?"
+      ],
+      "django_guidance": [
+        "Django ist eine harte Randbedingung, wenn die Anwendung als Django-App beschrieben wird.",
+        "PostgreSQL, Redis, Celery oder Cloud-Services nur als Annahme oder offene Frage aufnehmen, wenn nicht gefordert."
+      ]
+    },
+    {
+      "id": "3",
+      "key": "context_and_scope",
+      "title": "Kontext und Abgrenzung",
+      "content": "Beschreibt Systemgrenze, Nutzer, Nachbarsysteme, aktuelle Schnittstellen und explizite Abgrenzungen.",
+      "motivation": "Das Team soll verstehen, was zum System gehoert, was ausserhalb liegt und ueber welche Schnittstellen Interaktion stattfindet.",
+      "form": [
+        "Kontextbeschreibung in Textform",
+        "Nutzer- und Nachbarsystemliste",
+        "Schnittstellenliste",
+        "In-Scope- und Out-of-Scope-Abgrenzung"
+      ],
+      "must_include": [
+        "alle belegten Nutzergruppen",
+        "aktuelle Schnittstellen aus der Anforderung",
+        "ausgeschlossene oder nicht belegte Nachbarsysteme als Abgrenzung"
+      ],
+      "must_not_include": [
+        "externe Systeme, die nicht erwaehnt wurden",
+        "zukuenftige APIs als aktuelle Schnittstellen",
+        "Projektmanagement-Tools ohne expliziten Beleg"
+      ],
+      "review_checks": [
+        "Sind alle Schnittstellen entweder in_scope oder als future/open question markiert?",
+        "Enthaelt der Kontext keine erfundenen Nachbarsysteme?",
+        "Sind ausgeschlossene Begriffe nicht als Systembestandteile modelliert?"
+      ],
+      "django_guidance": [
+        "Eine serverseitige Django-Weboberflaeche ist eine typische aktuelle Schnittstelle.",
+        "Django Admin nur aufnehmen, wenn interne Pflege oder Administration gefordert ist."
+      ]
+    },
+    {
+      "id": "4",
+      "key": "solution_strategy",
+      "title": "Loesungsstrategie",
+      "content": "Fasst die wichtigsten Loesungsideen zusammen, die das System fachlich und technisch tragfaehig machen.",
+      "motivation": "Stakeholder sollen die Leitidee der Architektur verstehen, ohne zuerst alle Detailansichten lesen zu muessen.",
+      "form": [
+        "wenige Abschnitte mit Kernideen",
+        "Bezug auf wichtigste Qualitaetsziele",
+        "klarer Zusammenhang zwischen Anforderungen und Loesungsansatz"
+      ],
+      "must_include": [
+        "warum der vorgeschlagene Django-Schnitt zur Anforderung passt",
+        "wie Kernobjekte, Workflows und Tests grob organisiert werden",
+        "welche Komplexitaet bewusst vermieden wird"
+      ],
+      "must_not_include": [
+        "Features ausserhalb in_scope",
+        "lange Implementierungsdetails",
+        "technische Muster ohne Bezug zur Anforderung"
+      ],
+      "review_checks": [
+        "Erklaert die Strategie die wichtigsten Architekturentscheidungen?",
+        "Bleibt die Strategie klein, wenn die Anforderung klein ist?",
+        "Vermeidet sie nicht belegte Integrationen, Rollen oder Datenmodelle?"
+      ],
+      "django_guidance": [
+        "Fuer einfache Anwendungen genuegen oft Models, Forms/Views, Templates und Tests.",
+        "Services nur einfuehren, wenn fachliche Regeln oder Wiederverwendung dies rechtfertigen."
+      ]
+    },
+    {
+      "id": "5",
+      "key": "building_block_view",
+      "title": "Bausteinsicht",
+      "content": "Beschreibt die statische Struktur des Systems: fachliche Module, Django-Apps, zentrale Klassen, Verantwortlichkeiten und Abhaengigkeiten.",
+      "motivation": "Die Bausteinsicht macht sichtbar, wie das System zerlegt wird und welche Teile spaeter von Implementierungsagenten bearbeitet werden.",
+      "form": [
+        "hierarchische Bausteinliste",
+        "je Baustein Verantwortung und Django-Zuordnung",
+        "optional Abhaengigkeiten zwischen Bausteinen"
+      ],
+      "must_include": [
+        "Bausteine fuer belegte Kernobjekte",
+        "Verantwortung je Baustein",
+        "Django-Mapping, z. B. App, Model, View, Form, Service oder Testmodul"
+      ],
+      "must_not_include": [
+        "Apps fuer nicht belegte Features",
+        "Accounts-, Teams- oder Projektmodule, wenn ausgeschlossen oder nicht belegt",
+        "generische Bausteine ohne fachliche Verantwortung"
+      ],
+      "review_checks": [
+        "Laesst sich jeder Baustein auf in_scope oder core_facts zurueckfuehren?",
+        "Sind Bausteine klein genug fuer spaetere Workorders?",
+        "Sind ausgeschlossene Features nicht als Bausteine enthalten?"
+      ],
+      "django_guidance": [
+        "Kernobjekte werden meist als Django Models mit Tests abgebildet.",
+        "Fuer einfache Todo-Listen kann ein einzelnes Aufgabenmodul ausreichen."
+      ]
+    },
+    {
+      "id": "6",
+      "key": "runtime_view",
+      "title": "Laufzeitsicht",
+      "content": "Beschreibt ausgewaehlte architekturrelevante Ablaufszenarien und die Interaktion beteiligter Bausteine zur Laufzeit.",
+      "motivation": "Die Laufzeitsicht zeigt, wie Bausteine zusammenarbeiten. Sie hilft Stakeholdern, Verhalten und Architekturbezug besser zu verstehen als rein statische Modelle.",
+      "form": [
+        "repraesentative nummerierte Szenarien",
+        "je Schritt beteiligter Nutzer oder Baustein",
+        "optional Sequenzdiagramm, Aktivitaetsdiagramm oder Zustandsmodell"
+      ],
+      "must_include": [
+        "wichtige fachliche Use Cases aus in_scope",
+        "Zusammenspiel von UI, Views, Models, Services und Datenbank, soweit architekturrelevant",
+        "kritische Fehler- oder Ausnahmefaelle, wenn sie die Architektur beeinflussen"
+      ],
+      "must_not_include": [
+        "moeglichst viele beliebige CRUD-Szenarien",
+        "nicht geforderte Ablaeufe wie Loeschen, Zuweisen oder Projektintegration ohne Beleg",
+        "reine UI-Klicklisten ohne Bausteinbezug"
+      ],
+      "review_checks": [
+        "Ist jedes Szenario architekturrelevant und aus in_scope ableitbar?",
+        "Werden beteiligte Bausteine oder Systemteile genannt?",
+        "Fehlen wichtige Fehler- oder Ausnahmefaelle, obwohl sie fuer die Architektur relevant sind?"
+      ],
+      "django_guidance": [
+        "Typische Beteiligte sind Template, View, Form, Model, Service und Datenbank.",
+        "Bei Statuswechseln sollten Validierung und erlaubte Statuswerte im Ablauf sichtbar sein."
+      ]
+    },
+    {
+      "id": "7",
+      "key": "deployment_view",
+      "title": "Verteilungssicht",
+      "content": "Beschreibt Laufzeitumgebungen, Infrastruktur, Container, Prozesse, Datenbank und Betriebsaspekte.",
+      "motivation": "Das Team soll verstehen, wo das System laeuft, welche technischen Knoten beteiligt sind und welche Betriebsannahmen gelten.",
+      "form": [
+        "Textbeschreibung der Zielumgebung",
+        "Liste von Deployment-Knoten oder Containern",
+        "Umgebungen wie lokal, Test, Produktion",
+        "offene Betriebsfragen"
+      ],
+      "must_include": [
+        "Django-Webprozess oder Container, wenn relevant",
+        "Persistenzkomponente, wenn aus der Architektur ableitbar",
+        "lokale oder produktive Betriebsannahmen als Annahme markieren"
+      ],
+      "must_not_include": [
+        "Cloud-Infrastruktur ohne Anforderung",
+        "Skalierungsarchitektur ohne Beleg",
+        "konkrete Provider oder Managed Services ohne Vorgabe"
+      ],
+      "review_checks": [
+        "Sind Deployment-Aussagen als Fakt, Annahme oder offene Frage erkennbar?",
+        "Wurde keine Cloud- oder Skalierungsloesung erfunden?",
+        "Passt die Verteilungssicht zur Groesse der Anwendung?"
+      ],
+      "django_guidance": [
+        "Docker, Webprozess und relationale Datenbank sind plausible Bausteine, muessen aber bei fehlender Vorgabe als Annahme markiert werden.",
+        "SQLite nicht als Produktionsfakt setzen, wenn Persistenz nicht vorgegeben ist."
+      ]
+    },
+    {
+      "id": "8",
+      "key": "crosscutting_concepts",
+      "title": "Querschnittliche Konzepte",
+      "content": "Beschreibt uebergreifende Konzepte, die mehrere Bausteine betreffen, z. B. Validierung, Fehlerbehandlung, Sicherheit, Logging, Tests oder Konfiguration.",
+      "motivation": "Querschnittsthemen verhindern widerspruechliche Einzelloesungen in verschiedenen Bausteinen.",
+      "form": [
+        "Konzeptliste mit Ziel und Anwendungsbereich",
+        "je Konzept konkrete Regeln fuer Bausteine",
+        "Bezug auf Qualitaetsziele und Risiken"
+      ],
+      "must_include": [
+        "Validierungskonzepte fuer fachliche Eingaben",
+        "Test- und Qualitaetssicherungskonzepte bei expliziten Testanforderungen",
+        "Sicherheits- und Betriebskonzepte, soweit relevant"
+      ],
+      "must_not_include": [
+        "Framework-Buzzwords ohne konkrete Regel",
+        "Auth-Konzepte, wenn Login explizit ausgeschlossen ist",
+        "Monitoring- oder Integrationskonzepte ohne Architekturbezug"
+      ],
+      "review_checks": [
+        "Sind Konzepte uebergreifend und nicht nur einzelne Features?",
+        "Unterstuetzen sie konkrete Qualitaetsziele?",
+        "Vermeiden sie Widersprueche zu out_of_scope?"
+      ],
+      "django_guidance": [
+        "Django Forms oder Model-Validierung fuer Eingaben.",
+        "pytest, Django TestCase und Coverage-Regeln fuer Testkonzepte.",
+        "CSRF und Template-Escaping als Sicherheits-Basics auch ohne Login."
+      ]
+    },
+    {
+      "id": "9",
+      "key": "architecture_decisions",
+      "title": "Architekturentscheidungen",
+      "content": "Dokumentiert wichtige Entscheidungen, ihre Begruendung, Alternativen und Status.",
+      "motivation": "Entscheidungen bleiben nachvollziehbar und koennen spaeter geprueft, bestaetigt oder ersetzt werden.",
+      "form": [
+        "ADR-Liste",
+        "je Entscheidung: Entscheidung, Begruendung, Status",
+        "optional Alternativen und Konsequenzen"
+      ],
+      "must_include": [
+        "Entscheidungen, die nicht bereits offensichtlich aus der Anforderung folgen",
+        "Begruendung mit Bezug zu Zielen, Randbedingungen oder Qualitaetszielen",
+        "Status, initial meist proposed"
+      ],
+      "must_not_include": [
+        "Entscheidungen fuer Features ausserhalb in_scope",
+        "falsche Faktbehauptungen wie vorgeschriebene Cloud oder externe Integration",
+        "reine Implementierungsnotizen ohne Architekturwirkung"
+      ],
+      "review_checks": [
+        "Ist jede Entscheidung begruendet?",
+        "Ist jede Entscheidung aus Anforderungen, Zielen oder Annahmen ableitbar?",
+        "Sind vorgeschlagene Entscheidungen nicht als akzeptiert markiert, solange kein Review erfolgt ist?"
+      ],
+      "django_guidance": [
+        "Typische Entscheidungen betreffen App-Schnitt, Persistenz, Teststrategie, Auth-Nutzung und UI/API-Stil.",
+        "Django-User-System nur entscheiden, wenn Login, Rollen oder Authentifizierung relevant sind."
+      ]
+    },
+    {
+      "id": "10",
+      "key": "quality_requirements",
+      "title": "Qualitaetsanforderungen",
+      "content": "Beschreibt Qualitaetsziele, konkrete Qualitaetsszenarien, Prioritaeten und Mess- oder Pruefkriterien.",
+      "motivation": "Qualitaet wird nur steuerbar, wenn sie konkret beobachtbar, priorisiert und pruefbar ist.",
+      "form": [
+        "Qualitaetsbaum oder priorisierte Liste",
+        "konkrete Szenarien mit Ausloeser, Reaktion und Messkriterium",
+        "Bezug zu Tests oder Review-Kriterien"
+      ],
+      "must_include": [
+        "explizit geforderte Qualitaetsbedingungen",
+        "Szenarien statt einzelner Buzzwords",
+        "Pruef- oder Messkriterium je wichtigem Qualitaetsziel"
+      ],
+      "must_not_include": [
+        "Qualitaetsziele ohne Beleg oder Szenario",
+        "Performance- oder Skalierungsziele ohne Anforderung",
+        "Prioritaetswoerter wie high oder medium ohne Inhalt"
+      ],
+      "review_checks": [
+        "Hat jedes Qualitaetsziel ein konkretes Szenario?",
+        "Sind explizite Vorgaben wie 98 Prozent Testabdeckung uebernommen?",
+        "Wurden nicht belegte Qualitaetsziele entfernt oder als offene Frage markiert?"
+      ],
+      "django_guidance": [
+        "Coverage-Anforderungen werden in Teststrategie und CI-Pruefung gespiegelt.",
+        "Bedienbarkeit kann ueber wenige klare Workflows und Medium-Tests abgesichert werden."
+      ]
+    },
+    {
+      "id": "11",
+      "key": "risks_and_technical_debt",
+      "title": "Risiken und technische Schulden",
+      "content": "Sammelt bekannte Risiken, Unsicherheiten, technische Schulden und konkrete Gegenmassnahmen.",
+      "motivation": "Risiken muessen sichtbar sein, damit sie vor Workorders, Implementierung oder Betrieb adressiert werden koennen.",
+      "form": [
+        "Risikoliste mit Auswirkung und Mitigation",
+        "Liste technischer Schulden mit Ursache und Konsequenz",
+        "Verweis auf offene Fragen"
+      ],
+      "must_include": [
+        "Risiken aus unklaren Anforderungen",
+        "Risiken aus expliziten Qualitaetszielen",
+        "Mitigation je Risiko"
+      ],
+      "must_not_include": [
+        "Risiken, die nur durch erfundene Features entstehen",
+        "Projektmanagement-, Cloud- oder Skalierungsrisiken ohne Beleg",
+        "pauschale Risiken ohne konkrete Auswirkung"
+      ],
+      "review_checks": [
+        "Ist jedes Risiko aus Anforderung, Annahme oder offener Frage ableitbar?",
+        "Hat jedes Risiko eine konkrete Mitigation?",
+        "Entstehen Risiken durch Halluzinationen statt durch echte Unsicherheit?"
+      ],
+      "django_guidance": [
+        "Typische Risiken: unklare Fachregeln, unvollstaendige Statuswerte, fehlende Testabdeckung.",
+        "Security-Risiken auch ohne Login differenziert formulieren: kein Auth-Konzept ist nicht gleich keine Sicherheit."
+      ]
+    },
+    {
+      "id": "12",
+      "key": "glossary",
+      "title": "Glossar",
+      "content": "Definiert wichtige fachliche und technische Begriffe, damit alle Beteiligten dieselbe Sprache verwenden.",
+      "motivation": "Ein Glossar verhindert Missverstaendnisse und stabilisiert die spaetere Zerlegung in Workorders, Models und Tests.",
+      "form": [
+        "alphabetische Begriffsliste",
+        "je Begriff kurze Definition",
+        "optional Quelle: Anforderung, Annahme oder Architekturentscheidung"
+      ],
+      "must_include": [
+        "zentrale Fachbegriffe aus core_facts",
+        "wichtige Statuswerte oder Rollen",
+        "technische Begriffe, wenn sie fuer Stakeholder erklaert werden muessen"
+      ],
+      "must_not_include": [
+        "Begriffe fuer nicht belegte Features",
+        "Framework-Begriffe, die im Dokument keine Rolle spielen",
+        "Synonyme, die neue Anforderungen vortaeuschen"
+      ],
+      "review_checks": [
+        "Ist das Glossar nicht leer?",
+        "Sind zentrale Fachbegriffe eindeutig definiert?",
+        "Enthaelt es keine Begriffe aus out_of_scope?"
+      ],
+      "django_guidance": [
+        "Statuswerte, Modelnamen und fachliche Rollen sollten im Glossar auftauchen.",
+        "Bei einfachen Anwendungen reichen wenige gut definierte Begriffe."
+      ]
+    }
+  ]
+}

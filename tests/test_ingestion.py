@@ -16,14 +16,20 @@ def test_loads_supported_documents_recursively_with_collection_metadata(tmp_path
     policy_dir = tmp_path / "policies" / "security"
     policy_dir.mkdir(parents=True)
     (policy_dir / "access-control.md").write_text("# Access Control\n\nUse least privilege.", encoding="utf-8")
+    (policy_dir / "rules.json").write_text('{"rule": "Review before deploy"}', encoding="utf-8")
     (policy_dir / "diagram.png").write_text("not text", encoding="utf-8")
 
     documents = load_documents(tmp_path, collection="policies")
+    paths = [document.relative_path.as_posix() for document in documents]
 
-    assert len(documents) == 1
+    assert paths == [
+        "policies/security/access-control.md",
+        "policies/security/rules.json",
+    ]
     assert documents[0].collection == "policies"
     assert documents[0].relative_path.as_posix() == "policies/security/access-control.md"
     assert documents[0].metadata["filename"] == "access-control.md"
+    assert documents[1].metadata["extension"] == ".json"
 
 
 def test_ingest_data_chunks_documents_with_stable_ids_and_positions(tmp_path: Path) -> None:

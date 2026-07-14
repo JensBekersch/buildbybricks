@@ -33,6 +33,7 @@ def test_software_factory_architecture_method_collection_is_loadable() -> None:
     assert collections == ["architecture-method"]
     assert document_paths == [
         "architecture-method/arc42_architecture_sheet.md",
+        "architecture-method/arc42_sections.json",
         "architecture-method/description_to_sheet_mapping.md",
         "architecture-method/django_building_blocks.md",
         "architecture-method/quality_goals_catalog.md",
@@ -40,9 +41,48 @@ def test_software_factory_architecture_method_collection_is_loadable() -> None:
     ]
     all_content = "\n".join(document.content for document in documents)
     assert "Architecture Sheet" in all_content
+    assert "crosscutting_concepts" in all_content
     assert "Django Building Blocks" in all_content
     assert "Qualitaetsziele" in all_content
     assert "Review-Regeln" in all_content
+
+
+def test_software_factory_arc42_sections_reference_covers_all_chapters() -> None:
+    reference_path = (
+        PROJECT_ROOT
+        / "data"
+        / "software-factory"
+        / "architecture-method"
+        / "arc42_sections.json"
+    )
+    reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    sections = reference["sections"]
+
+    assert reference["schema_version"] == "1.0.0"
+    assert reference["language"] == "de"
+    assert [section["id"] for section in sections] == [str(index) for index in range(1, 13)]
+    assert [section["key"] for section in sections] == [
+        "introduction_and_goals",
+        "constraints",
+        "context_and_scope",
+        "solution_strategy",
+        "building_block_view",
+        "runtime_view",
+        "deployment_view",
+        "crosscutting_concepts",
+        "architecture_decisions",
+        "quality_requirements",
+        "risks_and_technical_debt",
+        "glossary",
+    ]
+    for section in sections:
+        assert section["content"]
+        assert section["motivation"]
+        assert section["form"]
+        assert section["must_include"]
+        assert section["must_not_include"]
+        assert section["review_checks"]
+        assert section["django_guidance"]
 
 
 def test_software_factory_architecture_sheet_schema_has_required_contract() -> None:

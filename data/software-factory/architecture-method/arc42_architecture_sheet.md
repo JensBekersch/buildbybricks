@@ -7,6 +7,8 @@ sondern ein kompakter, pruefbarer Zwischenstand fuer nachgelagerte Agenten.
 
 Ergaenzende Methodenquellen in dieser Collection:
 
+- `arc42_sections.json`: strukturierte Referenz der 12 arc42-Kapitel mit
+  Inhalt, Motivation, Form, Muss-/Darf-nicht-Regeln und Review-Kriterien.
 - `description_to_sheet_mapping.md`: Mapping von Nutzerbeschreibung zu Sheet-Feldern.
 - `django_building_blocks.md`: typische Django-Bausteine, App-Schnitte und Test-Mapping.
 - `quality_goals_catalog.md`: wiederverwendbare Qualitaetsziele mit Szenarien.
