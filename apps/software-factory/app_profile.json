@@ -1,0 +1,12 @@
+{
+  "name": "Software Factory",
+  "description": "Mehragentenfaehige Softwarefabrik fuer Django-Applikationen, Architektur-Sheets, Workorders, Tests und GitHub-Integration.",
+  "default_collection": "architecture-method",
+  "default_top_k": 4,
+  "answer_policy": "Erzeuge strukturierte, pruefbare Architekturentscheidungen fuer Django-Applikationen. Nutze arc42-orientierte Abschnitte, markiere Annahmen und offene Fragen explizit, und trenne fachliche Ziele von technischen Loesungen.",
+  "enabled_tools": [
+    "search_knowledge_base",
+    "read_source",
+    "answer_with_citations"
+  ]
+}

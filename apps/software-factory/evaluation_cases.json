@@ -1,0 +1,21 @@
+[
+  {
+    "id": "architecture-sheet-django-crm",
+    "question": "Erstelle ein Architecture Sheet fuer eine Django-App zur Verwaltung von Kunden, Angeboten und Freigabeprozessen.",
+    "collection": "architecture-method",
+    "expected_source_locations": [
+      "architecture-method/arc42_architecture_sheet.md"
+    ],
+    "required_answer_terms": [
+      "Architecture Sheet",
+      "Django",
+      "Qualitaetsziele",
+      "offene Fragen"
+    ],
+    "required_tool_calls": [
+      "search_knowledge_base",
+      "read_source",
+      "answer_with_citations"
+    ]
+  }
+]
