@@ -4,7 +4,10 @@
     "question": "Erstelle ein Architecture Sheet fuer eine Django-App zur Verwaltung von Kunden, Angeboten und Freigabeprozessen.",
     "collection": "architecture-method",
     "expected_source_locations": [
-      "architecture-method/arc42_architecture_sheet.md"
+      "architecture-method/arc42_architecture_sheet.md",
+      "architecture-method/django_building_blocks.md",
+      "architecture-method/quality_goals_catalog.md",
+      "architecture-method/risks_and_review.md"
     ],
     "required_answer_terms": [
       "Architecture Sheet",

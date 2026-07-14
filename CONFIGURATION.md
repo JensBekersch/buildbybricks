@@ -149,6 +149,11 @@ The current architecture-sheet contract is `schema_version` `1.0.0`. It includes
 architecture drivers, explicit architecture decisions, acceptance criteria, and a
 readiness status so later workorder agents can consume the sheet predictably.
 
+The Software Factory method collection lives under
+`data/software-factory/architecture-method/`. It contains the arc42 overview,
+description-to-sheet mapping rules, Django building-block guidance, a
+quality-goal catalog, and risk/review rules.
+
 ## Embedding Providers
 
 Embeddings convert chunks into vectors for retrieval.

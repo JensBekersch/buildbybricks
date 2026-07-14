@@ -28,13 +28,21 @@ def test_software_factory_architecture_method_collection_is_loadable() -> None:
 
     collections = discover_collections(data_dir)
     documents = load_documents(data_dir, collection="architecture-method")
+    document_paths = [document.relative_path.as_posix() for document in documents]
 
     assert collections == ["architecture-method"]
-    assert [document.relative_path.as_posix() for document in documents] == [
-        "architecture-method/arc42_architecture_sheet.md"
+    assert document_paths == [
+        "architecture-method/arc42_architecture_sheet.md",
+        "architecture-method/description_to_sheet_mapping.md",
+        "architecture-method/django_building_blocks.md",
+        "architecture-method/quality_goals_catalog.md",
+        "architecture-method/risks_and_review.md",
     ]
-    assert "Architecture Sheet" in documents[0].content
-    assert "Django" in documents[0].content
+    all_content = "\n".join(document.content for document in documents)
+    assert "Architecture Sheet" in all_content
+    assert "Django Building Blocks" in all_content
+    assert "Qualitaetsziele" in all_content
+    assert "Review-Regeln" in all_content
 
 
 def test_software_factory_architecture_sheet_schema_has_required_contract() -> None:

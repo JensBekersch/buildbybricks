@@ -38,6 +38,10 @@ Der erste Contract liegt unter:
 - `apps/software-factory/architecture_sheet.schema.json`
 - `apps/software-factory/app_profile.json`
 - `data/software-factory/architecture-method/arc42_architecture_sheet.md`
+- `data/software-factory/architecture-method/description_to_sheet_mapping.md`
+- `data/software-factory/architecture-method/django_building_blocks.md`
+- `data/software-factory/architecture-method/quality_goals_catalog.md`
+- `data/software-factory/architecture-method/risks_and_review.md`
 - `apps/software-factory/examples/good_architecture_sheet.json`
 - `apps/software-factory/examples/bad_architecture_sheet.md`
 
