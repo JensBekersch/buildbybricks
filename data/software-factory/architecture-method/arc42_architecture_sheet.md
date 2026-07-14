@@ -5,6 +5,13 @@ Aus einer freien Beschreibung eines Softwareartefakts wird ein strukturiertes
 Architecture Sheet erzeugt. Das Sheet ist kein vollstaendiges arc42-Dokument,
 sondern ein kompakter, pruefbarer Zwischenstand fuer nachgelagerte Agenten.
 
+Ergaenzende Methodenquellen in dieser Collection:
+
+- `description_to_sheet_mapping.md`: Mapping von Nutzerbeschreibung zu Sheet-Feldern.
+- `django_building_blocks.md`: typische Django-Bausteine, App-Schnitte und Test-Mapping.
+- `quality_goals_catalog.md`: wiederverwendbare Qualitaetsziele mit Szenarien.
+- `risks_and_review.md`: typische Risiken, offene Fragen und Review-Regeln.
+
 ## Ziel des Architecture Sheets
 
 Das Architecture Sheet soll ein gemeinsames Verstaendnis ueber Ziel, Kontext,
