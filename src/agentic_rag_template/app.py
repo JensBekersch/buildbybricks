@@ -14,6 +14,7 @@ from agentic_rag_template.config import Settings
 from agentic_rag_template.embeddings import create_embedding_provider
 from agentic_rag_template.evaluation import EvaluationRunner
 from agentic_rag_template.ingestion import discover_collections, ingest_data, load_documents
+from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.template_config import load_application_profile
 
@@ -108,7 +109,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
     def _handle_chat(self, request: ChatRequest) -> ChatResponse:
         embedding_provider = create_embedding_provider(self.settings)
-        agent = StudyAgent(self.settings.data_dir, embedding_provider)
+        llm_provider = create_llm_provider(self.settings)
+        profile = load_application_profile(self.settings.template_dir)
+        agent = StudyAgent(
+            self.settings.data_dir,
+            embedding_provider,
+            llm_provider=llm_provider,
+            answer_policy=profile.answer_policy,
+        )
         response = agent.answer(
             AgentRequest(
                 message=request.message,
@@ -229,11 +237,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
     def _run_evaluation(self) -> Dict[str, Any]:
         embedding_provider = create_embedding_provider(self.settings)
-        agent = StudyAgent(self.settings.data_dir, embedding_provider)
+        llm_provider = create_llm_provider(self.settings)
+        profile = load_application_profile(self.settings.template_dir)
+        agent = StudyAgent(
+            self.settings.data_dir,
+            embedding_provider,
+            llm_provider=llm_provider,
+            answer_policy=profile.answer_policy,
+        )
         report = EvaluationRunner(agent).run_template(self.settings.template_dir)
         payload = report.to_dict()
         payload["provider"] = embedding_provider.name
         payload["model"] = embedding_provider.model
+        payload["llm_provider"] = llm_provider.name
+        payload["llm_model"] = llm_provider.model
         return payload
 
     def _read_json_body(self) -> Dict[str, Any]:

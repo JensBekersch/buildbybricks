@@ -231,11 +231,11 @@ AGENTIC_RAG_EMBEDDING_MODEL=nomic-embed-text
 AGENTIC_RAG_EMBEDDING_API_BASE_URL=http://host.docker.internal:11434
 ```
 
-`ollama`, `openai` und andere Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
+`ollama`, `openai` und andere Embedding-Provider sind noch nicht implementiert. Sie sollen spaeter hinter derselben `EmbeddingProvider`-Schnittstelle ergaenzt werden, ohne Ingestion, Vector Store oder Retriever umzubauen.
 
 ## LLM-Konfiguration
 
-Die LLM-Konfiguration ist vorbereitet und kann ueber `.env` gesteuert werden. Der aktuelle Agent nutzt aber noch den deterministischen lokalen Antwort-Composer.
+Die LLM-Konfiguration kann ueber `.env` gesteuert werden. Der aktuelle Agent nutzt standardmaessig den deterministischen lokalen Antwort-Composer, kann aber fuer Chat-Antworten auf Ollama umgestellt werden.
 
 ```text
 AGENTIC_RAG_LLM_PROVIDER=deterministic

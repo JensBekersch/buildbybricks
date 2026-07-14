@@ -1,10 +1,12 @@
 """First deterministic agent orchestration flow."""
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from agentic_rag_template.agent.models import AgentRequest, AgentResponse
 from agentic_rag_template.embeddings.models import EmbeddingProvider
+from agentic_rag_template.llm.deterministic_provider import DeterministicLLMProvider
+from agentic_rag_template.llm.models import LLMProvider
 from agentic_rag_template.tools import (
     ToolCall,
     answer_with_citations,
@@ -17,9 +19,17 @@ from agentic_rag_template.tools import (
 class StudyAgent:
     """A small agent that uses explicit tools in a fixed order."""
 
-    def __init__(self, data_dir: Path, embedding_provider: EmbeddingProvider) -> None:
+    def __init__(
+        self,
+        data_dir: Path,
+        embedding_provider: EmbeddingProvider,
+        llm_provider: Optional[LLMProvider] = None,
+        answer_policy: str = "Answer only from retrieved local sources.",
+    ) -> None:
         self.data_dir = data_dir
         self.embedding_provider = embedding_provider
+        self.llm_provider = llm_provider or DeterministicLLMProvider()
+        self.answer_policy = answer_policy
 
     def answer(self, request: AgentRequest) -> AgentResponse:
         query = request.message.strip()
@@ -66,15 +76,25 @@ class StudyAgent:
         else:
             trace.append("skipped_source_read")
 
-        answer = answer_with_citations(query, results)
+        answer = answer_with_citations(
+            query=query,
+            results=results,
+            llm_provider=self.llm_provider,
+            answer_policy=self.answer_policy,
+        )
         sources = answer.sources or build_source_references(results)
         tool_calls.append(
             ToolCall(
                 name="answer_with_citations",
-                arguments={"source_count": len(sources)},
-                result_summary="answer composed",
+                arguments={
+                    "source_count": len(sources),
+                    "llm_provider": self.llm_provider.name,
+                    "llm_model": self.llm_provider.model,
+                },
+                result_summary=f"answer composed by {self.llm_provider.name}",
             )
         )
+        trace.extend(answer.trace)
         trace.append("composed_answer")
 
         return AgentResponse(

@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from agentic_rag_template.api.schemas import SourceReference
 from agentic_rag_template.embeddings.models import EmbeddingProvider
+from agentic_rag_template.llm.models import LLMProvider, LLMRequest
 from agentic_rag_template.retrieval import RetrievedChunk, RetrievalQuery, Retriever
 from agentic_rag_template.tools.answering import AnswerDraft, compose_grounded_answer
 
@@ -36,9 +37,31 @@ def read_source(data_dir: Path, source_path: str) -> str:
     return source.read_text(encoding="utf-8")
 
 
-def answer_with_citations(query: str, results: List[RetrievedChunk]) -> AnswerDraft:
+def answer_with_citations(
+    query: str,
+    results: List[RetrievedChunk],
+    llm_provider: Optional[LLMProvider] = None,
+    answer_policy: str = "Answer only from retrieved local sources.",
+) -> AnswerDraft:
     """Build an answer draft grounded in retrieved chunks."""
-    return compose_grounded_answer(query, results)
+    citations = compose_grounded_answer(query, results).citations
+
+    if llm_provider is None:
+        return compose_grounded_answer(query, results)
+
+    response = llm_provider.generate_answer(
+        LLMRequest(
+            query=query,
+            retrieved_chunks=results,
+            answer_policy=answer_policy,
+        )
+    )
+    return AnswerDraft(
+        answer=response.answer,
+        citations=citations,
+        uncertainty=response.uncertainty,
+        trace=response.trace,
+    )
 
 
 def build_source_references(results: List[RetrievedChunk]) -> List[SourceReference]:

@@ -97,6 +97,7 @@ def test_local_server_exposes_health_and_chat(tmp_path: Path) -> None:
             "validated_message",
             "searched_knowledge_base",
             "skipped_source_read",
+            "deterministic_answer_composed",
             "composed_answer",
         ]
         assert [tool_call["name"] for tool_call in chat_payload["tool_calls"]] == [
