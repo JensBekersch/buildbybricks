@@ -176,8 +176,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "description is required"}, status=HTTPStatus.BAD_REQUEST)
             return
 
+        use_llm = _payload_bool(payload.get("use_llm"), self.settings.architecture_llm_enabled)
+        llm_provider = create_llm_provider(self.settings) if use_llm else None
+
         try:
-            result = generate_architecture_sheet(description, application)
+            result = generate_architecture_sheet(
+                description,
+                application,
+                llm_provider=llm_provider,
+            )
         except FileNotFoundError as error:
             self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
             return
@@ -504,6 +511,19 @@ def create_server(settings: Optional[Settings] = None) -> ThreadingHTTPServer:
     frontend_dir.mkdir(parents=True, exist_ok=True)
     handler = partial(AgenticRagRequestHandler, settings=active_settings)
     return ThreadingHTTPServer((active_settings.host, active_settings.port), handler)
+
+
+def _payload_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+
+    return bool(value)
 
 
 def main() -> None:

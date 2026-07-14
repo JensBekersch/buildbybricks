@@ -3,7 +3,7 @@ import json
 from agentic_rag_template.config import Settings
 from agentic_rag_template.llm import DeterministicLLMProvider, OllamaLLMProvider, create_llm_provider
 from agentic_rag_template.llm.models import LLMRequest
-from agentic_rag_template.llm.ollama_provider import build_payload
+from agentic_rag_template.llm.ollama_provider import build_json_payload, build_payload
 from agentic_rag_template.retrieval import RetrievedChunk
 
 
@@ -75,6 +75,23 @@ def test_ollama_payload_contains_context_and_citation_instructions() -> None:
     assert "sample/guide.md" in payload["messages"][1]["content"]
 
 
+def test_ollama_json_payload_requests_json_object() -> None:
+    payload = build_json_payload(
+        system_prompt="Return JSON.",
+        user_prompt="Create architecture sheet.",
+        model="llama3.1",
+        max_tokens=2200,
+    )
+
+    assert payload["model"] == "llama3.1"
+    assert payload["format"] == "json"
+    assert payload["stream"] is False
+    assert payload["options"]["temperature"] == 0.1
+    assert payload["options"]["num_predict"] == 2200
+    assert payload["messages"][0]["content"] == "Return JSON."
+    assert payload["messages"][1]["content"] == "Create architecture sheet."
+
+
 def test_ollama_provider_parses_chat_response(monkeypatch) -> None:
     class FakeHTTPResponse:
         def __enter__(self):
@@ -103,3 +120,33 @@ def test_ollama_provider_parses_chat_response(monkeypatch) -> None:
 
     assert response.answer == "Antwort mit Quelle [1]."
     assert response.trace == ["ollama_chat_completed"]
+
+
+def test_ollama_provider_parses_json_response(monkeypatch) -> None:
+    class FakeHTTPResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return None
+
+        def read(self):
+            return json.dumps(
+                {"message": {"content": json.dumps({"artifact_name": "Angebote"})}}
+            ).encode("utf-8")
+
+    def fake_urlopen(req, timeout):
+        assert req.full_url == "http://ollama:11434/api/chat"
+        body = json.loads(req.data.decode("utf-8"))
+        assert body["format"] == "json"
+        assert body["options"]["num_predict"] == 2048
+        return FakeHTTPResponse()
+
+    monkeypatch.setattr("agentic_rag_template.llm.ollama_provider.request.urlopen", fake_urlopen)
+    provider = OllamaLLMProvider(
+        model="llama3.1",
+        api_base_url="http://ollama:11434",
+        max_tokens=160,
+    )
+
+    assert provider.generate_json("System", "User") == {"artifact_name": "Angebote"}

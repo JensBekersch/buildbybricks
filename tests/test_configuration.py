@@ -8,6 +8,7 @@ def test_settings_reads_llm_configuration_from_environment(monkeypatch) -> None:
     monkeypatch.setenv("AGENTIC_RAG_LLM_API_KEY", "secret")
     monkeypatch.setenv("AGENTIC_RAG_LLM_TIMEOUT_SECONDS", "240")
     monkeypatch.setenv("AGENTIC_RAG_LLM_MAX_TOKENS", "80")
+    monkeypatch.setenv("AGENTIC_RAG_ARCHITECTURE_LLM_ENABLED", "true")
 
     settings = Settings.from_env()
 
@@ -17,3 +18,4 @@ def test_settings_reads_llm_configuration_from_environment(monkeypatch) -> None:
     assert settings.llm_api_key == "secret"
     assert settings.llm_timeout_seconds == 240
     assert settings.llm_max_tokens == 80
+    assert settings.architecture_llm_enabled is True

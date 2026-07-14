@@ -12,6 +12,27 @@ from agentic_rag_template.software_factory import generate_architecture_sheet
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+class FakeArchitectureLLMProvider:
+    name = "fake-architecture-llm"
+    model = "fake-json-v1"
+
+    def generate_json(self, system_prompt: str, user_prompt: str):
+        assert "valides JSON" in system_prompt
+        assert "Deterministisches Basissheet" in user_prompt
+        return {
+            "artifact_name": "LLM Angebotsplattform",
+            "solution_strategy": "LLM-verfeinerte Django-Strategie mit klaren Fachmodulen.",
+            "architecture_decisions": [
+                {
+                    "id": "ADR-LLM-001",
+                    "decision": "Angebote werden als eigenes Django-Modul umgesetzt.",
+                    "rationale": "Der Angebotsprozess hat eigene Regeln, Tests und Freigaben.",
+                    "status": "proposed",
+                }
+            ],
+        }
+
+
 def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> None:
     settings = Settings(
         apps_dir=PROJECT_ROOT / "apps",
@@ -43,6 +64,33 @@ def test_generate_architecture_sheet_returns_schema_shaped_django_contract() -> 
     assert any(scenario["name"] == "Freigabe durchfuehren" for scenario in sheet["runtime_scenarios"])
     assert any(scenario["name"] == "PDF exportieren" for scenario in sheet["runtime_scenarios"])
     assert "generated_django_architecture_sheet" in payload["trace"]
+    assert payload["generation"]["mode"] == "deterministic"
+
+
+def test_generate_architecture_sheet_can_merge_llm_json() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    result = generate_architecture_sheet(
+        "Eine Django-App fuer Angebote und Freigaben.",
+        application,
+        llm_provider=FakeArchitectureLLMProvider(),
+    )
+    payload = result.to_dict()
+    sheet = payload["architecture_sheet"]
+
+    assert payload["validation"]["valid"] is True
+    assert payload["generation"]["mode"] == "llm-assisted"
+    assert payload["generation"]["llm_provider"] == "fake-architecture-llm"
+    assert sheet["artifact_name"] == "LLM Angebotsplattform"
+    assert sheet["schema_version"] == "1.0.0"
+    assert sheet["architecture_decisions"][0]["id"] == "ADR-LLM-001"
+    assert sheet["quality_goals"]
+    assert "generated_llm_architecture_sheet" in payload["trace"]
 
 
 def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
@@ -84,6 +132,7 @@ def test_architecture_sheet_endpoint_returns_generated_sheet() -> None:
         assert payload["architecture_sheet"]["architecture_decisions"]
         assert payload["architecture_sheet"]["acceptance_criteria"]
         assert payload["architecture_sheet"]["open_questions"]
+        assert payload["generation"]["llm_provider"] == "none"
         assert payload["trace"] == [
             "validated_description",
             "loaded_architecture_sheet_schema",
