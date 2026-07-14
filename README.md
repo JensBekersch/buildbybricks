@@ -138,7 +138,10 @@ Ein minimales agentic-RAG-System braucht folgende Bestandteile:
 
 12. **Docker Runtime**
 
-    Ein `Dockerfile` und optional `docker-compose.yml`, damit die API und das HTML-Frontend reproduzierbar gestartet werden koennen. Lokale Entwicklung und Containerlauf sollten denselben Codepfad verwenden.
+    Ein `Dockerfile` und optional `docker-compose.yml`, damit API, HTML-Frontend
+    und produktionsnahe Infrastruktur reproduzierbar gestartet werden koennen.
+    Lokale Entwicklung und Containerlauf sollten denselben Codepfad verwenden.
+    Langlauf-Jobs werden in Postgres persistiert.
 
 ## Vorgeschlagene Reihenfolge
 
@@ -390,9 +393,25 @@ Ollama kann optional als zweiter Compose-Service gestartet werden:
 docker compose --profile ollama up --build
 ```
 
+## Persistenz
+
+Langlauf-Jobs der Software Factory werden in Postgres gespeichert. Compose
+startet dafuer einen eigenen Datenbank-Container mit persistentem Volume:
+
+```text
+AGENTIC_RAG_DATABASE_URL=postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag
+POSTGRES_DB=agentic_rag
+POSTGRES_USER=agentic_rag
+POSTGRES_PASSWORD=agentic_rag
+```
+
+Der Job-Store legt die Tabelle `architecture_generation_jobs` beim Start der
+Store-Initialisierung an. Die API-Anbindung folgt im naechsten Ausbauschritt.
+
 ## Lokal Starten
 
-Der aktuelle Stand startet eine minimale HTTP API und das statische Chat-Frontend aus einem Container:
+Der aktuelle Stand startet eine minimale HTTP API, das statische Chat-Frontend
+und Postgres:
 
 ```bash
 docker compose up --build

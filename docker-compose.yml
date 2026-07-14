@@ -22,10 +22,30 @@ services:
       AGENTIC_RAG_LLM_API_KEY: "${AGENTIC_RAG_LLM_API_KEY:-}"
       AGENTIC_RAG_LLM_TIMEOUT_SECONDS: "${AGENTIC_RAG_LLM_TIMEOUT_SECONDS:-1200}"
       AGENTIC_RAG_LLM_MAX_TOKENS: "${AGENTIC_RAG_LLM_MAX_TOKENS:-4096}"
+      AGENTIC_RAG_DATABASE_URL: "${AGENTIC_RAG_DATABASE_URL:-postgresql://agentic_rag:agentic_rag@postgres:5432/agentic_rag}"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./template:/app/template:ro
       - ./apps:/app/apps:ro
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-agentic_rag}"
+      POSTGRES_USER: "${POSTGRES_USER:-agentic_rag}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-agentic_rag}"
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres:/var/lib/postgresql/data
 
   ollama:
     image: ollama/ollama:latest
@@ -42,3 +62,4 @@ services:
 
 volumes:
   ollama:
+  postgres:

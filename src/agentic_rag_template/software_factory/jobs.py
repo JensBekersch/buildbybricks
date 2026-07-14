@@ -50,6 +50,15 @@ def timestamp(value: Optional[datetime]) -> Optional[str]:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def parse_timestamp(value: Any) -> Optional[datetime]:
+    """Parse serialized timestamps from API/JSONB payloads."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc)
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
 @dataclass
 class ArchitectureGenerationLogEntry:
     """Append-only job log entry."""
@@ -66,6 +75,15 @@ class ArchitectureGenerationLogEntry:
             "step": self.step,
             "message": self.message,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "ArchitectureGenerationLogEntry":
+        return cls(
+            message=str(payload.get("message", "")),
+            level=str(payload.get("level", "info")),
+            step=str(payload.get("step", "")),
+            created_at=parse_timestamp(payload.get("created_at")) or utc_now(),
+        )
 
 
 @dataclass
@@ -115,6 +133,18 @@ class ArchitectureGenerationStep:
             "started_at": timestamp(self.started_at),
             "finished_at": timestamp(self.finished_at),
         }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "ArchitectureGenerationStep":
+        return cls(
+            key=str(payload.get("key", "")),
+            label=str(payload.get("label", "")),
+            status=str(payload.get("status", STEP_STATUS_PENDING)),
+            message=str(payload.get("message", "")),
+            error=str(payload.get("error", "")),
+            started_at=parse_timestamp(payload.get("started_at")),
+            finished_at=parse_timestamp(payload.get("finished_at")),
+        )
 
 
 @dataclass
@@ -252,6 +282,33 @@ class ArchitectureGenerationJob:
             payload["result"] = self.result
 
         return payload
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "ArchitectureGenerationJob":
+        return cls(
+            id=str(payload["id"]),
+            app_id=str(payload.get("app_id", "software-factory")),
+            description=str(payload.get("description", "")),
+            generation_mode=str(payload.get("generation_mode", "agentic_with_review")),
+            llm_provider=str(payload.get("llm_provider", "none")),
+            llm_model=str(payload.get("llm_model", "none")),
+            status=str(payload.get("status", JOB_STATUS_QUEUED)),
+            current_step=str(payload.get("current_step", "")),
+            created_at=parse_timestamp(payload.get("created_at")) or utc_now(),
+            updated_at=parse_timestamp(payload.get("updated_at")) or utc_now(),
+            started_at=parse_timestamp(payload.get("started_at")),
+            finished_at=parse_timestamp(payload.get("finished_at")),
+            steps=[
+                ArchitectureGenerationStep.from_dict(step)
+                for step in payload.get("steps", [])
+            ],
+            logs=[
+                ArchitectureGenerationLogEntry.from_dict(entry)
+                for entry in payload.get("logs", [])
+            ],
+            result=payload.get("result"),
+            error=str(payload.get("error", "")),
+        )
 
     def _step(self, key: str) -> ArchitectureGenerationStep:
         for step in self.steps:

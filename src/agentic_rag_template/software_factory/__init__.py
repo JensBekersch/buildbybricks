@@ -5,6 +5,10 @@ from agentic_rag_template.software_factory.architecture_sheet import (
     ArchitectureSheetResult,
     generate_architecture_sheet,
 )
+from agentic_rag_template.software_factory.job_store import (
+    ArchitectureGenerationJobStoreError,
+    PostgresArchitectureGenerationJobStore,
+)
 from agentic_rag_template.software_factory.jobs import (
     ARCHITECTURE_GENERATION_STEPS,
     JOB_STATUS_CANCELED,
@@ -36,10 +40,12 @@ __all__ = [
     "STEP_STATUS_RUNNING",
     "STEP_STATUS_SKIPPED",
     "ArchitectureGenerationJob",
+    "ArchitectureGenerationJobStoreError",
     "ArchitectureGenerationLogEntry",
     "ArchitectureGenerationStep",
     "ArchitectureGenerationStepDefinition",
     "ArchitectureSheetGenerationError",
     "ArchitectureSheetResult",
+    "PostgresArchitectureGenerationJobStore",
     "generate_architecture_sheet",
 ]
