@@ -13,7 +13,7 @@ from agentic_rag_template.workflows.models import (
     WorkflowStep,
     WorkflowVersion,
 )
-from agentic_rag_template.workflows.store import PostgresWorkflowStore
+from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStore
 
 
 class FakeCursor:
@@ -170,6 +170,10 @@ def test_postgres_workflow_store_initializes_schema() -> None:
     assert any("CREATE TABLE IF NOT EXISTS agent_versions" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS workflow_runs" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS workflow_artifacts" in statement for statement in statements)
+
+
+def test_postgres_workflow_store_implements_workflow_store_contract() -> None:
+    assert isinstance(_store(FakeConnection()), WorkflowStore)
 
 
 def test_postgres_workflow_store_saves_and_loads_agent_version() -> None:

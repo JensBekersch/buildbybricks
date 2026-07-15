@@ -14,6 +14,7 @@ Persistenz, Admin-UI, Versionierung und Berechtigungen aufbauen koennen.
 - generische Workflow-, Version-, Step-, Run-, StepRun- und Artifact-Modelle
 - generische AgentDefinition- und AgentVersion-Modelle
 - Postgres-Snapshot-Store fuer Workflow- und Agent-Versionen, Runs und Artefakte
+- `WorkflowStore` Contract als Persistenz-Port fuer spaetere Store-Implementierungen
 - erster konfigurierter Software-Factory-Workflow fuer Architecture-Sheet-Erzeugung
 - providerneutrales `LLMProviderAdapter`-Interface
 - Fake-Provider fuer Tests
@@ -98,9 +99,10 @@ validierte Artefakte zugreifen, ohne rohe LLM-Ausgaben direkt zu rendern.
 ## Persistenz
 
 Die erste Persistenzstufe verwendet einen leichten Postgres-Store analog zum
-bestehenden Architecture-Job-Store. Es wurden bewusst noch keine Django Models
-oder Migrationen eingefuehrt, weil das aktuelle Projekt keine Django-App-Struktur
-besitzt.
+bestehenden Architecture-Job-Store. `WorkflowStore` definiert den stabilen
+Persistenz-Contract, den ein spaeterer Django-basierter Store ebenfalls
+erfuellen muss. Es wurden bewusst noch keine Django Models oder Migrationen
+eingefuehrt, weil das aktuelle Projekt keine Django-App-Struktur besitzt.
 
 Der Store legt indexierbare Tabellen an und speichert vollstaendige Snapshots
 als JSONB:
@@ -111,6 +113,9 @@ als JSONB:
 - `agent_versions`
 - `workflow_runs`
 - `workflow_artifacts`
+
+Der geplante Migrationspfad ist unter
+`docs/todos/django-workflow-store-migration.md` dokumentiert.
 
 Die indexierten Spalten dienen der Suche nach Slug, Version, Run-ID, Status und
 validierten Artefakten. Die Payloads halten die vollstaendige versionierte
@@ -175,7 +180,8 @@ Ergebnis:
 
 - Noch kein Adminbereich.
 - Noch keine Django Models oder Migrationen, weil das aktuelle Projekt keine
-  Django-App-Struktur besitzt.
+  Django-App-Struktur besitzt; Store-Contract und Migrationspfad sind
+  vorbereitet.
 - Ein produktiver Workflow-Provider-Adapter ist vorhanden, aber derzeit nur fuer
   Runtime-Provider mit strukturierter JSON-Erzeugung nutzbar.
 - Fachliche Scope-, Zahlen- und Testanforderungsvalidierung ist als generische
@@ -200,5 +206,6 @@ Ergebnis:
    Custom HTTP ergaenzen.
 5. Weitere Validatoren fuer Cross Field Consistency und kapitelspezifische
    arc42-Regeln ergaenzen.
-6. Optional spaeter: Migration von Snapshot-Store zu Django Models, falls das
-   Projekt zur vollwertigen Django-App umgebaut wird.
+6. Sobald das Projekt zur vollwertigen Django-App umgebaut wird:
+   `DjangoWorkflowStore` gegen den bestehenden `WorkflowStore` Contract
+   implementieren.

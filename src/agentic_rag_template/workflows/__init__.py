@@ -10,7 +10,7 @@ from agentic_rag_template.workflows.models import (
     WorkflowVersion,
 )
 from agentic_rag_template.workflows.providers import LLMProviderWorkflowAdapter
-from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStoreError
+from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStore, WorkflowStoreError
 from agentic_rag_template.workflows.workflow_execution import LinearWorkflowEngine
 from agentic_rag_template.workflows.workflow_validation import WorkflowVersionValidator
 
@@ -24,6 +24,7 @@ __all__ = [
     "WorkflowArtifact",
     "WorkflowRun",
     "WorkflowStep",
+    "WorkflowStore",
     "WorkflowStoreError",
     "WorkflowVersion",
     "WorkflowVersionValidator",

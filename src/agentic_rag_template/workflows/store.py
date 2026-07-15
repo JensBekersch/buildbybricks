@@ -1,6 +1,6 @@
 """Postgres-backed persistence for configurable workflows."""
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
 
 from agentic_rag_template.workflows.models import (
     AgentVersion,
@@ -12,6 +12,41 @@ from agentic_rag_template.workflows.models import (
 
 class WorkflowStoreError(RuntimeError):
     """Raised when workflow persistence cannot read or write data."""
+
+
+@runtime_checkable
+class WorkflowStore(Protocol):
+    """Persistence contract for workflow configuration, runs and artifacts."""
+
+    def initialize(self) -> None:
+        """Prepare persistence structures."""
+
+    def save_workflow_version(self, workflow_version: WorkflowVersion) -> None:
+        """Persist one workflow version snapshot."""
+
+    def get_workflow_version(self, workflow_slug: str, version_number: int) -> Optional[WorkflowVersion]:
+        """Load one workflow version by slug and version number."""
+
+    def list_workflow_versions(self, workflow_slug: str) -> List[WorkflowVersion]:
+        """List workflow versions for one workflow."""
+
+    def save_agent_version(self, agent_version: AgentVersion) -> None:
+        """Persist one agent version snapshot."""
+
+    def get_agent_version(self, agent_slug: str, version_number: int) -> Optional[AgentVersion]:
+        """Load one agent version by slug and version number."""
+
+    def save_run(self, workflow_run: WorkflowRun) -> None:
+        """Persist one workflow run snapshot and its artifacts."""
+
+    def get_run(self, run_id: str) -> Optional[WorkflowRun]:
+        """Load one workflow run."""
+
+    def list_runs(self, workflow_slug: Optional[str] = None, limit: int = 50) -> List[WorkflowRun]:
+        """List workflow runs, optionally scoped to one workflow."""
+
+    def list_validated_artifacts(self, run_id: str) -> List[WorkflowArtifact]:
+        """List validated artifacts for a workflow run."""
 
 
 class PostgresWorkflowStore:
