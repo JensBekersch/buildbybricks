@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Protocol
+from typing import Any, Dict, Iterable, List, Protocol
 
 
 @dataclass(frozen=True)
@@ -112,6 +112,97 @@ class JsonSchemaValidator:
         return ValidationResult(self.validator_id, not errors, errors=errors)
 
 
+class ScopeEvidenceValidator:
+    validator_id = "scope_evidence"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        requirement_analysis = _get_path(
+            context.initial_input,
+            str(context.configuration.get("requirement_analysis_path", "requirement_analysis")),
+        )
+        if not isinstance(requirement_analysis, dict):
+            return ValidationResult(self.validator_id, False, errors=["requirement_analysis must be available"])
+
+        ignored_keys = set(
+            context.configuration.get(
+                "ignored_keys",
+                [
+                    "assumptions",
+                    "explicitly_excluded",
+                    "explicitly_excluded_terms",
+                    "non_goals",
+                    "not_evidenced",
+                    "open_questions",
+                    "out_of_scope",
+                    "requirement_trace",
+                ],
+            )
+        )
+        output_text = _normalize_for_search(" ".join(_flatten_text(value, ignored_keys=ignored_keys)))
+        positive_evidence = _normalize_for_search(
+            " ".join(
+                _flatten_text(
+                    [
+                        requirement_analysis.get("input_summary"),
+                        requirement_analysis.get("in_scope"),
+                        requirement_analysis.get("core_facts"),
+                    ]
+                )
+            )
+        )
+        forbidden_text = _normalize_for_search(
+            " ".join(
+                _flatten_text(
+                    [
+                        requirement_analysis.get("out_of_scope"),
+                        requirement_analysis.get("not_evidenced"),
+                        requirement_analysis.get("explicitly_excluded"),
+                        requirement_analysis.get("explicitly_excluded_terms"),
+                        requirement_analysis.get("not_requested"),
+                    ]
+                )
+            )
+        )
+        extracted_forbidden_terms = [
+            term
+            for term in _flatten_text(
+                [
+                    requirement_analysis.get("out_of_scope"),
+                    requirement_analysis.get("not_evidenced"),
+                    requirement_analysis.get("explicitly_excluded"),
+                    requirement_analysis.get("explicitly_excluded_terms"),
+                    requirement_analysis.get("not_requested"),
+                ]
+            )
+            if _is_searchable_term(term)
+        ]
+        watched_terms = [
+            str(term)
+            for term in context.configuration.get("watched_terms", [])
+            if str(term).strip()
+        ]
+
+        violations = []
+        for term in _dedupe_terms(extracted_forbidden_terms + watched_terms):
+            normalized = _normalize_for_search(term)
+            if normalized not in output_text:
+                continue
+            is_explicitly_forbidden = normalized in forbidden_text
+            is_not_evidenced = normalized not in positive_evidence
+            if is_explicitly_forbidden or is_not_evidenced:
+                violations.append(term)
+
+        return ValidationResult(
+            self.validator_id,
+            not violations,
+            errors=[f"scope term is not supported by requirements: {term}" for term in violations],
+            metrics={
+                "violation_count": len(violations),
+                "checked_term_count": len(_dedupe_terms(extracted_forbidden_terms + watched_terms)),
+            },
+        )
+
+
 class ValidatorRegistry:
     def __init__(self) -> None:
         self._validators: Dict[str, WorkflowValidator] = {}
@@ -132,6 +223,7 @@ class ValidatorRegistry:
         registry.register(RequiredFieldsValidator())
         registry.register(NoAdditionalPropertiesValidator())
         registry.register(UniqueIdsValidator())
+        registry.register(ScopeEvidenceValidator())
         return registry
 
 
@@ -173,3 +265,57 @@ def _get_path(value: Any, path: str) -> Any:
             return None
     return current
 
+
+def _flatten_text(value: Any, ignored_keys: Iterable[str] = ()) -> List[str]:
+    ignored = set(ignored_keys)
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, dict):
+        texts: List[str] = []
+        for key, nested in value.items():
+            if str(key) in ignored:
+                continue
+            texts.extend(_flatten_text(nested, ignored_keys=ignored))
+        return texts
+    if isinstance(value, list):
+        texts = []
+        for item in value:
+            texts.extend(_flatten_text(item, ignored_keys=ignored))
+        return texts
+    return [str(value)]
+
+
+def _is_searchable_term(term: str) -> bool:
+    normalized = term.strip()
+    if len(normalized) < 3:
+        return False
+    return any(character.isalpha() for character in normalized)
+
+
+def _dedupe_terms(terms: Iterable[str]) -> List[str]:
+    seen = set()
+    result = []
+    for term in terms:
+        normalized = " ".join(str(term).split())
+        key = normalized.casefold()
+        if not normalized or key in seen:
+            continue
+        seen.add(key)
+        result.append(normalized)
+    return result
+
+
+def _normalize_for_search(value: str) -> str:
+    replacements = {
+        "\u00e4": "ae",
+        "\u00f6": "oe",
+        "\u00fc": "ue",
+        "\u00df": "ss",
+    }
+    normalized = value.casefold()
+    for source, replacement in replacements.items():
+        normalized = normalized.replace(source, replacement)
+    return normalized

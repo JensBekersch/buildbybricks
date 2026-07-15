@@ -163,6 +163,8 @@ class LinearWorkflowEngine:
         step = step_run.workflow_step
         if step.agent_version and step.agent_version.output_schema:
             validators.append({"validator": "json_schema", "configuration": {"schema": step.agent_version.output_schema}})
+        if step.agent_version:
+            validators.extend(step.agent_version.validators)
         validators.extend(step.configuration.get("validators", []))
         results = []
         for definition in validators:
@@ -259,4 +261,3 @@ def _resolve_condition_path(path: str, workflow_run: WorkflowRun) -> Any:
         else:
             return None
     return current
-

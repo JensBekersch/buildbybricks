@@ -29,7 +29,7 @@ def _workflow_version() -> WorkflowVersion:
     )
 
 
-def _published_agent(output_schema=None, required_inputs=None) -> AgentVersion:
+def _published_agent(output_schema=None, required_inputs=None, validators=None) -> AgentVersion:
     agent = AgentDefinition(name="Generic Agent", slug="generic-agent")
     return AgentVersion(
         agent=agent,
@@ -40,6 +40,7 @@ def _published_agent(output_schema=None, required_inputs=None) -> AgentVersion:
         input_contract={"required": required_inputs or ["description"]},
         output_schema=output_schema or {},
         model_configuration={"provider": "fake", "model": "fake-json"},
+        validators=validators or [],
     )
 
 
@@ -47,12 +48,13 @@ class StructuredProvider:
     name = "ollama"
     model = "qwen3:14b"
 
-    def __init__(self) -> None:
+    def __init__(self, output=None) -> None:
+        self.output = output or {"artifact_name": "Team Todo"}
         self.calls = []
 
     def generate_json(self, system_prompt, user_prompt):
         self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt})
-        return {"artifact_name": "Team Todo"}
+        return self.output
 
 
 class AnswerOnlyProvider:
@@ -222,6 +224,111 @@ def test_productive_llm_provider_adapter_requires_structured_generation() -> Non
 
     assert run.status == RUN_STATUS_FAILED
     assert "does not support structured JSON generation" in run.error_summary
+
+
+def test_agent_configured_scope_evidence_validator_rejects_unsupported_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "scope_evidence",
+                        "configuration": {
+                            "requirement_analysis_path": "requirement_analysis",
+                            "watched_terms": ["Projektmanagement", "Cloud"],
+                        },
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {
+                        "input_summary": "Eine einfache Todo-Liste fuer Teams.",
+                        "in_scope": [{"description": "Aufgaben erfassen und Status pflegen."}],
+                        "out_of_scope": [{"description": "Keine Integration in Projektmanagement-Tools."}],
+                        "not_evidenced": [],
+                    },
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "artifact_name": "Team Todo",
+            "context": "Die Anwendung bietet eine Projektmanagement-Integration.",
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste fuer Teams."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert "step output validation failed" in run.error_summary
+    assert run.step_runs[0].validation_result["valid"] is False
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "scope_evidence"
+    assert "Projektmanagement" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
+def test_agent_configured_scope_evidence_validator_allows_supported_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "scope_evidence",
+                        "configuration": {
+                            "requirement_analysis_path": "requirement_analysis",
+                            "watched_terms": ["REST API"],
+                        },
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {
+                        "input_summary": "Eine Todo-Liste mit REST API.",
+                        "in_scope": [{"description": "REST API fuer externe Clients."}],
+                        "out_of_scope": [],
+                        "not_evidenced": [],
+                    },
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "artifact_name": "Team Todo",
+            "context": "Die REST API stellt Aufgaben fuer externe Clients bereit.",
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste mit REST API."},
+    )
+
+    assert run.status == RUN_STATUS_SUCCEEDED
+    assert run.final_output["context"] == "Die REST API stellt Aufgaben fuer externe Clients bereit."
 
 
 def test_disabled_and_conditioned_steps_are_skipped() -> None:

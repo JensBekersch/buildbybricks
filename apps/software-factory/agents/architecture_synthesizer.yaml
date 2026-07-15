@@ -57,3 +57,17 @@ review_rules:
     severity: error
     description: Ausgeschlossene oder nicht verlangte Inhalte duerfen nicht als Architektur erscheinen.
 
+validators:
+  - validator: scope_evidence
+    configuration:
+      requirement_analysis_path: requirement_analysis
+      watched_terms:
+        - Projektmanagement
+        - Cloud
+        - Team-Zuordnung
+        - Loeschen
+        - Ersteller
+        - Zustaendiger
+        - REST API
+        - Integration
+        - Integrationen
