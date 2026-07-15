@@ -1,20 +1,5 @@
-const appSelect = document.querySelector("#app-select");
 const appDescription = document.querySelector("#app-description");
-const collectionSelect = document.querySelector("#collection-select");
-const refreshCollectionsButton = document.querySelector("#refresh-collections");
-const documentList = document.querySelector("#document-list");
-const documentCount = document.querySelector("#document-count");
-const uploadForm = document.querySelector("#upload-form");
-const uploadCollectionInput = document.querySelector("#upload-collection");
-const uploadFilenameInput = document.querySelector("#upload-filename");
-const uploadContentInput = document.querySelector("#upload-content");
-const uploadStatus = document.querySelector("#upload-status");
 const runtimeStatus = document.querySelector("#runtime-status");
-const chatForm = document.querySelector("#chat-form");
-const chatLog = document.querySelector("#chat-log");
-const messageInput = document.querySelector("#message-input");
-const modeTabs = document.querySelectorAll("[data-view-target]");
-const views = document.querySelectorAll(".view");
 
 const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
@@ -39,8 +24,11 @@ const architectureTitle = document.querySelector("#architecture-title");
 const architectureBusinessGoal = document.querySelector("#architecture-business-goal");
 const architectureValidation = document.querySelector("#architecture-validation");
 const architectureGeneration = document.querySelector("#architecture-generation");
-const architectureSections = document.querySelector("#architecture-sections");
-const architectureJson = document.querySelector("#architecture-json");
+const agentStepList = document.querySelector("#agent-step-list");
+const agentViewerKicker = document.querySelector("#agent-viewer-kicker");
+const agentViewerTitle = document.querySelector("#agent-viewer-title");
+const agentViewerStatus = document.querySelector("#agent-viewer-status");
+const agentViewerBody = document.querySelector("#agent-viewer-body");
 const architectureReviewStatus = document.querySelector("#architecture-review-status");
 const architectureSchema = document.querySelector("#architecture-schema");
 const architectureProvider = document.querySelector("#architecture-provider");
@@ -54,10 +42,10 @@ const architectureTrace = document.querySelector("#architecture-trace");
 
 let applications = [];
 let runtimeConfig = null;
-let activeAppId = "default";
-let activeCollection = "";
+let activeAppId = "software-factory";
 let activeArchitectureJobId = "";
 let activeArchitectureJob = null;
+let activeAgentStepKey = "";
 let architectureEventSource = null;
 let architecturePollingTimer = null;
 
@@ -117,79 +105,17 @@ function setRuntimeStatus(text, tone = "neutral") {
   runtimeStatus.dataset.tone = tone;
 }
 
-function renderApplications() {
-  appSelect.replaceChildren();
-
-  applications.forEach((application) => {
-    const option = document.createElement("option");
-    option.value = application.id;
-    option.textContent = application.name;
-    appSelect.append(option);
-  });
-
-  if (applications.some((application) => application.id === activeAppId)) {
-    appSelect.value = activeAppId;
-  } else if (applications.length > 0) {
-    activeAppId = applications[0].id;
-    appSelect.value = activeAppId;
-  }
-
+function renderApplicationDescription() {
   const application = selectedApplication();
   appDescription.textContent = application
     ? `${application.name} · ${application.description || application.id}`
-    : "Keine Anwendung gefunden";
-}
-
-function renderCollections(collections) {
-  collectionSelect.replaceChildren();
-
-  collections.forEach((collection) => {
-    const option = document.createElement("option");
-    option.value = collection.name;
-    option.textContent = `${collection.name} (${collection.document_count})`;
-    collectionSelect.append(option);
-  });
-
-  if (collections.some((collection) => collection.name === activeCollection)) {
-    collectionSelect.value = activeCollection;
-  } else if (collections.length > 0) {
-    activeCollection = collections[0].name;
-    collectionSelect.value = activeCollection;
-  } else {
-    activeCollection = "";
-  }
-
-  uploadCollectionInput.value = activeCollection;
-}
-
-function renderDocuments(documents) {
-  documentList.replaceChildren();
-  documentCount.textContent = String(documents.length);
-
-  if (documents.length === 0) {
-    const emptyItem = document.createElement("li");
-    emptyItem.className = "empty-state";
-    emptyItem.textContent = "Keine Dokumente";
-    documentList.append(emptyItem);
-    return;
-  }
-
-  documents.forEach((sourceDocument) => {
-    const item = document.createElement("li");
-    const title = document.createElement("strong");
-    const meta = document.createElement("span");
-
-    title.textContent = sourceDocument.title || sourceDocument.filename;
-    meta.textContent = `${sourceDocument.relative_path} · ${sourceDocument.char_count} Zeichen`;
-    item.append(title, meta);
-    documentList.append(item);
-  });
+    : "Software Factory";
 }
 
 async function loadApplications() {
   const payload = await getJson("/apps");
   applications = payload.applications || [];
-  renderApplications();
+  renderApplicationDescription();
 }
 
 async function loadRuntimeConfig() {
@@ -213,90 +139,6 @@ function renderRuntimeConfig(config) {
   ) {
     architectureGenerationMode.value = architecturePipeline.mode;
   }
-}
-
-async function loadCollections() {
-  if (!activeAppId) {
-    return;
-  }
-
-  const payload = await getJson(appPath(activeAppId, "collections"));
-  renderCollections(payload.collections || []);
-  await loadDocuments();
-}
-
-async function loadDocuments() {
-  if (!activeAppId || !activeCollection) {
-    renderDocuments([]);
-    return;
-  }
-
-  const payload = await getJson(
-    appPath(activeAppId, "collections", activeCollection, "documents")
-  );
-  renderDocuments(payload.documents || []);
-}
-
-async function setActiveApplication(appId) {
-  activeAppId = appId;
-  activeCollection = "";
-  renderApplications();
-  await loadCollections();
-}
-
-function appendMessage(author, text, details = [], sources = [], uncertainty = "") {
-  const message = document.createElement("article");
-  const content = document.createElement("p");
-  content.textContent = `${author}: ${text}`;
-  message.className = "chat-message";
-  message.append(content);
-
-  if (uncertainty) {
-    const uncertaintyNote = document.createElement("p");
-    uncertaintyNote.className = "uncertainty";
-    uncertaintyNote.textContent = `Unsicherheit: ${uncertainty}`;
-    message.append(uncertaintyNote);
-  }
-
-  if (sources.length > 0) {
-    const sourceList = document.createElement("ol");
-    sourceList.className = "source-list";
-
-    sources.forEach((source) => {
-      const sourceItem = document.createElement("li");
-      sourceItem.textContent = `${source.title} (${source.location})`;
-
-      if (source.excerpt) {
-        const excerpt = document.createElement("small");
-        excerpt.textContent = source.excerpt;
-        sourceItem.append(excerpt);
-      }
-
-      sourceList.append(sourceItem);
-    });
-
-    message.append(sourceList);
-  }
-
-  if (details.length > 0) {
-    const trace = document.createElement("small");
-    trace.textContent = details.join(" -> ");
-    trace.className = "trace";
-    message.append(trace);
-  }
-
-  chatLog.append(message);
-  chatLog.scrollTop = chatLog.scrollHeight;
-}
-
-function activateView(targetId) {
-  views.forEach((view) => {
-    view.hidden = view.id !== targetId;
-  });
-
-  modeTabs.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.viewTarget === targetId);
-  });
 }
 
 function createElement(tagName, className, text = "") {
@@ -337,7 +179,7 @@ function renderArchitectureJob(job) {
   const statusText = {
     queued: "Job wurde angelegt und wartet auf Ausfuehrung.",
     running: activeStep ? activeStep.label : "Job wird ausgefuehrt.",
-    completed: "Architecture Sheet ist erstellt.",
+    completed: "Django-Machine-Lauf ist abgeschlossen.",
     failed: job.error || "Job ist fehlgeschlagen.",
     canceled: job.error || "Job wurde abgebrochen.",
   };
@@ -363,6 +205,8 @@ function renderArchitectureJob(job) {
 
   if (job.result) {
     renderArchitectureResult(job.result);
+  } else {
+    renderAgentRuns(job, null);
   }
 
   renderArchitectureJobLogs(job.logs || []);
@@ -386,11 +230,11 @@ function stopArchitectureJobUpdates() {
 
 function completeArchitectureJobUi(job) {
   generateArchitectureButton.disabled = false;
-  generateArchitectureButton.textContent = "Architecture Job anlegen";
+  generateArchitectureButton.textContent = "Django-Machine-Job anlegen";
 
   if (job.status === "completed") {
     architectureStatus.textContent = `Job ${job.id} ist abgeschlossen.`;
-    setRuntimeStatus("Architecture Sheet erstellt", "ok");
+    setRuntimeStatus("Django Machine abgeschlossen", "ok");
     return;
   }
 
@@ -460,7 +304,7 @@ async function openArchitectureJob(jobId) {
 
   generateArchitectureButton.disabled = true;
   generateArchitectureButton.textContent = "Generierung laeuft...";
-  setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+  setRuntimeStatus("Django Machine arbeitet...", "neutral");
   subscribeArchitectureJob(job.id);
 }
 
@@ -575,7 +419,7 @@ async function retryArchitectureJob() {
   await loadArchitectureJobs();
   generateArchitectureButton.disabled = true;
   generateArchitectureButton.textContent = "Generierung laeuft...";
-  setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+  setRuntimeStatus("Django Machine arbeitet...", "neutral");
   subscribeArchitectureJob(payload.job.id);
 }
 
@@ -642,60 +486,6 @@ function appendList(container, items) {
   container.append(list);
 }
 
-function appendSection(title, content) {
-  const section = createElement("section", "sheet-section");
-  section.append(createElement("h3", "", title));
-
-  if (Array.isArray(content)) {
-    appendList(section, content);
-  } else {
-    const text = valueText(content);
-    section.append(createElement("p", "", text || "Noch offen"));
-  }
-
-  architectureSections.append(section);
-}
-
-function renderArchitectureSections(sheet) {
-  architectureSections.replaceChildren();
-
-  if (sheet.arc42) {
-    renderArc42Sections(sheet.arc42);
-    return;
-  }
-
-  appendSection("Architekturtreiber", sheet.architecture_drivers || sheet.drivers || []);
-  appendSection("Qualitaetsziele", sheet.quality_goals || []);
-  appendSection("Kontext & Schnittstellen", sheet.context || sheet.external_interfaces || []);
-  appendSection("Bausteine", sheet.building_blocks || []);
-  appendSection("Laufzeitszenarien", sheet.runtime_scenarios || []);
-  appendSection("Architekturentscheidungen", sheet.architecture_decisions || sheet.decisions || []);
-  appendSection("Risiken", sheet.risks || []);
-  appendSection("Annahmen", sheet.assumptions || []);
-  appendSection("Offene Fragen", sheet.open_questions || []);
-  appendSection("Akzeptanzkriterien", sheet.acceptance_criteria || []);
-  appendSection("Teststrategie", sheet.test_strategy || []);
-}
-
-function renderArc42Sections(arc42) {
-  const sections = [
-    ["1. Einfuehrung & Ziele", arc42.introduction_and_goals],
-    ["2. Randbedingungen", arc42.constraints],
-    ["3. Kontext & Abgrenzung", arc42.context_and_scope],
-    ["4. Loesungsstrategie", arc42.solution_strategy],
-    ["5. Bausteinsicht", arc42.building_block_view],
-    ["6. Laufzeitsicht", arc42.runtime_view],
-    ["7. Verteilungssicht", arc42.deployment_view],
-    ["8. Querschnittliche Konzepte", arc42.crosscutting_concepts],
-    ["9. Architekturentscheidungen", arc42.architecture_decisions],
-    ["10. Qualitaetsanforderungen", arc42.quality_requirements],
-    ["11. Risiken & technische Schulden", arc42.risks_and_technical_debt],
-    ["12. Glossar", arc42.glossary],
-  ];
-
-  sections.forEach(([title, content]) => appendSection(title, content));
-}
-
 function displayPriority(priority) {
   if (!priority) {
     return "";
@@ -711,6 +501,221 @@ function displayPriority(priority) {
     return "niedrig";
   }
   return priority;
+}
+
+function agentStepTitle(step) {
+  const labels = {
+    validate_description: "Input Guard",
+    load_schema: "Schema Loader",
+    load_method_sources: "Method Knowledge Loader",
+    analyze_requirements: "Requirement Analyst",
+    synthesize_architecture: "Architecture Synthesizer",
+    review_architecture: "Architecture Reviewer",
+    validate_contract: "Contract Validator",
+    final_result: "Final Architecture Artifact",
+  };
+  return labels[step.key] || step.label || step.key;
+}
+
+function stepLogs(job, stepKey) {
+  return (job.logs || []).filter((log) => (log.step || "") === stepKey);
+}
+
+function stepDuration(step) {
+  if (!step.started_at || !step.finished_at) {
+    return "";
+  }
+  return formatElapsedTime(step.started_at, step.finished_at);
+}
+
+function buildAgentRunItems(job, payload) {
+  const result = payload || job.result || {};
+  const generation = result.generation || {};
+  const sheet = result.architecture_sheet || {};
+  const items = (job.steps || []).map((step) => {
+    const logs = stepLogs(job, step.key);
+    const llmLogs = logs.filter((log) => (log.metadata || {}).kind === "llm_call");
+    let output = null;
+
+    if (step.key === "analyze_requirements") {
+      output = generation.requirement_analysis || null;
+    } else if (step.key === "synthesize_architecture") {
+      output = sheet && Object.keys(sheet).length > 0 ? sheet : null;
+    } else if (step.key === "review_architecture") {
+      output = generation.architecture_review || null;
+    } else if (step.key === "validate_contract") {
+      output = result.validation || null;
+    } else if (step.key === "load_method_sources") {
+      output = result.sources || null;
+    } else if (step.key === "load_schema") {
+      output = { schema_id: result.schema_id || "-", valid: (result.validation || {}).valid || false };
+    } else if (step.key === "validate_description") {
+      output = { description: job.description };
+    }
+
+    return {
+      key: step.key,
+      title: agentStepTitle(step),
+      label: step.label,
+      status: step.status,
+      message: step.message || step.error || "",
+      error: step.error || "",
+      duration: stepDuration(step),
+      logs,
+      llmLogs,
+      output,
+    };
+  });
+
+  if (result.architecture_sheet) {
+    items.push({
+      key: "final_result",
+      title: "Finales Architekturartefakt",
+      label: "Finales Architekturartefakt",
+      status: (result.validation || {}).valid ? "completed" : "failed",
+      message: result.artifact && result.artifact.json_path ? result.artifact.json_path : "Finales Ergebnis",
+      error: "",
+      duration: "",
+      logs: [],
+      llmLogs: [],
+      output: result.architecture_sheet,
+    });
+  }
+
+  return items;
+}
+
+function renderAgentRuns(job, payload) {
+  const result = payload || job.result || {};
+  const sheet = result.architecture_sheet || {};
+  const validation = result.validation || {};
+  const generation = result.generation || {};
+  const provider =
+    generation.provider ||
+    (generation.llm_provider && generation.llm_provider !== "none" ? generation.llm_provider : "") ||
+    job.llm_provider ||
+    generation.mode ||
+    "Agent";
+  const usedLlm = Boolean(
+    generation.used_llm ||
+      (generation.llm_provider && generation.llm_provider !== "none") ||
+      (job.llm_provider && job.llm_provider !== "none")
+  );
+  const items = buildAgentRunItems(job, result);
+
+  architectureEmpty.hidden = true;
+  architectureResult.hidden = false;
+  architectureTitle.textContent = sheet.artifact_name || job.description || "Django Machine Job";
+  architectureBusinessGoal.textContent =
+    valueText(sheet.business_goal || sheet.input_summary || job.description) || "Noch kein finales Ergebnis.";
+  architectureValidation.textContent = validation.valid ? "Schema gueltig" : job.status;
+  architectureValidation.dataset.tone = validation.valid ? "ok" : job.status === "failed" ? "warn" : "neutral";
+  architectureGeneration.textContent = provider;
+  architectureGeneration.dataset.tone = usedLlm ? "accent" : "neutral";
+
+  agentStepList.replaceChildren();
+  items.forEach((item) => {
+    const listItem = document.createElement("li");
+    const button = document.createElement("button");
+    const title = createElement("strong", "", item.title);
+    const meta = createElement(
+      "span",
+      "",
+      [displayStepStatus(item.status), item.duration, item.llmLogs.length ? `${item.llmLogs.length} LLM Call(s)` : ""]
+        .filter(Boolean)
+        .join(" · ")
+    );
+
+    button.type = "button";
+    button.className = "agent-step-button";
+    button.dataset.state = item.status || "pending";
+    button.dataset.active = item.key === activeAgentStepKey ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => {
+      activeAgentStepKey = item.key;
+      renderAgentRuns(job, result);
+      renderAgentViewer(item);
+    });
+    listItem.append(button);
+    agentStepList.append(listItem);
+  });
+
+  const selected = items.find((item) => item.key === activeAgentStepKey) || items.find((item) => item.status === "running") || items[0];
+  if (selected) {
+    activeAgentStepKey = selected.key;
+    renderAgentViewer(selected);
+  }
+}
+
+function displayStepStatus(status) {
+  const labels = {
+    pending: "wartet",
+    running: "laeuft",
+    completed: "fertig",
+    failed: "fehlgeschlagen",
+    skipped: "uebersprungen",
+  };
+  return labels[status] || status || "";
+}
+
+function appendViewerSection(title, value, options = {}) {
+  const section = createElement("section", "viewer-section");
+  section.append(createElement("h3", "", title));
+
+  if (value === null || value === undefined || value === "") {
+    section.append(createElement("p", "empty-state", options.emptyText || "Noch keine Daten."));
+  } else if (options.json) {
+    const pre = createElement("pre", "viewer-json");
+    pre.textContent = JSON.stringify(value, null, 2);
+    section.append(pre);
+  } else if (Array.isArray(value)) {
+    appendList(section, value.length > 0 ? value : [options.emptyText || "Noch keine Daten."]);
+  } else if (typeof value === "object") {
+    const pre = createElement("pre", "viewer-json");
+    pre.textContent = JSON.stringify(value, null, 2);
+    section.append(pre);
+  } else {
+    section.append(createElement("p", "", valueText(value)));
+  }
+
+  agentViewerBody.append(section);
+}
+
+function renderAgentViewer(item) {
+  agentViewerBody.replaceChildren();
+  agentViewerKicker.textContent = item.label || "Agent Output";
+  agentViewerTitle.textContent = item.title;
+  agentViewerStatus.textContent = displayStepStatus(item.status);
+  agentViewerStatus.dataset.tone = item.status === "completed" ? "ok" : item.status === "failed" ? "warn" : "neutral";
+
+  appendViewerSection("Status", item.error || item.message || displayStepStatus(item.status));
+  appendViewerSection("Output", item.output, { json: true, emptyText: "Dieser Schritt hat noch kein gespeichertes Ergebnis." });
+
+  if (item.llmLogs.length > 0) {
+    appendViewerSection(
+      "LLM Calls",
+      item.llmLogs.map((log) => ({
+        step: (log.metadata || {}).llm_step,
+        provider: (log.metadata || {}).provider,
+        model: (log.metadata || {}).model,
+        status: (log.metadata || {}).status,
+        duration_seconds: (log.metadata || {}).duration_seconds,
+        error: (log.metadata || {}).error,
+      })),
+      { json: true }
+    );
+  }
+
+  appendViewerSection(
+    "Logs",
+    item.logs.map((log) => ({
+      time: formatDateTime(log.created_at),
+      level: log.level,
+      message: log.message,
+      metadata: log.metadata || {},
+    })),
+    { json: true, emptyText: "Keine Logs fuer diesen Schritt." }
+  );
 }
 
 function displayStatus(status) {
@@ -749,7 +754,6 @@ function renderSupportList(element, items, emptyText, formatter) {
 }
 
 function renderArchitectureResult(payload) {
-  const sheet = payload.architecture_sheet || {};
   const validation = payload.validation || {};
   const generation = payload.generation || {};
   const artifact = payload.artifact || {};
@@ -761,17 +765,10 @@ function renderArchitectureResult(payload) {
     generation.mode ||
     "Regelbasiert";
   const model = generation.model || (generation.llm_model !== "none" ? generation.llm_model : "");
-  const usedLlm = Boolean(generation.used_llm || (generation.llm_provider && generation.llm_provider !== "none"));
 
-  architectureEmpty.hidden = true;
-  architectureResult.hidden = false;
-  architectureTitle.textContent = sheet.artifact_name || sheet.title || sheet.name || "Unbenanntes Artefakt";
-  architectureBusinessGoal.textContent = valueText(sheet.business_goal || sheet.goal) || "Business-Ziel noch offen.";
-  architectureValidation.textContent = validation.valid ? "Schema gueltig" : "Schema pruefen";
-  architectureValidation.dataset.tone = validation.valid ? "ok" : "warn";
-  architectureGeneration.textContent = provider;
-  architectureGeneration.dataset.tone = usedLlm ? "accent" : "neutral";
-  architectureJson.textContent = JSON.stringify(sheet, null, 2);
+  if (activeArchitectureJob) {
+    renderAgentRuns(activeArchitectureJob, payload);
+  }
 
   architectureReviewStatus.textContent = validation.valid ? "Bestanden" : "Mit Hinweisen";
   architectureSchema.textContent = payload.schema_id || "-";
@@ -782,7 +779,6 @@ function renderArchitectureResult(payload) {
     : "-";
   architectureSourceCount.textContent = String(sources.length);
 
-  renderArchitectureSections(sheet);
   renderSupportList(architectureSources, sources, "Keine Quellen", (item, source) => {
     item.append(createElement("strong", "", source.title || "Quelle"));
     item.append(createElement("span", "", source.location || source.relative_path || ""));
@@ -815,7 +811,7 @@ async function generateArchitectureSheet() {
     renderArchitectureJob(payload.job);
     await loadArchitectureJobs();
     generateArchitectureButton.textContent = "Generierung laeuft...";
-    setRuntimeStatus("Architecture Sheet wird erzeugt...", "neutral");
+    setRuntimeStatus("Django Machine arbeitet...", "neutral");
     subscribeArchitectureJob(payload.job.id);
   } catch (error) {
     architectureProgress.hidden = false;
@@ -823,7 +819,7 @@ async function generateArchitectureSheet() {
     architectureProgressElapsed.textContent = "0s";
     architectureProgressSteps.replaceChildren();
     generateArchitectureButton.disabled = false;
-    generateArchitectureButton.textContent = "Architecture Job anlegen";
+    generateArchitectureButton.textContent = "Django-Machine-Job anlegen";
     throw error;
   }
 }
@@ -833,64 +829,12 @@ async function initialize() {
     setRuntimeStatus("Verbinden...");
     await loadRuntimeConfig();
     await loadApplications();
-    await loadCollections();
     await loadArchitectureJobs();
     setRuntimeStatus("Bereit", "ok");
   } catch (error) {
     setRuntimeStatus(error.message || "API nicht erreichbar", "error");
-    renderDocuments([]);
   }
 }
-
-modeTabs.forEach((button) => {
-  button.addEventListener("click", async () => {
-    const targetId = button.dataset.viewTarget;
-    activateView(targetId);
-
-    if (
-      targetId === "architecture-view" &&
-      activeAppId !== "software-factory" &&
-      applications.some((application) => application.id === "software-factory")
-    ) {
-      try {
-        await setActiveApplication("software-factory");
-        await loadArchitectureJobs();
-        setRuntimeStatus("Bereit", "ok");
-      } catch (error) {
-        setRuntimeStatus(error.message, "error");
-      }
-    }
-  });
-});
-
-appSelect.addEventListener("change", async () => {
-  try {
-    await setActiveApplication(appSelect.value);
-    setRuntimeStatus("Bereit", "ok");
-  } catch (error) {
-    setRuntimeStatus(error.message, "error");
-  }
-});
-
-collectionSelect.addEventListener("change", async () => {
-  activeCollection = collectionSelect.value;
-  uploadCollectionInput.value = activeCollection;
-
-  try {
-    await loadDocuments();
-  } catch (error) {
-    setRuntimeStatus(error.message, "error");
-  }
-});
-
-refreshCollectionsButton.addEventListener("click", async () => {
-  try {
-    await loadCollections();
-    setRuntimeStatus("Aktualisiert", "ok");
-  } catch (error) {
-    setRuntimeStatus(error.message, "error");
-  }
-});
 
 refreshArchitectureJobsButton.addEventListener("click", async () => {
   try {
@@ -925,67 +869,13 @@ retryArchitectureJobButton.addEventListener("click", async () => {
   }
 });
 
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const collection = uploadCollectionInput.value.trim();
-  const filename = uploadFilenameInput.value.trim();
-  const content = uploadContentInput.value.trim();
-
-  if (!collection || !filename || !content) {
-    uploadStatus.textContent = "Collection, Dateiname und Inhalt sind erforderlich.";
-    return;
-  }
-
-  try {
-    uploadStatus.textContent = "Upload laeuft...";
-    await postJson(appPath(activeAppId, "collections", collection, "documents"), {
-      filename,
-      content,
-    });
-    activeCollection = collection;
-    uploadFilenameInput.value = "";
-    uploadContentInput.value = "";
-    uploadStatus.textContent = "Gespeichert.";
-    await loadCollections();
-  } catch (error) {
-    uploadStatus.textContent = error.message;
-  }
-});
-
-chatForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const message = messageInput.value.trim();
-
-  if (!message) {
-    return;
-  }
-
-  appendMessage("Du", message);
-  messageInput.value = "";
-
-  try {
-    const payload = await postJson(appPath(activeAppId, "chat"), {
-      message,
-      collection: activeCollection || undefined,
-    });
-
-    const details = [...(payload.trace || [])];
-    if (payload.tool_calls && payload.tool_calls.length > 0) {
-      details.push(...payload.tool_calls.map((toolCall) => toolCall.name));
-    }
-    appendMessage("Agent", payload.answer, details, payload.sources || [], payload.uncertainty || "");
-  } catch (error) {
-    appendMessage("System", error.message || "Die API ist nicht erreichbar.");
-  }
-});
-
 architectureForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   try {
     await generateArchitectureSheet();
   } catch (error) {
-    architectureStatus.textContent = error.message || "Architecture Sheet konnte nicht erstellt werden.";
+    architectureStatus.textContent = error.message || "Django-Machine-Job konnte nicht erstellt werden.";
     setRuntimeStatus("Fehler", "error");
   }
 });
