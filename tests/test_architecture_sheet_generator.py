@@ -393,7 +393,7 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     assert payload["generation"]["agent_configs"]["requirement_analyst"] == {
         "id": "requirement_analyst",
         "name": "Requirement Analyst",
-        "version": 1,
+        "version": 2,
     }
     assert payload["generation"]["requirement_analysis"]["domain_entities"][0]["attributes"][0]["name"] == "startzeit"
     assert payload["generation"]["requirement_analysis"]["validation_rules"][0]["description"] == "Endzeit muss nach Startzeit liegen."
@@ -401,8 +401,9 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     requirement_system_prompt, requirement_user_prompt = provider.prompts[0]
     assert "verlustarmer Requirements Parser" in requirement_system_prompt
     assert "preserve_explicit_test_cases" in requirement_system_prompt
-    assert "domain_entities" in requirement_user_prompt
-    assert "test_requirements" in requirement_user_prompt
+    assert "domain_entities" in requirement_system_prompt
+    assert "test_requirements" in requirement_system_prompt
+    assert "Methodenhinweise:" in requirement_user_prompt
     assert provider.calls == [
         "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
         "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",

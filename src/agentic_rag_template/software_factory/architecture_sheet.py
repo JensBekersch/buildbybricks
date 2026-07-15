@@ -6,11 +6,10 @@ import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-import yaml
-
 from agentic_rag_template.applications import ApplicationInstance
 from agentic_rag_template.ingestion import load_documents
 from agentic_rag_template.llm.models import LLMProvider
+from agentic_rag_template.software_factory.configured_agent import ConfiguredAgent
 from agentic_rag_template.software_factory.jobs import (
     EVENT_STEP_COMPLETED,
     EVENT_STEP_FAILED,
@@ -187,7 +186,7 @@ def generate_architecture_sheet(
     sources = _load_method_sources(application)
     _emit_step_output(event_handler, "load_method_sources", sources)
     _emit_completed(event_handler, "load_method_sources", "Methodenwissen wurde geladen.")
-    requirement_analyst_config = _load_agent_config(application, "requirement_analyst")
+    requirement_analyst_agent = ConfiguredAgent.load(application, "requirement_analyst")
     trace = [
         "validated_description",
         "loaded_architecture_sheet_schema",
@@ -208,7 +207,7 @@ def generate_architecture_sheet(
         llm_provider=llm_provider,
         include_review=mode == "agentic_with_review",
         event_handler=event_handler,
-        requirement_analyst_config=requirement_analyst_config,
+        requirement_analyst_agent=requirement_analyst_agent,
     )
 
     if agentic_sheet["sheet"] is None:
@@ -227,7 +226,7 @@ def generate_architecture_sheet(
         else "requirement_analyst -> architecture_synthesizer"
     )
     generation["agent_configs"] = {
-        "requirement_analyst": _agent_config_summary(requirement_analyst_config),
+        "requirement_analyst": requirement_analyst_agent.summary(),
     }
     generation["requirement_analysis"] = agentic_sheet["analysis"]
     if agentic_sheet["review"]:
@@ -275,28 +274,6 @@ def _load_method_sources(application: ApplicationInstance) -> List[Dict[str, Any
     ]
 
 
-def _load_agent_config(application: ApplicationInstance, agent_id: str) -> Dict[str, Any]:
-    config_path = application.template_dir / "agents" / f"{agent_id}.yaml"
-
-    if not config_path.is_file():
-        return {}
-
-    payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    if not isinstance(payload, dict):
-        raise ArchitectureSheetGenerationError(f"Agent config must be a YAML object: {config_path}")
-    return payload
-
-
-def _agent_config_summary(config: Dict[str, Any]) -> Dict[str, Any]:
-    if not config:
-        return {}
-    return {
-        "id": config.get("id", ""),
-        "name": config.get("name", ""),
-        "version": config.get("version", ""),
-    }
-
-
 def _normalize_generation_mode(generation_mode: str) -> str:
     allowed_modes = {"agentic", "agentic_with_review"}
     mode = (generation_mode or "agentic_with_review").strip().lower().replace("-", "_")
@@ -316,7 +293,7 @@ def _try_generate_agentic_architecture_sheet(
     llm_provider: Optional[LLMProvider],
     include_review: bool,
     event_handler: Optional[ArchitectureGenerationEventHandler],
-    requirement_analyst_config: Optional[Dict[str, Any]] = None,
+    requirement_analyst_agent: ConfiguredAgent,
 ) -> Dict[str, Any]:
     if llm_provider is None or llm_provider.name == "deterministic":
         _emit_failed(event_handler, "analyze_requirements", "Architecture sheet generation requires a structured LLM provider.")
@@ -348,18 +325,15 @@ def _try_generate_agentic_architecture_sheet(
 
     try:
         _emit_started(event_handler, "analyze_requirements", "Requirement Analyst wird aufgerufen.")
-        raw_analysis = _call_generate_json_with_metrics(
-            generate_json=generate_json,
+        raw_analysis = requirement_analyst_agent.run_json(
             llm_provider=llm_provider,
+            context={
+                "user_description": description,
+                "method_sources": _compact_method_sources(method_sources),
+            },
             event_handler=event_handler,
             step="analyze_requirements",
             llm_step="requirement_analyst",
-            system_prompt=_build_requirements_analyst_system_prompt(requirement_analyst_config),
-            user_prompt=_build_requirements_analyst_user_prompt(
-                description,
-                method_sources,
-                requirement_analyst_config,
-            ),
         )
         analysis = _normalize_requirements_analysis(raw_analysis, description)
         _emit_step_output(event_handler, "analyze_requirements", analysis)
@@ -649,83 +623,6 @@ def _compact_method_sources(method_sources: List[Dict[str, Any]]) -> List[Dict[s
     ]
 
 
-def _build_requirements_analyst_system_prompt(
-    agent_config: Optional[Dict[str, Any]] = None,
-) -> str:
-    config = agent_config or {}
-    configured_prompt = _string_value((config.get("prompt") or {}).get("system"))
-    lines = configured_prompt.splitlines() if configured_prompt else [
-        "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
-        "Erzeuge ausschliesslich valides JSON.",
-        "Schreibe alle fachlichen Inhalte ausnahmslos auf Deutsch.",
-        "Analysiere die Beschreibung, ohne Architektur zu erfinden.",
-        "Trenne aktuellen Scope strikt von spaeteren, optionalen oder unklaren Erweiterungen.",
-        "Extrahiere konkrete Rollen, Kernobjekte, Workflows, Schnittstellen, Qualitaetsziele, Risiken, Annahmen und offene Fragen.",
-        "Erzeuge explizit in_scope, out_of_scope, not_evidenced, explicitly_excluded_terms und core_facts.",
-    ]
-
-    if config:
-        lines.extend(
-            [
-                "",
-                f"Agent-Konfiguration: {config.get('id', 'requirement_analyst')} v{config.get('version', '-')}",
-                "Output-Schema:",
-                json.dumps(config.get("output_schema", {}), ensure_ascii=True),
-                "Review-Regeln:",
-                json.dumps(config.get("review_rules", []), ensure_ascii=True),
-                "Normalisierung:",
-                json.dumps(config.get("normalization", {}), ensure_ascii=True),
-            ]
-        )
-
-    return "\n".join(line for line in lines if line is not None)
-
-
-def _build_requirements_analyst_user_prompt(
-    description: str,
-    method_sources: List[Dict[str, Any]],
-    agent_config: Optional[Dict[str, Any]] = None,
-) -> str:
-    config = agent_config or {}
-    configured_template = _string_value((config.get("prompt") or {}).get("user_template"))
-    context = {
-        "user_description": description,
-        "method_sources": json.dumps(_compact_method_sources(method_sources), ensure_ascii=True),
-        "agent_config": json.dumps(
-            {
-                "output_schema": config.get("output_schema", {}),
-                "review_rules": config.get("review_rules", []),
-                "normalization": config.get("normalization", {}),
-            },
-            ensure_ascii=True,
-        ),
-    }
-    if configured_template:
-        prompt = configured_template
-        for key, value in context.items():
-            prompt = prompt.replace("{{ " + key + " }}", value)
-            prompt = prompt.replace("{{" + key + "}}", value)
-        return prompt
-
-    return "\n\n".join(
-        [
-            f"Beschreibung:\n{description}",
-            f"Methodenhinweise:\n{json.dumps(_compact_method_sources(method_sources), ensure_ascii=True)}",
-            (
-                "Gib JSON mit diesen Feldern zurueck: artifact_name, business_goal, roles, "
-                "core_entities, workflows, current_interfaces, future_interfaces, quality_goals, "
-                "constraints, explicitly_not_needed, in_scope, out_of_scope, not_evidenced, "
-                "explicitly_excluded_terms, core_facts, domain_entities, enumerations, "
-                "functional_requirements, crud_requirements, validation_rules, security_rules, "
-                "ui_requirements, technical_constraints, delivery_requirements, test_requirements, "
-                "explicitly_excluded, not_requested, future_ideas, risks, assumptions, open_questions. "
-                "Array-Eintraege sollen konkrete Strings oder Objekte mit name/description sein. "
-                "Alle Werte muessen in deutscher Sprache formuliert sein."
-            ),
-        ]
-    )
-
-
 def _build_architecture_synthesizer_system_prompt() -> str:
     return "\n".join(
         [
@@ -882,11 +779,18 @@ def _normalize_requirements_analysis(
         "technical_constraints": _list_of_structured_items(raw_analysis.get("technical_constraints")),
         "delivery_requirements": _list_of_structured_items(raw_analysis.get("delivery_requirements")),
         "test_requirements": _list_of_structured_items(raw_analysis.get("test_requirements")),
+        "quality_requirements": _list_of_structured_items(raw_analysis.get("quality_requirements")),
         "risks": _list_of_risk_items(raw_analysis.get("risks")),
         "assumptions": _list_of_text_items(raw_analysis.get("assumptions")),
         "open_questions": _list_of_text_items(raw_analysis.get("open_questions")),
     }
 
+    if not analysis["core_entities"] and analysis["domain_entities"]:
+        analysis["core_entities"] = _derive_core_entities_from_domain_entities(analysis)
+    if not analysis["workflows"] and analysis["functional_requirements"]:
+        analysis["workflows"] = _derive_workflows_from_functional_requirements(analysis)
+    if not analysis["quality_goals"] and analysis["quality_requirements"]:
+        analysis["quality_goals"] = _derive_quality_goals_from_quality_requirements(analysis)
     if not analysis["roles"]:
         analysis["roles"] = [{"name": "Nutzer", "description": "Nutzen die Django-Anwendung."}]
     if not analysis["core_entities"]:
@@ -998,6 +902,45 @@ def _derive_domain_entities(analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
         }
         for entity in analysis.get("core_entities", [])
     ]
+
+
+def _derive_core_entities_from_domain_entities(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    return [
+        {
+            "name": _string_value(entity.get("name")),
+            "description": _string_value(entity.get("description")) or _string_value(entity.get("name")),
+        }
+        for entity in analysis.get("domain_entities", [])
+        if _string_value(entity.get("name"))
+    ]
+
+
+def _derive_workflows_from_functional_requirements(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    workflows = []
+    for requirement in analysis.get("functional_requirements", []):
+        name = _string_value(
+            requirement.get("name")
+            or requirement.get("action")
+            or requirement.get("id")
+        )
+        description = _string_value(requirement.get("description")) or name
+        if name:
+            workflows.append({"name": name, "description": description})
+    return workflows
+
+
+def _derive_quality_goals_from_quality_requirements(analysis: Dict[str, Any]) -> List[Dict[str, str]]:
+    goals = []
+    for requirement in analysis.get("quality_requirements", []):
+        name = _string_value(
+            requirement.get("name")
+            or requirement.get("category")
+            or requirement.get("id")
+        )
+        scenario = _string_value(requirement.get("description")) or name
+        if name:
+            goals.append({"name": name, "description": scenario})
+    return goals
 
 
 def _derive_functional_requirements(analysis: Dict[str, Any]) -> List[Dict[str, Any]]:
