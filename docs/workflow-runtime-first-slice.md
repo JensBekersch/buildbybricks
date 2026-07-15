@@ -124,6 +124,11 @@ Ein Loader uebersetzt den Blueprint in eine generische `WorkflowVersion`.
 Damit ist der Prozess jetzt maschinenlesbar konfiguriert und strukturell mit
 der generischen Workflow-Validierung pruefbar.
 
+Die bestehende Architecture-Sheet-Generatorfunktion laedt diesen Blueprint
+waehrend der Ausfuehrung. Workflow-Metadaten und Agentenwahl stammen aus der
+konfigurierten `WorkflowVersion`. Requirement Analyst, Architecture Synthesizer
+und Architecture Reviewer werden aus YAML-Agentenkonfigurationen geladen.
+
 ## Architekturentscheidungen
 
 - Die erste Stufe bleibt framework-neutral, weil das bestehende Projekt aktuell
@@ -154,9 +159,10 @@ Ergebnis:
 - Noch keine Django Models oder Migrationen, weil das aktuelle Projekt keine
   Django-App-Struktur besitzt.
 - Noch keine produktiven Provider-Adapter.
-- Der neue Architecture-Sheet-Workflow-Blueprint ist validierbar, aber die
-  bestehende Generatorfunktion nutzt fuer die Produktion noch den bisherigen
-  spezialisierten Codepfad.
+- Die bestehende Generatorfunktion nutzt den Workflow-Blueprint fuer
+  Agentenwahl und Workflow-Metadaten, fuehrt aber deterministische
+  Zwischenschritte wie Schema-Laden, Baseline-Erzeugung, Korrekturlauf und
+  Contract-Validierung noch im spezialisierten Codepfad aus.
 - Noch keine Rechte-/Mandantentrennung fuer Workflow-Runs.
 - Noch keine UI fuer Workflow-Konfiguration.
 - Noch keine Anbindung der bestehenden Django-Machine-Ansicht an generische
@@ -164,10 +170,11 @@ Ergebnis:
 
 ## Naechste sinnvolle Schritte
 
-1. Die bestehende Architecture-Sheet-Ausfuehrung schrittweise auf den
-   konfigurierten Workflow-Blueprint umstellen.
-2. Admin-/Workflow-UI listenbasiert ergaenzen.
-3. Produktive Provider-Adapter hinter dem Adapter-Interface implementieren.
-4. Weitere Validatoren fuer fachliche Review-Regeln ergaenzen.
-5. Optional spaeter: Migration von Snapshot-Store zu Django Models, falls das
+1. Deterministische Architecture-Sheet-Schritte als registrierte Workflow-Tasks
+   ausfuehrbar machen.
+2. Den Architecture-Repair-Corrector als konfigurierten Agenten modellieren.
+3. Admin-/Workflow-UI listenbasiert ergaenzen.
+4. Produktive Provider-Adapter hinter dem Adapter-Interface implementieren.
+5. Weitere Validatoren fuer fachliche Review-Regeln ergaenzen.
+6. Optional spaeter: Migration von Snapshot-Store zu Django Models, falls das
    Projekt zur vollwertigen Django-App umgebaut wird.

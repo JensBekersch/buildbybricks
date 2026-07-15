@@ -386,6 +386,17 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     interface_types = {interface["type"] for interface in sheet["context"]["interfaces"]}
 
     assert payload["generation"]["mode"] == "agentic_with_review"
+    assert payload["generation"]["workflow"]["id"] == "architecture-sheet"
+    assert payload["generation"]["workflow"]["version"] == 1
+    assert payload["generation"]["workflow"]["steps"] == [
+        "validate_description",
+        "load_schema",
+        "load_method_sources",
+        "analyze_requirements",
+        "synthesize_architecture",
+        "review_architecture",
+        "validate_contract",
+    ]
     assert payload["generation"]["architecture_review"]["passes"] is True
     assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
     assert payload["generation"]["requirement_analysis"]["in_scope"]
@@ -394,6 +405,16 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
         "id": "requirement_analyst",
         "name": "Requirement Analyst",
         "version": 2,
+    }
+    assert payload["generation"]["agent_configs"]["architecture_synthesizer"] == {
+        "id": "architecture_synthesizer",
+        "name": "Architecture Synthesizer",
+        "version": 1,
+    }
+    assert payload["generation"]["agent_configs"]["architecture_reviewer"] == {
+        "id": "architecture_reviewer",
+        "name": "Architecture Reviewer",
+        "version": 1,
     }
     assert payload["generation"]["requirement_analysis"]["domain_entities"][0]["attributes"][0]["name"] == "startzeit"
     assert payload["generation"]["requirement_analysis"]["validation_rules"][0]["description"] == "Endzeit muss nach Startzeit liegen."
@@ -457,6 +478,15 @@ def test_generate_architecture_sheet_can_skip_agentic_review() -> None:
 
     assert payload["generation"]["mode"] == "agentic"
     assert payload["generation"]["pipeline"] == "requirement_analyst -> architecture_synthesizer"
+    assert payload["generation"]["workflow"]["steps"] == [
+        "validate_description",
+        "load_schema",
+        "load_method_sources",
+        "analyze_requirements",
+        "synthesize_architecture",
+        "validate_contract",
+    ]
+    assert "architecture_reviewer" not in payload["generation"]["agent_configs"]
     assert "architecture_review" not in payload["generation"]
     assert provider.calls == [
         "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
