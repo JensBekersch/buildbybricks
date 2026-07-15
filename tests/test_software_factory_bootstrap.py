@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import yaml
+
 from agentic_rag_template.config import Settings
 from agentic_rag_template.ingestion import discover_collections, load_documents
 from agentic_rag_template.applications import FileApplicationRegistry
@@ -132,6 +134,26 @@ def test_software_factory_architecture_sheet_schema_has_required_contract() -> N
         "risks_and_technical_debt",
         "glossary",
     }
+
+
+def test_software_factory_requirement_analyst_agent_config_is_loadable() -> None:
+    config_path = (
+        PROJECT_ROOT
+        / "apps"
+        / "software-factory"
+        / "agents"
+        / "requirement_analyst.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    assert config["id"] == "requirement_analyst"
+    assert config["name"] == "Requirement Analyst"
+    assert config["version"] == 1
+    assert "domain_entities" in config["output_schema"]["required"]
+    assert "test_requirements" in config["output_schema"]["required"]
+    assert "{{ user_description }}" in config["prompt"]["user_template"]
+    assert "{{ agent_config }}" in config["prompt"]["user_template"]
+    assert any(rule["id"] == "preserve_explicit_test_cases" for rule in config["review_rules"])
 
 
 def test_software_factory_examples_document_good_and_bad_outputs() -> None:
