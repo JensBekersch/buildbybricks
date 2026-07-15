@@ -30,9 +30,11 @@ class AgenticArchitectureLLMProvider:
 
     def __init__(self) -> None:
         self.calls = []
+        self.prompts = []
 
     def generate_json(self, system_prompt: str, user_prompt: str):
         self.calls.append(system_prompt.split("\n")[0])
+        self.prompts.append((system_prompt, user_prompt))
         if "Requirement Analyst" in system_prompt:
             return {
                 "artifact_name": "Arbeitszeit Cockpit",
@@ -63,6 +65,28 @@ class AgenticArchitectureLLMProvider:
                     {"name": "Berechnungskorrektheit", "description": "Soll-Ist-Zeiten werden korrekt berechnet."}
                 ],
                 "constraints": [{"description": "Erste Version als serverseitige Django-Anwendung."}],
+                "domain_entities": [
+                    {
+                        "name": "Zeiteintrag",
+                        "description": "Erfasste Arbeitszeit eines Mitarbeitenden.",
+                        "attributes": [
+                            {"name": "startzeit", "type": "datetime", "required": True},
+                            {"name": "endzeit", "type": "datetime", "required": True},
+                        ],
+                    }
+                ],
+                "validation_rules": [
+                    {
+                        "description": "Endzeit muss nach Startzeit liegen.",
+                        "evidence": "Startzeit, Endzeit und Pause werden erfasst.",
+                    }
+                ],
+                "test_requirements": [
+                    {
+                        "description": "Soll-Ist-Berechnung wird automatisiert getestet.",
+                        "type": "unit",
+                    }
+                ],
                 "risks": [
                     {
                         "description": "Arbeitszeitregeln koennen komplex sein.",
@@ -366,6 +390,19 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
     assert payload["generation"]["requirement_analysis"]["in_scope"]
     assert payload["generation"]["requirement_analysis"]["not_evidenced"]
+    assert payload["generation"]["agent_configs"]["requirement_analyst"] == {
+        "id": "requirement_analyst",
+        "name": "Requirement Analyst",
+        "version": 1,
+    }
+    assert payload["generation"]["requirement_analysis"]["domain_entities"][0]["attributes"][0]["name"] == "startzeit"
+    assert payload["generation"]["requirement_analysis"]["validation_rules"][0]["description"] == "Endzeit muss nach Startzeit liegen."
+    assert payload["generation"]["requirement_analysis"]["test_requirements"][0]["type"] == "unit"
+    requirement_system_prompt, requirement_user_prompt = provider.prompts[0]
+    assert "verlustarmer Requirements Parser" in requirement_system_prompt
+    assert "preserve_explicit_test_cases" in requirement_system_prompt
+    assert "domain_entities" in requirement_user_prompt
+    assert "test_requirements" in requirement_user_prompt
     assert provider.calls == [
         "Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.",
         "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
