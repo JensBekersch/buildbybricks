@@ -21,6 +21,10 @@ from agentic_rag_template.ingestion.loader import SUPPORTED_EXTENSIONS
 from agentic_rag_template.llm import create_llm_provider
 from agentic_rag_template.observability import render_prometheus_metrics
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
+from agentic_rag_template.software_factory.workflow_blueprints import (
+    WorkflowBlueprintError,
+    load_software_factory_workflow,
+)
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
     ArchitectureGenerationJobStoreError,
@@ -32,10 +36,15 @@ from agentic_rag_template.software_factory import (
     PostgresArchitectureGenerationJobStore,
 )
 from agentic_rag_template.template_config import load_application_profile
+from agentic_rag_template.workflows.models import WorkflowRun, WorkflowVersion
+from agentic_rag_template.workflows.providers import FakeLLMProviderAdapter
+from agentic_rag_template.workflows.workflow_execution import LinearWorkflowEngine
+from agentic_rag_template.workflows.workflow_validation import WorkflowVersionValidator
 
 
 SAFE_COLLECTION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 SAFE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ -]*$")
+SAFE_WORKFLOW_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def create_app_settings() -> Settings:
@@ -48,9 +57,17 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
     settings: Settings
 
-    def __init__(self, *args: Any, settings: Settings, architecture_job_store: Any = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        settings: Settings,
+        architecture_job_store: Any = None,
+        workflow_admin_runs: Optional[Dict[str, WorkflowRun]] = None,
+        **kwargs: Any,
+    ) -> None:
         self.settings = settings
         self.architecture_job_store = architecture_job_store
+        self.workflow_admin_runs = workflow_admin_runs if workflow_admin_runs is not None else {}
         super().__init__(*args, directory=str(settings.frontend_dir), **kwargs)
 
     def do_GET(self) -> None:
@@ -107,6 +124,24 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/evaluation/run":
                 self._send_json(self._run_evaluation(application))
+                return
+
+            if app_route["remainder"] == "/workflows":
+                self._send_json(self._list_workflows(application))
+                return
+
+            workflow_run_route = self._parse_workflow_run_route(app_route["remainder"])
+            if workflow_run_route is not None:
+                self._send_workflow_run_response(
+                    application,
+                    workflow_run_route["workflow_id"],
+                    workflow_run_route.get("run_id", ""),
+                )
+                return
+
+            workflow_id = self._parse_workflow_detail_route(app_route["remainder"])
+            if workflow_id is not None:
+                self._send_workflow_detail_response(application, workflow_id)
                 return
 
             if app_route["remainder"] == "/architecture-sheet/jobs":
@@ -181,6 +216,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 return
 
             self._send_architecture_job_created_response(application)
+            return
+
+        workflow_action = self._parse_workflow_action_route(app_route["remainder"] if app_route else "")
+        if workflow_action is not None:
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_workflow_action_response(
+                application,
+                workflow_action["workflow_id"],
+                workflow_action["action"],
+            )
             return
 
         architecture_job_action = self._parse_architecture_job_action_route(
@@ -698,6 +747,196 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         payload["llm_model"] = llm_provider.model
         return payload
 
+    def _list_workflows(self, application: ApplicationInstance) -> Dict[str, Any]:
+        workflow_dir = application.template_dir / "workflows"
+        workflows = []
+        for path in sorted(workflow_dir.glob("*.yaml")):
+            workflow_id = path.stem
+            if not self._is_safe_workflow_id(workflow_id):
+                continue
+            try:
+                workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+            except WorkflowBlueprintError as error:
+                workflows.append(
+                    {
+                        "id": workflow_id,
+                        "status": "invalid",
+                        "error": str(error),
+                        "path": path.relative_to(application.template_dir).as_posix(),
+                    }
+                )
+                continue
+            workflows.append(self._workflow_summary(application, workflow_id, workflow_version))
+        return {"app_id": application.id, "workflows": workflows}
+
+    def _send_workflow_detail_response(self, application: ApplicationInstance, workflow_id: str) -> None:
+        workflow_version = self._load_workflow_or_404(application, workflow_id)
+        if workflow_version is None:
+            return
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "workflow": workflow_version.to_dict(),
+                "validation": self._validate_workflow_version(workflow_version),
+            }
+        )
+
+    def _send_workflow_action_response(
+        self,
+        application: ApplicationInstance,
+        workflow_id: str,
+        action: str,
+    ) -> None:
+        workflow_version = self._load_workflow_or_404(application, workflow_id)
+        if workflow_version is None:
+            return
+
+        if action == "validate":
+            self._send_json(
+                {
+                    "app_id": application.id,
+                    "workflow_id": workflow_id,
+                    "validation": self._validate_workflow_version(workflow_version),
+                }
+            )
+            return
+
+        if action == "test-runs":
+            payload = self._read_json_body()
+            responses = payload.get("responses", [])
+            if not isinstance(responses, list):
+                self._send_json({"error": "responses must be a list"}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            initial_input = payload.get("input", {})
+            if not isinstance(initial_input, dict):
+                self._send_json({"error": "input must be an object"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            description = str(payload.get("description", "")).strip()
+            if description and "description" not in initial_input:
+                initial_input = {**initial_input, "description": description}
+            if "description" not in initial_input:
+                initial_input = {**initial_input, "description": "Admin API Testlauf."}
+
+            engine = LinearWorkflowEngine(provider_adapter=FakeLLMProviderAdapter(responses))
+            run = engine.run(workflow_version, initial_input)
+            run.started_by = str(payload.get("started_by", "workflow-admin-api"))
+            self.workflow_admin_runs[self._workflow_run_store_key(application, workflow_id, run.id)] = run
+            self._send_json(
+                {
+                    "app_id": application.id,
+                    "workflow_id": workflow_id,
+                    "run": run.to_dict(),
+                },
+                status=HTTPStatus.CREATED,
+            )
+            return
+
+        self._send_json({"error": "unsupported workflow action"}, status=HTTPStatus.NOT_FOUND)
+
+    def _send_workflow_run_response(
+        self,
+        application: ApplicationInstance,
+        workflow_id: str,
+        run_id: str = "",
+    ) -> None:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if run_id:
+            run = self.workflow_admin_runs.get(self._workflow_run_store_key(application, workflow_id, run_id))
+            if run is None:
+                self._send_json({"error": "workflow run not found"}, status=HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(
+                {
+                    "app_id": application.id,
+                    "workflow_id": workflow_id,
+                    "run": run.to_dict(),
+                }
+            )
+            return
+
+        runs = [
+            run
+            for key, run in self.workflow_admin_runs.items()
+            if key.startswith(self._workflow_run_store_prefix(application, workflow_id))
+        ]
+        runs.sort(key=lambda item: item.started_at or item.finished_at or item.workflow_version.created_at, reverse=True)
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "runs": [self._workflow_run_summary(run) for run in runs],
+            }
+        )
+
+    def _load_workflow_or_404(
+        self,
+        application: ApplicationInstance,
+        workflow_id: str,
+    ) -> Optional[WorkflowVersion]:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return None
+        try:
+            return load_software_factory_workflow(application, workflow_id=workflow_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return None
+
+    def _workflow_summary(
+        self,
+        application: ApplicationInstance,
+        workflow_id: str,
+        workflow_version: WorkflowVersion,
+    ) -> Dict[str, Any]:
+        validation = self._validate_workflow_version(workflow_version)
+        return {
+            "id": workflow_id,
+            "name": workflow_version.workflow.name,
+            "slug": workflow_version.workflow.slug,
+            "description": workflow_version.workflow.description,
+            "status": workflow_version.status,
+            "workflow_status": workflow_version.workflow.status,
+            "version_number": workflow_version.version_number,
+            "final_output_key": workflow_version.final_output_key,
+            "step_count": len(workflow_version.steps),
+            "validation": validation,
+            "path": (application.template_dir / "workflows" / f"{workflow_id}.yaml")
+            .relative_to(application.template_dir)
+            .as_posix(),
+        }
+
+    def _validate_workflow_version(self, workflow_version: WorkflowVersion) -> Dict[str, Any]:
+        result = WorkflowVersionValidator().validate(workflow_version)
+        return {"valid": result.valid, "errors": result.errors, "warnings": result.warnings}
+
+    def _workflow_run_summary(self, run: WorkflowRun) -> Dict[str, Any]:
+        return {
+            "id": run.id,
+            "workflow": {
+                "name": run.workflow_version.workflow.name,
+                "slug": run.workflow_version.workflow.slug,
+                "version_number": run.workflow_version.version_number,
+            },
+            "status": run.status,
+            "started_by": run.started_by,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "error_summary": run.error_summary,
+            "step_count": len(run.step_runs),
+            "artifact_count": len(run.artifacts),
+        }
+
+    def _workflow_run_store_prefix(self, application: ApplicationInstance, workflow_id: str) -> str:
+        return f"{application.id}:{workflow_id}:"
+
+    def _workflow_run_store_key(self, application: ApplicationInstance, workflow_id: str, run_id: str) -> str:
+        return f"{self._workflow_run_store_prefix(application, workflow_id)}{run_id}"
+
     def _send_metrics_response(self) -> None:
         try:
             jobs = self._architecture_job_store().list(limit=500)
@@ -729,6 +968,38 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if len(parts) == 3 and parts[0] == "collections" and parts[2] == "documents":
             return parts[1]
+
+        return None
+
+    def _parse_workflow_detail_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 2 and parts[0] == "workflows" and parts[1]:
+            return parts[1]
+
+        return None
+
+    def _parse_workflow_action_route(self, remainder: str) -> Optional[Dict[str, str]]:
+        parts = remainder.strip("/").split("/")
+
+        if (
+            len(parts) == 3
+            and parts[0] == "workflows"
+            and parts[1]
+            and parts[2] in {"validate", "test-runs"}
+        ):
+            return {"workflow_id": parts[1], "action": parts[2]}
+
+        return None
+
+    def _parse_workflow_run_route(self, remainder: str) -> Optional[Dict[str, str]]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 3 and parts[0] == "workflows" and parts[1] and parts[2] == "runs":
+            return {"workflow_id": parts[1]}
+
+        if len(parts) == 4 and parts[0] == "workflows" and parts[1] and parts[2] == "runs" and parts[3]:
+            return {"workflow_id": parts[1], "run_id": parts[3]}
 
         return None
 
@@ -796,6 +1067,9 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             and path.suffix.lower() in SUPPORTED_EXTENSIONS
         )
 
+    def _is_safe_workflow_id(self, workflow_id: str) -> bool:
+        return bool(SAFE_WORKFLOW_ID_PATTERN.fullmatch(workflow_id))
+
     def _read_json_body(self) -> Dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0"))
         raw_body = self.rfile.read(content_length) if content_length else b"{}"
@@ -846,10 +1120,12 @@ def create_server(settings: Optional[Settings] = None, architecture_job_store: A
     active_settings = settings or create_app_settings()
     frontend_dir = Path(active_settings.frontend_dir)
     frontend_dir.mkdir(parents=True, exist_ok=True)
+    workflow_admin_runs: Dict[str, WorkflowRun] = {}
     handler = partial(
         AgenticRagRequestHandler,
         settings=active_settings,
         architecture_job_store=architecture_job_store,
+        workflow_admin_runs=workflow_admin_runs,
     )
     return ThreadingHTTPServer((active_settings.host, active_settings.port), handler)
 
