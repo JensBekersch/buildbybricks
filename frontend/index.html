@@ -3,76 +3,23 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Agentic RAG Studio</title>
+    <title>Django Machine</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Agentic RAG Studio</h1>
-          <p id="app-description">Lokale Study Runtime</p>
+          <h1>Django Machine</h1>
+          <p id="app-description">Software Factory fuer nachvollziehbare Django-Architekturarbeit</p>
         </div>
         <div class="runtime-status" id="runtime-status">Verbinden...</div>
       </header>
 
-      <nav class="mode-tabs" aria-label="Arbeitsbereich">
-        <button class="mode-tab is-active" type="button" data-view-target="rag-view">Chat & Wissen</button>
-        <button class="mode-tab" type="button" data-view-target="architecture-view">Architecture Sheet</button>
-      </nav>
-
-      <section id="rag-view" class="workspace view">
-        <aside class="control-panel" aria-label="App und Wissen">
-          <section class="panel-section">
-            <h2>Anwendung</h2>
-            <label for="app-select">App</label>
-            <select id="app-select"></select>
-          </section>
-
-          <section class="panel-section">
-            <h2>Collection</h2>
-            <label for="collection-select">Aktive Collection</label>
-            <select id="collection-select"></select>
-            <button id="refresh-collections" type="button">Aktualisieren</button>
-          </section>
-        </aside>
-
-        <section class="chat-panel" aria-label="Chat">
-          <div id="chat-log" class="chat-log" aria-label="Chat Verlauf"></div>
-          <form id="chat-form" class="chat-form">
-            <label class="sr-only" for="message-input">Nachricht</label>
-            <input id="message-input" name="message" type="text" placeholder="Frage eingeben" autocomplete="off">
-            <button type="submit">Senden</button>
-          </form>
-        </section>
-
-        <aside class="knowledge-panel" aria-label="Wissen">
-          <section class="panel-section">
-            <div class="section-heading">
-              <h2>Dokumente</h2>
-              <span id="document-count">0</span>
-            </div>
-            <ul id="document-list" class="document-list"></ul>
-          </section>
-
-          <form id="upload-form" class="upload-form">
-            <h2>Wissen hinzufuegen</h2>
-            <label for="upload-collection">Collection</label>
-            <input id="upload-collection" name="collection" type="text" autocomplete="off">
-            <label for="upload-filename">Dateiname</label>
-            <input id="upload-filename" name="filename" type="text" placeholder="notiz.md" autocomplete="off">
-            <label for="upload-content">Inhalt</label>
-            <textarea id="upload-content" name="content" rows="9"></textarea>
-            <button type="submit">Hochladen</button>
-            <p id="upload-status" class="form-status" role="status"></p>
-          </form>
-        </aside>
-      </section>
-
-      <section id="architecture-view" class="architecture-workbench view" hidden>
-        <aside class="architecture-panel architecture-input" aria-label="Architecture Sheet Generator">
+      <section id="architecture-view" class="architecture-workbench view">
+        <aside class="architecture-panel architecture-input" aria-label="Django Machine Generator">
           <div class="panel-kicker">Software Factory</div>
-          <h2>Architecture Sheet</h2>
+          <h2>Django Machine</h2>
           <form id="architecture-form" class="architecture-form">
             <div id="architecture-progress" class="architecture-progress" hidden aria-live="polite">
               <div class="progress-head">
@@ -117,7 +64,7 @@
               </dl>
             </section>
 
-            <button id="generate-architecture" type="submit">Architecture Job anlegen</button>
+            <button id="generate-architecture" type="submit">Django-Machine-Job anlegen</button>
             <div class="architecture-actions">
               <button id="cancel-architecture-job" type="button" disabled>Abbrechen</button>
               <button id="retry-architecture-job" type="button" disabled>Erneut starten</button>
@@ -126,32 +73,41 @@
           </form>
         </aside>
 
-        <section class="architecture-panel architecture-sheet" aria-label="Generiertes Architecture Sheet">
+        <section class="architecture-panel agent-workbench" aria-label="Agenten-Ausfuehrungen">
           <div id="architecture-empty" class="architecture-empty">
-            <strong>Noch kein Sheet erzeugt</strong>
-            <span>Der Generator rendert das Ergebnis hier als pruefbares Arbeitsdokument.</span>
+            <strong>Noch kein Job ausgewaehlt</strong>
+            <span>Starte einen Job oder waehle rechts einen vorhandenen Job, um die Agenten-Schritte zu inspizieren.</span>
           </div>
 
-          <article id="architecture-result" hidden>
-            <header class="sheet-header">
-              <div>
-                <p class="panel-kicker">Architecture Sheet</p>
-                <h2 id="architecture-title">Unbenanntes Artefakt</h2>
-              </div>
-              <div class="sheet-badges">
-                <span id="architecture-validation" class="badge">Validierung</span>
-                <span id="architecture-generation" class="badge">Generator</span>
-              </div>
-            </header>
+          <div id="architecture-result" class="agent-workbench-grid" hidden>
+            <aside class="agent-step-list-panel" aria-label="Agenten-Schritte">
+              <header class="agent-panel-header">
+                <div>
+                  <p class="panel-kicker">Agent Runs</p>
+                  <h2 id="architecture-title">Unbenannter Job</h2>
+                </div>
+                <div class="sheet-badges">
+                  <span id="architecture-validation" class="badge">Validierung</span>
+                  <span id="architecture-generation" class="badge">Generator</span>
+                </div>
+              </header>
+              <p id="architecture-business-goal" class="sheet-lede"></p>
+              <ol id="agent-step-list" class="agent-step-list"></ol>
+            </aside>
 
-            <p id="architecture-business-goal" class="sheet-lede"></p>
-            <div id="architecture-sections" class="sheet-sections"></div>
-
-            <details class="json-panel">
-              <summary>JSON anzeigen</summary>
-              <pre id="architecture-json"></pre>
-            </details>
-          </article>
+            <article class="agent-viewer" aria-label="Agenten-Ergebnis">
+              <header class="agent-viewer-header">
+                <div>
+                  <p id="agent-viewer-kicker" class="panel-kicker">Agent Output</p>
+                  <h2 id="agent-viewer-title">Schritt auswaehlen</h2>
+                </div>
+                <span id="agent-viewer-status" class="badge">Wartet</span>
+              </header>
+              <div id="agent-viewer-body" class="agent-viewer-body">
+                <p class="empty-state">Waehle links einen Agenten-Schritt, um Input, Output, Quellen und technische Details zu sehen.</p>
+              </div>
+            </article>
+          </div>
         </section>
 
         <aside class="architecture-panel architecture-review" aria-label="Pruefung und Quellen">
