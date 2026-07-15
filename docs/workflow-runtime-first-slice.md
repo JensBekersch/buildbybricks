@@ -14,6 +14,7 @@ Persistenz, Admin-UI, Versionierung und Berechtigungen aufbauen koennen.
 - generische Workflow-, Version-, Step-, Run-, StepRun- und Artifact-Modelle
 - generische AgentDefinition- und AgentVersion-Modelle
 - Postgres-Snapshot-Store fuer Workflow- und Agent-Versionen, Runs und Artefakte
+- erster konfigurierter Software-Factory-Workflow fuer Architecture-Sheet-Erzeugung
 - providerneutrales `LLMProviderAdapter`-Interface
 - Fake-Provider fuer Tests
 - Input-Resolver fuer Workflow-Input, Step-Output, Artefakte, statische Werte und Run-Metadaten
@@ -97,6 +98,32 @@ Die indexierten Spalten dienen der Suche nach Slug, Version, Run-ID, Status und
 validierten Artefakten. Die Payloads halten die vollstaendige versionierte
 Konfiguration und Ausfuehrungshistorie.
 
+## Erster Workflow-Blueprint
+
+Der bestehende Architecture-Sheet-Prozess ist als YAML-Blueprint hinterlegt:
+
+- `apps/software-factory/workflows/architecture_sheet.yaml`
+
+Der Blueprint beschreibt diese Schritte:
+
+1. `validate_description`
+2. `load_schema`
+3. `load_method_sources`
+4. `analyze_requirements`
+5. `synthesize_architecture`
+6. `review_architecture`
+7. `validate_contract`
+
+Die Agentenschritte referenzieren YAML-Agentenkonfigurationen:
+
+- `requirement_analyst`
+- `architecture_synthesizer`
+- `architecture_reviewer`
+
+Ein Loader uebersetzt den Blueprint in eine generische `WorkflowVersion`.
+Damit ist der Prozess jetzt maschinenlesbar konfiguriert und strukturell mit
+der generischen Workflow-Validierung pruefbar.
+
 ## Architekturentscheidungen
 
 - Die erste Stufe bleibt framework-neutral, weil das bestehende Projekt aktuell
@@ -113,6 +140,7 @@ Konfiguration und Ausfuehrungshistorie.
 - `python -m py_compile ...`
 - `PYTHONPATH=src:. python -m pytest tests/test_workflow_runtime.py`
 - `PYTHONPATH=src:. python -m pytest tests/test_workflow_runtime.py tests/test_workflow_store.py`
+- `PYTHONPATH=src:. python -m pytest tests/test_software_factory_bootstrap.py tests/test_workflow_runtime.py`
 
 Ergebnis:
 
@@ -126,6 +154,9 @@ Ergebnis:
 - Noch keine Django Models oder Migrationen, weil das aktuelle Projekt keine
   Django-App-Struktur besitzt.
 - Noch keine produktiven Provider-Adapter.
+- Der neue Architecture-Sheet-Workflow-Blueprint ist validierbar, aber die
+  bestehende Generatorfunktion nutzt fuer die Produktion noch den bisherigen
+  spezialisierten Codepfad.
 - Noch keine Rechte-/Mandantentrennung fuer Workflow-Runs.
 - Noch keine UI fuer Workflow-Konfiguration.
 - Noch keine Anbindung der bestehenden Django-Machine-Ansicht an generische
@@ -133,8 +164,8 @@ Ergebnis:
 
 ## Naechste sinnvolle Schritte
 
-1. Die bestehende Architecture-Sheet-Pipeline als ersten konfigurierten
-   Workflow auf die neue Engine abbilden.
+1. Die bestehende Architecture-Sheet-Ausfuehrung schrittweise auf den
+   konfigurierten Workflow-Blueprint umstellen.
 2. Admin-/Workflow-UI listenbasiert ergaenzen.
 3. Produktive Provider-Adapter hinter dem Adapter-Interface implementieren.
 4. Weitere Validatoren fuer fachliche Review-Regeln ergaenzen.

@@ -38,6 +38,10 @@ from agentic_rag_template.software_factory.jobs import (
     ArchitectureGenerationStepDefinition,
     apply_architecture_generation_event,
 )
+from agentic_rag_template.software_factory.workflow_blueprints import (
+    WorkflowBlueprintError,
+    load_software_factory_workflow,
+)
 
 __all__ = [
     "ARCHITECTURE_GENERATION_STEPS",
@@ -68,6 +72,8 @@ __all__ = [
     "ArchitectureSheetResult",
     "FileArchitectureArtifactStore",
     "PostgresArchitectureGenerationJobStore",
+    "WorkflowBlueprintError",
     "apply_architecture_generation_event",
     "generate_architecture_sheet",
+    "load_software_factory_workflow",
 ]
