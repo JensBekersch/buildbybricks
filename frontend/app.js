@@ -175,7 +175,7 @@ function renderArchitectureJob(job) {
   const statusText = {
     queued: "Job wurde angelegt und wartet auf Ausfuehrung.",
     running: activeStep ? activeStep.label : "Job wird ausgefuehrt.",
-    completed: "Django-Machine-Lauf ist abgeschlossen.",
+    completed: "Workflow-Factory-Lauf ist abgeschlossen.",
     failed: job.error || "Job ist fehlgeschlagen.",
     canceled: job.error || "Job wurde abgebrochen.",
   };
@@ -226,11 +226,11 @@ function stopArchitectureJobUpdates() {
 
 function completeArchitectureJobUi(job) {
   generateArchitectureButton.disabled = false;
-  generateArchitectureButton.textContent = "Django-Machine-Job anlegen";
+  generateArchitectureButton.textContent = "Workflow-Job anlegen";
 
   if (job.status === "completed") {
     architectureStatus.textContent = `Job ${job.id} ist abgeschlossen.`;
-    setRuntimeStatus("Django Machine abgeschlossen", "ok");
+    setRuntimeStatus("Workflow Factory abgeschlossen", "ok");
     return;
   }
 
@@ -300,7 +300,7 @@ async function openArchitectureJob(jobId) {
 
   generateArchitectureButton.disabled = true;
   generateArchitectureButton.textContent = "Generierung laeuft...";
-  setRuntimeStatus("Django Machine arbeitet...", "neutral");
+  setRuntimeStatus("Workflow Factory arbeitet...", "neutral");
   subscribeArchitectureJob(job.id);
 }
 
@@ -415,7 +415,7 @@ async function retryArchitectureJob() {
   await loadArchitectureJobs();
   generateArchitectureButton.disabled = true;
   generateArchitectureButton.textContent = "Generierung laeuft...";
-  setRuntimeStatus("Django Machine arbeitet...", "neutral");
+  setRuntimeStatus("Workflow Factory arbeitet...", "neutral");
   subscribeArchitectureJob(payload.job.id);
 }
 
@@ -522,6 +522,11 @@ function stepOutputFromLogs(logs) {
   return outputLog ? (outputLog.metadata || {}).output || null : null;
 }
 
+function artifactContent(result, key) {
+  const artifact = (result.validated_artifacts || []).find((item) => item.key === key);
+  return artifact ? artifact.content : null;
+}
+
 function stepDuration(step) {
   if (!step.started_at || !step.finished_at) {
     return "";
@@ -533,17 +538,20 @@ function buildAgentRunItems(job, payload) {
   const result = payload || job.result || {};
   const generation = result.generation || {};
   const sheet = result.architecture_sheet || {};
+  const requirementArtifact = artifactContent(result, "requirements_analysis");
+  const sheetArtifact = artifactContent(result, "architecture_sheet");
+  const reviewArtifact = artifactContent(result, "architecture_review");
   const items = (job.steps || []).map((step) => {
     const logs = stepLogs(job, step.key);
     const llmLogs = logs.filter((log) => (log.metadata || {}).kind === "llm_call");
     let output = stepOutputFromLogs(logs);
 
     if (!output && step.key === "analyze_requirements") {
-      output = generation.requirement_analysis || null;
+      output = requirementArtifact || generation.requirement_analysis || null;
     } else if (!output && step.key === "synthesize_architecture") {
-      output = sheet && Object.keys(sheet).length > 0 ? sheet : null;
+      output = sheetArtifact || (sheet && Object.keys(sheet).length > 0 ? sheet : null);
     } else if (!output && step.key === "review_architecture") {
-      output = generation.architecture_review || null;
+      output = reviewArtifact || generation.architecture_review || null;
     } else if (!output && step.key === "validate_contract") {
       output = result.validation || null;
     } else if (!output && step.key === "load_method_sources") {
@@ -579,7 +587,7 @@ function buildAgentRunItems(job, payload) {
       duration: "",
       logs: [],
       llmLogs: [],
-      output: result.architecture_sheet,
+      output: sheetArtifact || result.architecture_sheet,
     });
   }
 
@@ -791,7 +799,7 @@ async function generateArchitectureSheet() {
     renderArchitectureJob(payload.job);
     await loadArchitectureJobs();
     generateArchitectureButton.textContent = "Generierung laeuft...";
-    setRuntimeStatus("Django Machine arbeitet...", "neutral");
+    setRuntimeStatus("Workflow Factory arbeitet...", "neutral");
     subscribeArchitectureJob(payload.job.id);
   } catch (error) {
     architectureProgress.hidden = false;
@@ -799,7 +807,7 @@ async function generateArchitectureSheet() {
     architectureProgressElapsed.textContent = "0s";
     architectureProgressSteps.replaceChildren();
     generateArchitectureButton.disabled = false;
-    generateArchitectureButton.textContent = "Django-Machine-Job anlegen";
+    generateArchitectureButton.textContent = "Workflow-Job anlegen";
     throw error;
   }
 }
@@ -855,7 +863,7 @@ architectureForm.addEventListener("submit", async (event) => {
   try {
     await generateArchitectureSheet();
   } catch (error) {
-    architectureStatus.textContent = error.message || "Django-Machine-Job konnte nicht erstellt werden.";
+    architectureStatus.textContent = error.message || "Workflow-Job konnte nicht erstellt werden.";
     setRuntimeStatus("Fehler", "error");
   }
 });

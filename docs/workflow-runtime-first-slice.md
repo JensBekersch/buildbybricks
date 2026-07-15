@@ -107,6 +107,24 @@ oder, falls nicht gesetzt, aus dem letzten validierten Artefakt abgeleitet.
 Damit kann das bestehende fachliche Frontend spaeter kontrolliert auf
 validierte Artefakte zugreifen, ohne rohe LLM-Ausgaben direkt zu rendern.
 
+## Frontend-Artefaktvertrag
+
+Die Workflow-Factory-Ansicht liest validierte Ergebnisse aus dem Feld
+`validated_artifacts`. Fuer den aktuellen Architecture-Sheet-Flow sind folgende
+Artefakte stabil definiert:
+
+- `requirements_analysis`: Ergebnis des Requirement Analysten aus
+  `generation.requirement_analysis`
+- `architecture_sheet`: Ergebnis des Architecture Synthesizers aus
+  `architecture_sheet`
+- `architecture_review`: Ergebnis des Architecture Reviewers aus
+  `generation.architecture_review`, sofern der Review-Modus aktiv ist
+
+Jedes Artefakt enthaelt `key`, `label`, `producer_step`, `artifact_type`,
+`payload_path` und `content`. Das Frontend verwendet diese Artefakte bevorzugt
+fuer die Agenten-Viewer und nutzt die alten Result-Felder nur noch als
+Rueckfallpfad.
+
 ## Persistenz
 
 Die erste Persistenzstufe verwendet einen leichten Postgres-Store analog zum
@@ -204,8 +222,9 @@ Ergebnis:
   Contract-Validierung noch im spezialisierten Codepfad aus.
 - Noch keine Rechte-/Mandantentrennung fuer Workflow-Runs.
 - Noch keine UI fuer Workflow-Konfiguration.
-- Noch keine Anbindung der bestehenden Django-Machine-Ansicht an generische
-  Workflow-Artefakte.
+- Die bisherige Django-Machine-Ansicht ist als Workflow Factory beschriftet und
+  liest `requirements_analysis`, `architecture_sheet` und `architecture_review`
+  ueber den `validated_artifacts` Vertrag.
 
 ## Naechste sinnvolle Schritte
 

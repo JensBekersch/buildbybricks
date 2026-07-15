@@ -55,7 +55,7 @@ class ArchitectureSheetResult:
     generation: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "architecture_sheet": self.sheet,
             "schema_id": self.schema_id,
             "validation": self.validation,
@@ -63,10 +63,48 @@ class ArchitectureSheetResult:
             "trace": self.trace,
             "generation": self.generation,
         }
+        payload["validated_artifacts"] = build_frontend_artifact_contract(payload)
+        return payload
 
 
 class ArchitectureSheetGenerationError(RuntimeError):
     """Raised when an architecture sheet cannot be generated safely."""
+
+
+def build_frontend_artifact_contract(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return the validated artifacts consumed by the Workflow Factory frontend."""
+    generation = payload.get("generation", {}) if isinstance(payload, dict) else {}
+    artifacts = [
+        {
+            "key": "requirements_analysis",
+            "label": "Requirements Analysis",
+            "producer_step": "analyze_requirements",
+            "artifact_type": "json",
+            "payload_path": "generation.requirement_analysis",
+            "content": generation.get("requirement_analysis"),
+        },
+        {
+            "key": "architecture_sheet",
+            "label": "Architecture Sheet",
+            "producer_step": "synthesize_architecture",
+            "artifact_type": "json",
+            "payload_path": "architecture_sheet",
+            "content": payload.get("architecture_sheet"),
+        },
+        {
+            "key": "architecture_review",
+            "label": "Architecture Review",
+            "producer_step": "review_architecture",
+            "artifact_type": "json",
+            "payload_path": "generation.architecture_review",
+            "content": generation.get("architecture_review"),
+        },
+    ]
+    return [
+        artifact
+        for artifact in artifacts
+        if artifact["content"] not in (None, "", [])
+    ]
 
 
 def _emit_event(

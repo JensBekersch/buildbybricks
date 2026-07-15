@@ -399,6 +399,17 @@ def test_generate_architecture_sheet_uses_agentic_llm_pipeline() -> None:
     ]
     assert payload["generation"]["architecture_review"]["passes"] is True
     assert payload["generation"]["requirement_analysis"]["artifact_name"] == "Arbeitszeit Cockpit"
+    assert [artifact["key"] for artifact in payload["validated_artifacts"]] == [
+        "requirements_analysis",
+        "architecture_sheet",
+        "architecture_review",
+    ]
+    assert payload["validated_artifacts"][0]["producer_step"] == "analyze_requirements"
+    assert payload["validated_artifacts"][0]["payload_path"] == "generation.requirement_analysis"
+    assert payload["validated_artifacts"][1]["producer_step"] == "synthesize_architecture"
+    assert payload["validated_artifacts"][1]["payload_path"] == "architecture_sheet"
+    assert payload["validated_artifacts"][2]["producer_step"] == "review_architecture"
+    assert payload["validated_artifacts"][2]["payload_path"] == "generation.architecture_review"
     assert payload["generation"]["requirement_analysis"]["in_scope"]
     assert payload["generation"]["requirement_analysis"]["not_evidenced"]
     assert payload["generation"]["agent_configs"]["requirement_analyst"] == {
@@ -478,6 +489,10 @@ def test_generate_architecture_sheet_can_skip_agentic_review() -> None:
 
     assert payload["generation"]["mode"] == "agentic"
     assert payload["generation"]["pipeline"] == "requirement_analyst -> architecture_synthesizer"
+    assert [artifact["key"] for artifact in payload["validated_artifacts"]] == [
+        "requirements_analysis",
+        "architecture_sheet",
+    ]
     assert payload["generation"]["workflow"]["steps"] == [
         "validate_description",
         "load_schema",
