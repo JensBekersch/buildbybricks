@@ -16,7 +16,7 @@ from agentic_rag_template.workflows.models import (
     WorkflowStep,
     WorkflowVersion,
 )
-from agentic_rag_template.workflows.providers import FakeLLMProviderAdapter
+from agentic_rag_template.workflows.providers import FakeLLMProviderAdapter, LLMProviderWorkflowAdapter
 from agentic_rag_template.workflows.workflow_execution import LinearWorkflowEngine
 from agentic_rag_template.workflows.workflow_validation import WorkflowVersionValidator
 
@@ -41,6 +41,23 @@ def _published_agent(output_schema=None, required_inputs=None) -> AgentVersion:
         output_schema=output_schema or {},
         model_configuration={"provider": "fake", "model": "fake-json"},
     )
+
+
+class StructuredProvider:
+    name = "ollama"
+    model = "qwen3:14b"
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def generate_json(self, system_prompt, user_prompt):
+        self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt})
+        return {"artifact_name": "Team Todo"}
+
+
+class AnswerOnlyProvider:
+    name = "deterministic"
+    model = "local"
 
 
 def test_workflow_version_validates_unique_step_keys_and_requires_steps() -> None:
@@ -143,6 +160,68 @@ def test_linear_workflow_runs_agent_and_task_in_order_with_step_output_mapping()
     assert [artifact.artifact_key for artifact in run.artifacts] == ["requirements", "final"]
     assert run.step_runs[0].rendered_system_prompt
     assert run.step_runs[0].model_metadata["provider"] == "fake"
+
+
+def test_productive_llm_provider_adapter_runs_structured_agent_step() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Requirement Agent",
+            "requirement_analysis",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(),
+            input_mapping={"description": {"source": "workflow_input", "path": "description"}},
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider()
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste fuer Teams."},
+    )
+
+    assert run.status == RUN_STATUS_SUCCEEDED
+    assert run.final_output == {"artifact_name": "Team Todo"}
+    assert provider.calls == [
+        {
+            "system_prompt": "Du bist ein generischer Agent.\n\nOutput-Schema:\n\n{}",
+            "user_prompt": "Input: Eine Todo-Liste fuer Teams.",
+        }
+    ]
+    assert run.step_runs[0].raw_output == {"artifact_name": "Team Todo"}
+    assert run.step_runs[0].model_metadata == {
+        "provider": "ollama",
+        "model": "qwen3:14b",
+        "requested_provider": "fake",
+        "requested_model": "fake-json",
+    }
+
+
+def test_productive_llm_provider_adapter_requires_structured_generation() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Requirement Agent",
+            "requirement_analysis",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(),
+            input_mapping={"description": {"source": "workflow_input", "path": "description"}},
+            output_key="final",
+        )
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(AnswerOnlyProvider())).run(
+        version,
+        {"description": "Eine Todo-Liste fuer Teams."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert "does not support structured JSON generation" in run.error_summary
 
 
 def test_disabled_and_conditioned_steps_are_skipped() -> None:

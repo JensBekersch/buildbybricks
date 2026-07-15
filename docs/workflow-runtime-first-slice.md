@@ -42,9 +42,15 @@ als optionale Ausfuehrungsbedingung an Steps ausgewertet.
 
 - providerneutrales Adapter-Interface
 - `FakeLLMProviderAdapter` fuer automatisierte Tests
+- `LLMProviderWorkflowAdapter` als produktive Bruecke vom konfigurierten
+  Runtime-LLM-Provider zur generischen Workflow-Engine
 
-Produktive Provider-Adapter fuer Ollama, OpenAI-kompatible APIs, OpenAI,
-Anthropic oder Custom HTTP Provider sind noch offen.
+Damit koennen Workflow-Agenten jeden Runtime-Provider verwenden, der
+strukturierte JSON-Erzeugung ueber `generate_json(system_prompt, user_prompt)`
+unterstuetzt. Ollama ist dadurch ueber den bestehenden `OllamaLLMProvider`
+angebunden. Weitere konkrete Provider wie OpenAI-kompatible APIs, OpenAI,
+Anthropic oder Custom HTTP Provider bleiben als zusaetzliche Runtime-Provider
+offen.
 
 ## Unterstuetzte Validatoren
 
@@ -158,7 +164,8 @@ Ergebnis:
 - Noch kein Adminbereich.
 - Noch keine Django Models oder Migrationen, weil das aktuelle Projekt keine
   Django-App-Struktur besitzt.
-- Noch keine produktiven Provider-Adapter.
+- Ein produktiver Workflow-Provider-Adapter ist vorhanden, aber derzeit nur fuer
+  Runtime-Provider mit strukturierter JSON-Erzeugung nutzbar.
 - Die bestehende Generatorfunktion nutzt den Workflow-Blueprint fuer
   Agentenwahl und Workflow-Metadaten, fuehrt aber deterministische
   Zwischenschritte wie Schema-Laden, Baseline-Erzeugung, Korrekturlauf und
@@ -174,7 +181,8 @@ Ergebnis:
    ausfuehrbar machen.
 2. Den Architecture-Repair-Corrector als konfigurierten Agenten modellieren.
 3. Admin-/Workflow-UI listenbasiert ergaenzen.
-4. Produktive Provider-Adapter hinter dem Adapter-Interface implementieren.
+4. Weitere Runtime-Provider fuer OpenAI-kompatible APIs, OpenAI, Anthropic oder
+   Custom HTTP ergaenzen.
 5. Weitere Validatoren fuer fachliche Review-Regeln ergaenzen.
 6. Optional spaeter: Migration von Snapshot-Store zu Django Models, falls das
    Projekt zur vollwertigen Django-App umgebaut wird.
