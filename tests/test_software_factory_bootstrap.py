@@ -148,11 +148,12 @@ def test_software_factory_requirement_analyst_agent_config_is_loadable() -> None
 
     assert config["id"] == "requirement_analyst"
     assert config["name"] == "Requirement Analyst"
-    assert config["version"] == 1
-    assert "domain_entities" in config["output_schema"]["required"]
-    assert "test_requirements" in config["output_schema"]["required"]
+    assert config["version"] == 2
+    assert "domain_entities" in config["output_contract"]["required"]
+    assert "test_requirements" in config["output_contract"]["required"]
+    assert "quality_gate" in config
     assert "{{ user_description }}" in config["prompt"]["user_template"]
-    assert "{{ agent_config }}" in config["prompt"]["user_template"]
+    assert "{% if method_sources %}" in config["prompt"]["user_template"]
     assert any(rule["id"] == "preserve_explicit_test_cases" for rule in config["review_rules"])
 
 

@@ -1,18 +1,35 @@
 id: requirement_analyst
 name: Requirement Analyst
-version: 1
+version: 2
+
 description: >
-  Extrahiert fachliche und technische Anforderungen granular aus der
-  Nutzerbeschreibung. Der Agent darf Anforderungen nicht verdichten, nicht
-  erfinden und muss Scope-Kategorien sauber trennen.
+  Extrahiert fachliche, technische und qualitätsbezogene Anforderungen
+  granular und verlustarm aus einer Nutzerbeschreibung. Der Agent darf
+  keine Anforderungen ergänzen, verallgemeinern, verdichten oder durch
+  typische Framework-Konventionen ersetzen.
 
 input_contract:
   required:
     - user_description
+  optional:
     - method_sources
 
-output_schema:
+  semantics:
+    user_description: >
+      Einzige autoritative Quelle für fachliche Anforderungen, Scope,
+      Datenfelder, Rollen, Funktionen, Tests und Lieferobjekte.
+    method_sources: >
+      Dürfen ausschließlich die Analysemethode, Begriffsklassifikation
+      oder Ausgabeform beeinflussen. Sie dürfen niemals als Quelle für
+      zusätzliche fachliche oder technische Anforderungen verwendet werden.
+
+output_contract:
+  format: json
+  additional_properties: false
+  language: de
+
   required:
+    - schema_version
     - artifact_name
     - business_goal
     - roles
@@ -26,92 +43,1198 @@ output_schema:
     - technical_constraints
     - delivery_requirements
     - test_requirements
+    - quality_requirements
     - in_scope
     - explicitly_excluded
     - not_requested
     - not_evidenced
+    - future_ideas
     - core_facts
     - risks
     - assumptions
     - open_questions
-  compatibility_fields:
-    - core_entities
-    - workflows
-    - current_interfaces
-    - future_interfaces
-    - quality_goals
-    - constraints
-    - explicitly_not_needed
-    - out_of_scope
-    - explicitly_excluded_terms
+    - readiness
+
+  field_contracts:
+
+    schema_version:
+      type: string
+      const: "2.0.0"
+
+    artifact_name:
+      type: string
+      rule: >
+        Möglichst nahe an der Bezeichnung der Nutzerbeschreibung bleiben.
+        Keine generische Umbenennung ohne Notwendigkeit.
+
+    business_goal:
+      type: object
+      required:
+        - description
+        - evidence
+      properties:
+        description:
+          type: string
+        evidence:
+          $ref: "#/definitions/evidence"
+
+    roles:
+      type: array
+      item:
+        required:
+          - id
+          - name
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          name:
+            type: string
+          description:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Nur menschliche oder externe Akteure aufnehmen.
+        - >
+          Das System selbst ist keine Rolle.
+        - >
+          Administratoren nur aufnehmen, wenn sie ausdrücklich genannt
+          oder durch eine explizit geforderte Administratorfunktion belegt sind.
+        - >
+          Das bloße Erwähnen eines Superusers in der Installationsdokumentation
+          begründet keine fachliche Administratorrolle.
+
+    domain_entities:
+      type: array
+      item:
+        required:
+          - id
+          - name
+          - description
+          - attributes
+          - evidence
+        properties:
+          id:
+            type: string
+          name:
+            type: string
+          description:
+            type: string
+          attributes:
+            type: array
+            item:
+              required:
+                - name
+                - required
+                - evidence
+              properties:
+                name:
+                  type: string
+                data_type:
+                  type:
+                    - string
+                    - "null"
+                required:
+                  type: boolean
+                generated:
+                  type: boolean
+                  default: false
+                max_length:
+                  type:
+                    - integer
+                    - "null"
+                min_length:
+                  type:
+                    - integer
+                    - "null"
+                nullable:
+                  type:
+                    - boolean
+                    - "null"
+                editable_by_user:
+                  type:
+                    - boolean
+                    - "null"
+                references:
+                  type:
+                    - string
+                    - "null"
+                evidence:
+                  $ref: "#/definitions/evidence"
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Explizit genannte Attribute vollständig und mit exakten
+          Einschränkungen übernehmen.
+        - >
+          Keine Attribute aus typischen Django-Modellen ergänzen.
+        - >
+          Docker, PostgreSQL, Django, Bootstrap, Django Auth und
+          Docker Compose sind keine Domain Entities.
+        - >
+          Platzhalter wie "Fachobjekt" sind verboten, wenn die Entität
+          aus der Beschreibung konkret benannt werden kann.
+
+    enumerations:
+      type: array
+      item:
+        required:
+          - id
+          - name
+          - values
+          - evidence
+        properties:
+          id:
+            type: string
+          name:
+            type: string
+          values:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Enumerationswerte exakt in der fachlichen Bedeutung erhalten.
+        - >
+          Keine eigenständigen englischen Werte erfinden, wenn die
+          Nutzerbeschreibung deutsche Werte nennt.
+        - >
+          Technische Speicherwerte dürfen nicht angenommen werden.
+
+    functional_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - actor
+          - action
+          - object
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          actor:
+            type: string
+          action:
+            type: string
+          object:
+            type: string
+          description:
+            type: string
+          preconditions:
+            type: array
+            items:
+              type: string
+          postconditions:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Jede fachliche Funktion einzeln erfassen.
+        - >
+          Registrierung, Login und Logout sind getrennte Anforderungen.
+        - >
+          Erstellen, Anzeigen, Bearbeiten, Löschen und Filtern sind
+          getrennte Anforderungen.
+        - >
+          Keine Sammelanforderung wie "Aufgaben verwalten", wenn konkrete
+          Einzelfunktionen genannt wurden.
+
+    crud_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - entity
+          - operation
+          - rules
+          - evidence
+        properties:
+          id:
+            type: string
+          entity:
+            type: string
+          operation:
+            enum:
+              - create
+              - read
+              - update
+              - delete
+          allowed_roles:
+            type: array
+            items:
+              type: string
+          user_editable_fields:
+            type: array
+            items:
+              type: string
+          server_managed_fields:
+            type: array
+            items:
+              type: string
+          required_input_fields:
+            type: array
+            items:
+              type: string
+          access_behavior:
+            type:
+              - string
+              - "null"
+          allowed_http_methods:
+            type: array
+            items:
+              type: string
+          rules:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Server-managed Felder dürfen nicht als erforderliche
+          Benutzereingaben ausgegeben werden.
+        - >
+          Ist ein Eigentümer automatisch zu setzen, muss er unter
+          server_managed_fields stehen und darf nicht unter
+          required_input_fields oder user_editable_fields erscheinen.
+        - >
+          Zugriffsverhalten wie HTTP 404 und POST-only exakt erhalten.
+
+    validation_rules:
+      type: array
+      item:
+        required:
+          - id
+          - target
+          - rule
+          - expected_behavior
+          - evidence
+        properties:
+          id:
+            type: string
+          target:
+            type: string
+          rule:
+            type: string
+          expected_behavior:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Nur explizit genannte Validierungen übernehmen.
+        - >
+          Keine min_length, max_length oder Pflichtfelder ergänzen,
+          wenn sie nicht belegt sind.
+        - >
+          Zahlenwerte exakt übernehmen.
+        - >
+          "Maximal 200 Zeichen" darf niemals zu 100 oder einem anderen
+          Wert verändert werden.
+
+    security_rules:
+      type: array
+      item:
+        required:
+          - id
+          - subject
+          - resource
+          - action
+          - rule
+          - enforcement
+          - evidence
+        properties:
+          id:
+            type: string
+          subject:
+            type: string
+          resource:
+            type: string
+          action:
+            type: string
+          rule:
+            type: string
+          enforcement:
+            enum:
+              - server_side
+              - framework_default
+              - configuration
+              - repository_policy
+          expected_response:
+            type:
+              - string
+              - "null"
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Keine Kryptographie- oder Hashing-Verfahren festlegen,
+          wenn die Beschreibung nur Django-Standardmechanismen verlangt.
+        - >
+          Django-Standardauthentifizierung bedeutet nicht automatisch bcrypt.
+        - >
+          Owner-Filterung, Login-Pflicht, HTTP 404, CSRF, POST-only,
+          Umgebungsvariablen und Secret-Schutz getrennt erfassen,
+          sofern sie genannt sind.
+        - >
+          Keine Administratorrechte ergänzen.
+
+    ui_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - view
+          - requirement_type
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          view:
+            type: string
+          requirement_type:
+            enum:
+              - page
+              - component
+              - field
+              - action
+              - message
+              - responsive_behavior
+              - navigation
+          description:
+            type: string
+          fields:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Keine Formularfelder ergänzen, die nicht genannt oder zwingend
+          aus einer expliziten Funktion ableitbar sind.
+        - >
+          Eine E-Mail-Adresse darf nicht als Registrierungsfeld
+          angenommen werden, wenn sie nicht verlangt wurde.
+        - >
+          Keine Sortierung ergänzen, wenn nur Filterung verlangt wurde.
+        - >
+          Erfolgsmeldungen, Fehlermeldungen und Löschbestätigung getrennt erfassen.
+
+    technical_constraints:
+      type: array
+      item:
+        required:
+          - id
+          - category
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          category:
+            enum:
+              - language
+              - framework
+              - database
+              - ui_framework
+              - rendering
+              - forms
+              - views
+              - authentication
+              - containerization
+              - prohibited_technology
+              - configuration
+              - code_quality
+              - testing
+          description:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Alternativen exakt erhalten. Aus "Django Testframework oder
+          pytest-django" darf nicht ausschließlich pytest werden.
+        - >
+          Keine zusätzliche Infrastruktur ergänzen.
+
+    delivery_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - artifact
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          artifact:
+            type: string
+          description:
+            type: string
+          required_contents:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          README, .env.example, Dockerfile, compose.yaml, Migrationen,
+          Tests und Abschlussbericht einzeln erfassen, sofern genannt.
+        - >
+          Keine API-Dokumentation oder Benutzerhandbücher ergänzen,
+          wenn sie nicht verlangt wurden.
+
+    test_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - category
+          - description
+          - expected_result
+          - evidence
+        properties:
+          id:
+            type: string
+          source_number:
+            type:
+              - integer
+              - "null"
+          category:
+            type: string
+          description:
+            type: string
+          expected_result:
+            type: string
+          related_requirement_ids:
+            type: array
+            items:
+              type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Explizit nummerierte Testfälle vollständig, einzeln und in
+          ursprünglicher Reihenfolge erhalten.
+        - >
+          Die Anzahl explizit genannter Tests muss mit der Anzahl der
+          daraus erzeugten Test Requirements übereinstimmen.
+        - >
+          Bestehende Tests dürfen nicht durch typische Tests ersetzt werden.
+        - >
+          Keine API-, Admin-, Concurrency-, Passwort-Hash- oder
+          Browsertests ergänzen, wenn sie nicht verlangt wurden.
+        - >
+          HTTP-Statuscodes und Manipulationsszenarien exakt erhalten.
+
+    quality_requirements:
+      type: array
+      item:
+        required:
+          - id
+          - category
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          category:
+            type: string
+          description:
+            type: string
+          verification:
+            type:
+              - string
+              - "null"
+          evidence:
+            $ref: "#/definitions/evidence"
+
+    in_scope:
+      $ref: "#/definitions/scoped_items"
+
+    explicitly_excluded:
+      $ref: "#/definitions/scoped_items_with_required_evidence"
+
+    not_requested:
+      type: array
+      rules:
+        - >
+          Nur verwenden, wenn ein Inhalt für die Abgrenzung tatsächlich
+          hilfreich ist.
+        - >
+          Nicht automatisch typische Produktfeatures aufzählen.
+        - >
+          Pro Analyse höchstens fünf not_requested-Einträge erzeugen.
+
+    not_evidenced:
+      type: array
+      item:
+        required:
+          - statement
+          - reason
+        properties:
+          statement:
+            type: string
+          reason:
+            type: string
+      rules:
+        - >
+          Nur Aussagen aufnehmen, die während der Analyse tatsächlich
+          geprüft oder verworfen wurden.
+        - >
+          Keine Keyword-Sammlungen oder Wortvarianten ausgeben.
+        - >
+          Keine Begriffe wie "löschen" als unbelegt markieren, wenn die
+          Funktion in der Beschreibung ausdrücklich vorkommt.
+
+    future_ideas:
+      type: array
+      item:
+        required:
+          - description
+          - evidence
+        properties:
+          description:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Nur ausdrücklich als später, optional zukünftig oder Folgeausbau
+          genannte Inhalte aufnehmen.
+
+    core_facts:
+      type: array
+      item:
+        required:
+          - id
+          - description
+          - evidence
+        properties:
+          id:
+            type: string
+          description:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Kurze atomare Aussagen erzeugen.
+        - >
+          Niemals die vollständige Nutzerbeschreibung als Core Fact kopieren.
+        - >
+          Keine Platzhalter wie "Kernobjekt aus Beschreibung ableiten" verwenden.
+
+    risks:
+      type: array
+      item:
+        required:
+          - id
+          - description
+          - cause
+          - impact
+          - mitigation
+          - evidence_basis
+        properties:
+          id:
+            type: string
+          description:
+            type: string
+          cause:
+            type: string
+          impact:
+            type: string
+          mitigation:
+            type: string
+          evidence_basis:
+            enum:
+              - explicit
+              - derived
+      rules:
+        - >
+          Risiken dürfen aus Anforderungen abgeleitet werden, müssen aber
+          als derived gekennzeichnet sein.
+        - >
+          Mitigations müssen konkret und prüfbar sein.
+        - >
+          Keine generische Formulierung wie "im Review klären".
+
+    assumptions:
+      type: array
+      item:
+        required:
+          - id
+          - description
+          - impact_if_false
+          - evidence
+        properties:
+          id:
+            type: string
+          description:
+            type: string
+          impact_if_false:
+            type: string
+          evidence:
+            $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Keine Definition-of-Done-Kriterien als Annahmen formulieren.
+        - >
+          Aussagen wie "Docker funktioniert" oder "alle Tests decken alles ab"
+          sind keine Annahmen, sondern zu verifizierende Ergebnisse.
+
+    open_questions:
+      type: array
+      item:
+        required:
+          - id
+          - question
+          - blocking
+          - reason
+        properties:
+          id:
+            type: string
+          question:
+            type: string
+          blocking:
+            type: boolean
+          reason:
+            type: string
+      rules:
+        - >
+          Keine Frage erzeugen, deren Antwort bereits in der Beschreibung steht.
+        - >
+          Keine trivialen Framework- oder UI-Implementierungsdetails fragen.
+        - >
+          Keine erfundenen Funktionen durch eine offene Frage legitimieren.
+        - >
+          Nur Fragen aufnehmen, deren Antwort Scope, Architektur,
+          Sicherheit, Datenmodell, Workorders oder Tests verändert.
+
+    readiness:
+      type: object
+      required:
+        - status
+        - blocking_issues
+        - warnings
+        - metrics
+      properties:
+        status:
+          enum:
+            - ready
+            - needs_review
+            - needs_enrichment
+            - blocked
+        blocking_issues:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        metrics:
+          type: object
+          required:
+            - explicit_requirements_detected
+            - requirements_with_evidence
+            - explicit_tests_detected
+            - explicit_tests_preserved
+            - unsupported_hard_requirements
+          properties:
+            explicit_requirements_detected:
+              type: integer
+            requirements_with_evidence:
+              type: integer
+            explicit_tests_detected:
+              type: integer
+            explicit_tests_preserved:
+              type: integer
+            unsupported_hard_requirements:
+              type: integer
+
+definitions:
+
+  evidence:
+    type: object
+    required:
+      - source
+      - quote
+      - classification
+    properties:
+      source:
+        enum:
+          - user_description
+          - derived_from_user_description
+      quote:
+        type:
+          - string
+          - "null"
+      classification:
+        enum:
+          - explicit
+          - necessary_derivation
+      rule: >
+        method_sources ist niemals eine zulässige Evidence-Quelle.
+
+  scoped_items:
+    type: array
+    item:
+      required:
+        - description
+        - evidence
+      properties:
+        description:
+          type: string
+        evidence:
+          $ref: "#/definitions/evidence"
+
+  scoped_items_with_required_evidence:
+    type: array
+    item:
+      required:
+        - description
+        - evidence
+      properties:
+        description:
+          type: string
+        evidence:
+          $ref: "#/definitions/evidence"
+      rules:
+        - >
+          Evidence muss classification=explicit enthalten.
 
 prompt:
   system: |
     Du bist der Requirement Analyst einer agentischen Django-Softwarefabrik.
-    Erzeuge ausschliesslich valides JSON.
-    Schreibe alle fachlichen Inhalte ausnahmslos auf Deutsch.
-    Englische Bezeichnungen sind nur erlaubt, wenn es sich um etablierte technische Eigennamen handelt, z. B. Django, REST, API, Docker, PostgreSQL oder Bootstrap.
 
-    Arbeite als verlustarmer Requirements Parser, nicht als Zusammenfasser.
-    Extrahiere konkrete Felder, CRUD-Regeln, Validierungsregeln, Sicherheitsregeln, UI-Anforderungen, Lieferobjekte und Testfaelle einzeln.
-    Verdichte explizit genannte Testfaelle nicht zu "Tests fuer alles".
-    Verdichte konkrete Datenmodellfelder nicht zu allgemeinen Entitaetsbeschreibungen.
-    Erfinde keine Produktfeatures, Roadmap-Ideen oder Integrationen.
+    Deine Aufgabe ist ausschließlich die verlustarme Extraktion und
+    Klassifikation der Nutzeranforderungen.
 
-    Trenne fachliche Entitaeten, Enumerationen, technische Constraints und technische Komponenten.
-    PostgreSQL, Docker, Bootstrap, Django Auth und Docker Compose sind keine fachlichen Kernentitaeten.
-    Ein Status mit festen Werten ist im Zweifel eine Enumeration oder ein Attribut, kein eigenes Fachmodell.
+    Erzeuge ausschließlich valides JSON, das dem Output Contract entspricht.
+    Schreibe alle fachlichen Inhalte auf Deutsch. Englische Begriffe sind nur
+    für etablierte technische Eigennamen oder vom Nutzer ausdrücklich
+    verwendete Bezeichner erlaubt.
 
-    Trenne Scope-Kategorien strikt:
-    - in_scope: explizit gefordert oder eindeutig aus der Beschreibung ableitbar.
-    - explicitly_excluded: im Text ausdruecklich ausgeschlossen.
-    - not_requested: nicht verlangt, aber typischerweise moeglich.
-    - not_evidenced: unbelegte Aussage; darf nicht als harte Anforderung verwendet werden.
-    - future_ideas: nur wenn die Beschreibung etwas eindeutig als spaeteren Scope nennt.
+    AUTORITATIVE QUELLE
 
-    Formuliere Annahmen nicht als bereits erfuellte Tatsachen.
-    Offene Fragen duerfen nur entstehen, wenn sie fuer Architektur, Workorders oder Tests entscheidend sind.
-    Jede konkrete Anforderung soll nach Moeglichkeit Evidence aus der Nutzerbeschreibung enthalten.
+    Die Nutzerbeschreibung ist die einzige autoritative Quelle für:
+    - fachliche Funktionen,
+    - Rollen,
+    - Datenfelder,
+    - Validierungsregeln,
+    - Sicherheitsregeln,
+    - UI-Funktionen,
+    - Tests,
+    - Scope,
+    - Lieferobjekte,
+    - technische Vorgaben.
+
+    Methodenhinweise dürfen ausschließlich erklären, wie Anforderungen
+    analysiert oder klassifiziert werden. Methodenhinweise dürfen niemals
+    zusätzliche Anforderungen, Rollen, Felder, Schnittstellen, Tests,
+    Technologien oder Lieferobjekte begründen.
+
+    ARBEITSMODUS
+
+    Arbeite als verlustarmer Requirements Parser, nicht als:
+    - Produktdesigner,
+    - Lösungsarchitekt,
+    - Django-Tutorial,
+    - Roadmap-Generator,
+    - Best-Practice-Ergänzer,
+    - Testfall-Erfinder.
+
+    Erhalte:
+    - jedes explizite Datenfeld,
+    - jeden Zahlenwert,
+    - jede Enumeration,
+    - jede CRUD-Regel,
+    - jede Sicherheitsregel,
+    - jede UI-Anforderung,
+    - jeden Testfall,
+    - jeden HTTP-Statuscode,
+    - jede Alternative,
+    - jedes Verbot,
+    - jedes Lieferobjekt.
+
+    VERBOTENE ANREICHERUNGEN
+
+    Ergänze niemals aufgrund typischer Django- oder Softwarekonventionen:
+    - Administratorrollen,
+    - Administratorrechte,
+    - Django-Admin als fachliche Schnittstelle,
+    - E-Mail-Felder,
+    - E-Mail-Bestätigung,
+    - REST APIs,
+    - API-Endpunkte,
+    - API-Dokumentation,
+    - Benutzerhandbücher,
+    - Benachrichtigungen,
+    - Reports,
+    - Sortierung,
+    - Prioritäten,
+    - Teams,
+    - Projekte,
+    - Cloud-Deployment,
+    - Redis,
+    - Kubernetes,
+    - Nginx,
+    - Auth0,
+    - OAuth,
+    - bcrypt,
+    - zusätzliche Tests,
+    - zusätzliche Feldlängen,
+    - zusätzliche Pflichtfelder.
+
+    Ein solcher Inhalt darf nur erscheinen, wenn er in der Nutzerbeschreibung
+    ausdrücklich belegt ist.
+
+    EXAKTHEIT
+
+    - Ändere keine Zahlenwerte.
+    - Übersetze keine fachlichen Enumerationswerte in andere Speicherwerte.
+    - Ersetze keine expliziten Alternativen durch eine einzelne Auswahl.
+    - Formuliere serverseitig verwaltete Felder nicht als Benutzereingaben.
+    - Ersetze HTTP 404 nicht durch "Zugriff verweigert".
+    - Verdichte nummerierte Tests nicht.
+    - Ersetze Tests nicht durch typische Testfälle.
+    - Kopiere niemals die vollständige Nutzerbeschreibung in ein einzelnes Feld.
+    - Verwende keine generischen Platzhalter wie "Fachobjekt" oder
+      "zentraler Workflow", wenn konkrete Inhalte vorliegen.
+
+    EVIDENCE
+
+    Jede harte Anforderung benötigt Evidence.
+
+    Evidence-Klassifikationen:
+    - explicit:
+      Die Aussage steht direkt in der Nutzerbeschreibung.
+    - necessary_derivation:
+      Die Aussage ist zur strukturellen Darstellung zwingend erforderlich,
+      ergänzt aber keine neue fachliche Funktion.
+
+    Zulässige notwendige Ableitungen sind beispielsweise:
+    - Eine genannte Aufgabe ist eine Domain Entity.
+    - Fest vorgegebene Statuswerte bilden eine Enumeration.
+    - Ein ausdrücklich automatisch gesetzter owner ist server-managed.
+
+    Unzulässige Ableitungen sind beispielsweise:
+    - Jede Anwendung braucht einen Administrator.
+    - Registrierung braucht eine E-Mail-Adresse.
+    - Django verwendet bcrypt.
+    - Eine Aufgabenliste braucht Sortierung.
+    - Ein Projekt ohne API sollte später eine API erhalten.
+
+    SCOPE
+
+    - in_scope:
+      ausdrücklich gefordert oder zwingend ableitbar.
+    - explicitly_excluded:
+      nur ausdrücklich ausgeschlossen.
+    - not_requested:
+      nur für wenige, zur Abgrenzung relevante Inhalte.
+    - not_evidenced:
+      nur tatsächlich geprüfte, aber unbelegte Aussagen.
+    - future_ideas:
+      nur ausdrücklich als späterer Ausbau genannt.
+
+    ABSCHLUSSPRÜFUNG
+
+    Prüfe vor der Ausgabe:
+
+    1. Wurden alle expliziten Datenfelder erhalten?
+    2. Stimmen alle Zahlenwerte exakt?
+    3. Wurden alle expliziten Testfälle einzeln erhalten?
+    4. Wurden keine neuen Rollen erzeugt?
+    5. Wurden keine neuen Schnittstellen erzeugt?
+    6. Wurden keine Technologien ergänzt?
+    7. Wurden server-managed Felder korrekt klassifiziert?
+    8. Wurden explizite HTTP-Statuscodes erhalten?
+    9. Wurde nichts als explicitly_excluded klassifiziert,
+       das nur nicht erwähnt wurde?
+    10. Enthält jede harte Anforderung Evidence?
+    11. Gibt es Widersprüche zwischen Feldern?
+    12. Ist unsupported_hard_requirements gleich 0?
+
+    Falls eine dieser Prüfungen fehlschlägt:
+    - korrigiere das JSON vor der Ausgabe;
+    - setze readiness.status mindestens auf needs_review;
+    - dokumentiere verbleibende Probleme in blocking_issues oder warnings.
+
+    Gib ausschließlich JSON zurück.
 
   user_template: |
-    Beschreibung:
+    Nutzerbeschreibung:
     {{ user_description }}
 
+    {% if method_sources %}
     Methodenhinweise:
     {{ method_sources }}
+    {% endif %}
 
-    Agent-Konfiguration:
-    {{ agent_config }}
-
-    Gib nur JSON zurueck. Nutze die Felder aus output_schema.required und die compatibility_fields.
+    Analysiere ausschließlich die Nutzerbeschreibung als fachliche Quelle.
+    Methodenhinweise dürfen keine Anforderungen ergänzen.
 
 review_rules:
+
+  - id: authoritative_source_only
+    severity: error
+    description: >
+      Harte Anforderungen dürfen ausschließlich aus user_description stammen.
+
+  - id: evidence_required_for_hard_requirements
+    severity: error
+    description: >
+      Jede funktionale, technische, fachliche, sicherheitsbezogene,
+      UI-bezogene und lieferbezogene Anforderung benötigt Evidence.
+
+  - id: preserve_artifact_name
+    severity: warning
+    description: >
+      Der Artefaktname darf nicht unnötig verallgemeinert oder übersetzt werden.
+
   - id: preserve_explicit_data_model_fields
     severity: error
-    description: Explizit genannte Datenmodellfelder muessen einzeln erhalten bleiben.
+    description: >
+      Explizit genannte Datenmodellfelder müssen einzeln und mit allen
+      genannten Eigenschaften erhalten bleiben.
+
+  - id: preserve_numeric_constraints
+    severity: error
+    description: >
+      Explizite Zahlenwerte, Feldlängen, Testanzahlen und Versionsangaben
+      müssen exakt erhalten bleiben.
+
+  - id: preserve_explicit_enumerations
+    severity: error
+    description: >
+      Explizite Enumerationswerte müssen vollständig und fachlich unverändert
+      erhalten bleiben.
+
   - id: preserve_explicit_test_cases
     severity: error
-    description: Explizit genannte Testfaelle muessen einzeln als test_requirements erhalten bleiben.
+    description: >
+      Explizit genannte Testfälle müssen einzeln, vollständig und in
+      ursprünglicher Reihenfolge erhalten bleiben.
+
+  - id: test_count_consistency
+    severity: error
+    description: >
+      Die Zahl expliziter Tests in der Eingabe muss der Zahl extrahierter
+      expliziter Tests entsprechen.
+
+  - id: no_test_replacement
+    severity: error
+    description: >
+      Explizite Tests dürfen nicht durch typische oder generische Tests
+      ersetzt werden.
+
+  - id: no_unverified_roles
+    severity: error
+    description: >
+      Rollen wie Administrator dürfen ohne Evidence nicht erzeugt werden.
+
+  - id: no_system_as_role
+    severity: error
+    description: >
+      Das System selbst darf nicht als Benutzerrolle klassifiziert werden.
+
   - id: no_technical_constraints_as_domain_entities
     severity: error
-    description: Technische Plattformen und Frameworks duerfen nicht als fachliche Entitaeten klassifiziert werden.
+    description: >
+      Technische Plattformen, Frameworks und Deployment-Komponenten dürfen
+      nicht als fachliche Entitäten klassifiziert werden.
+
+  - id: no_placeholder_entities
+    severity: error
+    description: >
+      Platzhalter wie Fachobjekt sind verboten, wenn konkrete Entitäten
+      identifiziert werden können.
+
   - id: no_unverified_future_interfaces
     severity: error
-    description: Future Interfaces duerfen nur entstehen, wenn die Beschreibung einen spaeteren Scope ausdruecklich nennt.
+    description: >
+      Future Interfaces dürfen nur entstehen, wenn die Beschreibung einen
+      späteren Scope ausdrücklich nennt.
+
+  - id: no_unverified_current_interfaces
+    severity: error
+    description: >
+      Schnittstellen dürfen nur erzeugt werden, wenn sie explizit gefordert
+      oder zwingend aus einer expliziten Interaktionsform ableitbar sind.
+
+  - id: no_framework_default_invention
+    severity: error
+    description: >
+      Framework-Defaults wie bcrypt, Admin-Rechte oder E-Mail-Felder dürfen
+      nicht als Anforderungen ausgegeben werden.
+
+  - id: server_managed_fields_not_user_input
+    severity: error
+    description: >
+      Automatisch gesetzte Felder dürfen nicht als erforderliche
+      Benutzereingaben erscheinen.
+
   - id: distinguish_excluded_from_not_requested
     severity: error
-    description: Nur ausdruecklich ausgeschlossene Inhalte duerfen in explicitly_excluded erscheinen.
+    description: >
+      Nur ausdrücklich ausgeschlossene Inhalte dürfen in explicitly_excluded
+      erscheinen.
+
+  - id: no_unrequested_delivery_artifacts
+    severity: error
+    description: >
+      API-Dokumentation, Benutzerhandbücher oder andere Lieferobjekte dürfen
+      ohne Evidence nicht ergänzt werden.
+
   - id: no_artificial_open_questions
     severity: warning
-    description: Offene Fragen duerfen keine bereits beantworteten Anforderungen oder trivialen Implementierungsdetails wiederholen.
+    description: >
+      Offene Fragen dürfen keine beantworteten Anforderungen, erfundenen
+      Features oder triviale Implementierungsdetails enthalten.
+
+  - id: no_full_input_as_core_fact
+    severity: error
+    description: >
+      Die vollständige Nutzerbeschreibung darf nicht als einzelner Core Fact
+      ausgegeben werden.
+
+  - id: no_keyword_dump_in_not_evidenced
+    severity: error
+    description: >
+      not_evidenced darf keine Liste unzusammenhängender Keywords,
+      Wortvarianten oder Suchbegriffe enthalten.
+
+  - id: no_generic_risk_mitigation
+    severity: warning
+    description: >
+      Risikomaßnahmen müssen konkret und prüfbar sein.
+
+  - id: no_internal_contradictions
+    severity: error
+    description: >
+      Anforderungen dürfen sich zwischen verschiedenen Ausgabefeldern nicht
+      widersprechen.
 
 normalization:
+
+  ids:
+    deterministic: true
+    prefixes:
+      role: ROLE
+      entity: ENT
+      enumeration: ENUM
+      functional_requirement: FR
+      crud_requirement: CRUD
+      validation_rule: VAL
+      security_rule: SEC
+      ui_requirement: UI
+      technical_constraint: TECH
+      delivery_requirement: DEL
+      test_requirement: TEST
+      quality_requirement: QUAL
+      core_fact: FACT
+      risk: RISK
+      assumption: ASM
+      open_question: OQ
+
+  evidence:
+    required_for:
+      - business_goal
+      - roles
+      - domain_entities
+      - enumerations
+      - functional_requirements
+      - crud_requirements
+      - validation_rules
+      - security_rules
+      - ui_requirements
+      - technical_constraints
+      - delivery_requirements
+      - test_requirements
+      - quality_requirements
+      - in_scope
+      - explicitly_excluded
+      - future_ideas
+      - core_facts
+
   scope_categories:
+    in_scope:
+      evidence_required: true
+      allowed_classifications:
+        - explicit
+        - necessary_derivation
+
     explicitly_excluded:
       evidence_required: true
+      allowed_classifications:
+        - explicit
+
     not_requested:
       evidence_required: false
+      maximum_items: 5
+
     not_evidenced:
       evidence_required: false
+
     future_ideas:
       evidence_required: true
+      allowed_classifications:
+        - explicit
+
+  empty_values:
+    use_empty_arrays: true
+    do_not_generate_placeholders: true
+
+  compatibility:
+    generate_in_requirement_analyst: false
+    rule: >
+      Compatibility Fields werden nicht durch den Requirement Analyst erzeugt.
+      Sie werden ausschließlich durch einen nachgelagerten deterministischen
+      Mapper aus dem kanonischen Output abgeleitet.
+
+quality_gate:
+
+  fail_on:
+    - unsupported_hard_requirements_greater_than_zero
+    - explicit_test_count_mismatch
+    - missing_explicit_data_model_field
+    - changed_numeric_constraint
+    - unverified_role
+    - unverified_interface
+    - server_managed_field_as_user_input
+    - internal_contradiction
+    - hard_requirement_without_evidence
+
+  readiness_rules:
+    ready:
+      conditions:
+        - unsupported_hard_requirements == 0
+        - explicit_tests_detected == explicit_tests_preserved
+        - requirements_with_evidence == explicit_requirements_detected
+        - blocking_issues_count == 0
+
+    needs_review:
+      conditions:
+        - warnings_count > 0
+        - blocking_issues_count == 0
+
+    blocked:
+      conditions:
+        - blocking_issues_count > 0
