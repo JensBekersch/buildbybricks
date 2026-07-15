@@ -204,6 +204,60 @@ class ScopeEvidenceValidator:
         )
 
 
+class ForbiddenTermsValidator:
+    validator_id = "forbidden_terms"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        output_text = _normalize_for_search(
+            " ".join(_flatten_text(value, ignored_keys=context.configuration.get("ignored_keys", [])))
+        )
+        terms = _dedupe_terms(
+            _configured_required_terms({"required_terms": context.configuration.get("terms", [])})
+            + _terms_from_paths(context.initial_input, context.configuration.get("term_source_paths", []))
+        )
+        violations = [
+            term
+            for term in terms
+            if _normalize_for_search(term) in output_text
+        ]
+        return ValidationResult(
+            self.validator_id,
+            not violations,
+            errors=[f"forbidden term is present: {term}" for term in violations],
+            metrics={"checked_term_count": len(terms), "violation_count": len(violations)},
+        )
+
+
+class EvidenceRequiredValidator:
+    validator_id = "evidence_required"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        evidence = _evidence_terms(context.initial_input, context.configuration)
+        if not evidence:
+            return ValidationResult(self.validator_id, False, errors=["no evidence terms configured or available"])
+
+        configured_terms = _configured_required_terms({"required_terms": context.configuration.get("checked_terms", [])})
+        output_terms = [
+            term
+            for term in configured_terms
+            if _normalize_for_search(term) in _normalize_for_search(" ".join(_flatten_text(value)))
+        ]
+        if not configured_terms:
+            output_terms = _candidate_feature_terms(value, context.configuration)
+
+        unsupported = [
+            term
+            for term in output_terms
+            if not _has_evidence(term, evidence)
+        ]
+        return ValidationResult(
+            self.validator_id,
+            not unsupported,
+            errors=[f"term has no supporting evidence: {term}" for term in unsupported],
+            metrics={"checked_term_count": len(output_terms), "unsupported_count": len(unsupported)},
+        )
+
+
 class NumericPreservationValidator:
     validator_id = "numeric_preservation"
 
@@ -226,6 +280,36 @@ class NumericPreservationValidator:
                 "checked_number_count": len(required_numbers),
                 "missing_number_count": len(missing),
             },
+        )
+
+
+class ExplicitTestCountValidator:
+    validator_id = "explicit_test_count"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        source = _get_path(
+            context.initial_input,
+            str(context.configuration.get("test_requirements_path", "requirement_analysis.test_requirements")),
+        )
+        required_count = int(context.configuration.get("min_count", 0) or 0)
+        source_items = _list_items(source)
+        if source_items:
+            required_count = max(required_count, len(source_items))
+
+        output_items = _get_path(value, str(context.configuration.get("output_path", "test_requirements")))
+        if output_items is None:
+            output_items = _get_path(value, "architecture_sheet.test_requirements")
+        output_count = len(_list_items(output_items))
+
+        errors = []
+        if output_count < required_count:
+            errors.append(f"expected at least {required_count} explicit test requirement(s), found {output_count}")
+
+        return ValidationResult(
+            self.validator_id,
+            not errors,
+            errors=errors,
+            metrics={"required_count": required_count, "output_count": output_count},
         )
 
 
@@ -263,6 +347,44 @@ class TestRequirementCoverageValidator:
         )
 
 
+class CrossFieldConsistencyValidator:
+    validator_id = "cross_field_consistency"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        rules = context.configuration.get("rules", [])
+        if not isinstance(rules, list):
+            return ValidationResult(self.validator_id, False, errors=["rules must be a list"])
+
+        errors = []
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            source_path = str(rule.get("source_path", ""))
+            target_path = str(rule.get("target_path", ""))
+            if not source_path or not target_path:
+                continue
+            source_value = _get_path(value, source_path)
+            target_value = _get_path(value, target_path)
+            source_terms = _selected_terms(source_value, rule)
+            target_text = _normalize_for_search(" ".join(_flatten_text(target_value)))
+            missing = [
+                term
+                for term in source_terms
+                if _normalize_for_search(term) not in target_text
+            ]
+            errors.extend(
+                f"{target_path} is missing term from {source_path}: {term}"
+                for term in missing
+            )
+
+        return ValidationResult(
+            self.validator_id,
+            not errors,
+            errors=errors,
+            metrics={"rule_count": len(rules), "missing_count": len(errors)},
+        )
+
+
 class ValidatorRegistry:
     def __init__(self) -> None:
         self._validators: Dict[str, WorkflowValidator] = {}
@@ -284,8 +406,12 @@ class ValidatorRegistry:
         registry.register(NoAdditionalPropertiesValidator())
         registry.register(UniqueIdsValidator())
         registry.register(ScopeEvidenceValidator())
+        registry.register(ForbiddenTermsValidator())
+        registry.register(EvidenceRequiredValidator())
         registry.register(NumericPreservationValidator())
+        registry.register(ExplicitTestCountValidator())
         registry.register(TestRequirementCoverageValidator())
+        registry.register(CrossFieldConsistencyValidator())
         return registry
 
 
@@ -400,6 +526,55 @@ def _configured_required_terms(configuration: Dict[str, Any]) -> List[str]:
     return [str(term) for term in configuration.get("required_terms", []) if str(term).strip()]
 
 
+def _terms_from_paths(payload: Dict[str, Any], paths: Any) -> List[str]:
+    terms = []
+    for path in _list_items(paths):
+        terms.extend(_flatten_text(_get_path(payload, str(path))))
+    return [term for term in terms if _is_searchable_term(term)]
+
+
+def _evidence_terms(payload: Dict[str, Any], configuration: Dict[str, Any]) -> List[str]:
+    configured = _configured_required_terms({"required_terms": configuration.get("evidence_terms", [])})
+    paths = configuration.get(
+        "evidence_paths",
+        [
+            "requirement_analysis.input_summary",
+            "requirement_analysis.in_scope",
+            "requirement_analysis.core_facts",
+            "requirement_analysis.test_requirements",
+            "requirement_analysis.quality_requirements",
+        ],
+    )
+    return _dedupe_terms(configured + _terms_from_paths(payload, paths))
+
+
+def _candidate_feature_terms(value: Any, configuration: Dict[str, Any]) -> List[str]:
+    paths = configuration.get(
+        "checked_paths",
+        [
+            "architecture_drivers",
+            "context",
+            "building_blocks",
+            "runtime_scenarios",
+            "architecture_decisions",
+            "test_strategy",
+            "test_requirements",
+        ],
+    )
+    terms = []
+    for path in _list_items(paths):
+        terms.extend(_flatten_text(_get_path(value, str(path))))
+    return [term for term in _dedupe_terms(terms) if _is_searchable_term(term)]
+
+
+def _has_evidence(term: str, evidence_terms: List[str]) -> bool:
+    normalized = _normalize_for_search(term)
+    evidence_text = _normalize_for_search(" ".join(evidence_terms))
+    if normalized in evidence_text:
+        return True
+    return any(_normalize_for_search(evidence) in normalized for evidence in evidence_terms if len(evidence) >= 4)
+
+
 def _test_requirement_terms(test_requirements: Any) -> List[str]:
     terms = []
     for item in _list_items(test_requirements):
@@ -439,3 +614,14 @@ def _known_test_terms(text: str) -> List[str]:
         if term in normalized:
             terms.append(term)
     return terms
+
+
+def _selected_terms(value: Any, rule: Dict[str, Any]) -> List[str]:
+    field = rule.get("term_field")
+    if isinstance(value, list) and field:
+        terms = []
+        for item in value:
+            if isinstance(item, dict):
+                terms.extend(_flatten_text(item.get(str(field))))
+        return _dedupe_terms(terms)
+    return _dedupe_terms(_flatten_text(value))

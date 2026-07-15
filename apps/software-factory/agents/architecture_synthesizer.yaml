@@ -71,9 +71,44 @@ validators:
         - REST API
         - Integration
         - Integrationen
+  - validator: forbidden_terms
+    configuration:
+      term_source_paths:
+        - requirement_analysis.out_of_scope
+        - requirement_analysis.not_evidenced
+        - requirement_analysis.explicitly_excluded
+        - requirement_analysis.explicitly_excluded_terms
+        - requirement_analysis.not_requested
+  - validator: evidence_required
+    configuration:
+      evidence_paths:
+        - requirement_analysis.input_summary
+        - requirement_analysis.in_scope
+        - requirement_analysis.core_facts
+        - requirement_analysis.test_requirements
+        - requirement_analysis.quality_requirements
+      checked_terms:
+        - Projektmanagement
+        - Cloud
+        - Team-Zuordnung
+        - Loeschen
+        - Ersteller
+        - Zustaendiger
+        - REST API
+        - Integration
+        - Integrationen
   - validator: numeric_preservation
     configuration:
       source_path: requirement_analysis
   - validator: test_requirement_coverage
     configuration:
       requirement_analysis_path: requirement_analysis
+  - validator: cross_field_consistency
+    configuration:
+      rules:
+        - source_path: architecture_sheet.building_blocks
+          target_path: architecture_sheet.arc42.building_block_view
+          term_field: name
+        - source_path: architecture_sheet.runtime_scenarios
+          target_path: architecture_sheet.arc42.runtime_view
+          term_field: name

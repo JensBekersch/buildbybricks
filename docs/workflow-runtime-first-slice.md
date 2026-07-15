@@ -61,21 +61,32 @@ offen.
 - `no_additional_properties`
 - `unique_ids`
 - `scope_evidence`
+- `forbidden_terms`
+- `evidence_required`
 - `numeric_preservation`
+- `explicit_test_count`
 - `test_requirement_coverage`
+- `cross_field_consistency`
 
 `scope_evidence` prueft Agent-Ausgaben gegen die Requirement-Analyse und kann
 pro Agent in YAML konfigurierte Watchlist-Begriffe sowie ausgeschlossene oder
 nicht belegte Inhalte blockieren. Damit werden Scope-Halluzinationen nicht nur
 per Prompt, sondern als maschinelles Quality Gate behandelt.
 
+`forbidden_terms` blockiert explizit verbotene Begriffe aus Konfiguration oder
+Requirement-Analyse. `evidence_required` verlangt, dass konfigurierte oder
+erkannte Feature-Begriffe durch belegte Requirement-Quellen gestuetzt sind.
 `numeric_preservation` stellt sicher, dass numerische Vorgaben aus der
 Requirement-Analyse, etwa 98 Prozent Testabdeckung oder Nutzerzahlen, im Output
-nicht verloren gehen. `test_requirement_coverage` gleicht Testtypen,
-Testbegriffe und Coverage-Zahlen gegen die erzeugte Architektur ab.
+nicht verloren gehen. `explicit_test_count` prueft, ob explizit erkannte
+Testanforderungen auch als explizite Testartefakte im Output erscheinen.
+`test_requirement_coverage` gleicht Testtypen, Testbegriffe und Coverage-Zahlen
+gegen die erzeugte Architektur ab. `cross_field_consistency` prueft einfache
+Konsistenzregeln zwischen zwei Output-Bereichen, z. B. Bausteine gegen arc42
+Bausteinsicht.
 
-Weitere Validatoren aus dem Zielbild, etwa Cross Field Consistency und
-kapitelspezifische arc42-Regeln, sind noch offen.
+Weitere Validatoren aus dem Zielbild, etwa kapitelspezifische arc42-Regeln,
+sind noch offen.
 
 ## Unterstuetzte Tasks
 
@@ -184,9 +195,9 @@ Ergebnis:
   vorbereitet.
 - Ein produktiver Workflow-Provider-Adapter ist vorhanden, aber derzeit nur fuer
   Runtime-Provider mit strukturierter JSON-Erzeugung nutzbar.
-- Fachliche Scope-, Zahlen- und Testanforderungsvalidierung ist als generische
-  Validatoren vorhanden, aber noch nicht vollstaendig fuer alle arc42-Kapitel
-  und Korrekturschleifen ausgebaut.
+- Fachliche Scope-, Evidenz-, Verbotsbegriff-, Zahlen-, Testanforderungs- und
+  Cross-Field-Validierung ist als generische Validatoren vorhanden, aber noch
+  nicht vollstaendig fuer alle arc42-Kapitel und Korrekturschleifen ausgebaut.
 - Die bestehende Generatorfunktion nutzt den Workflow-Blueprint fuer
   Agentenwahl und Workflow-Metadaten, fuehrt aber deterministische
   Zwischenschritte wie Schema-Laden, Baseline-Erzeugung, Korrekturlauf und
@@ -204,8 +215,7 @@ Ergebnis:
 3. Admin-/Workflow-UI listenbasiert ergaenzen.
 4. Weitere Runtime-Provider fuer OpenAI-kompatible APIs, OpenAI, Anthropic oder
    Custom HTTP ergaenzen.
-5. Weitere Validatoren fuer Cross Field Consistency und kapitelspezifische
-   arc42-Regeln ergaenzen.
+5. Weitere Validatoren fuer kapitelspezifische arc42-Regeln ergaenzen.
 6. Sobald das Projekt zur vollwertigen Django-App umgebaut wird:
    `DjangoWorkflowStore` gegen den bestehenden `WorkflowStore` Contract
    implementieren.

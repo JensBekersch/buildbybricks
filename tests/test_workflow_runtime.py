@@ -429,6 +429,224 @@ def test_agent_configured_test_requirement_coverage_validator_rejects_missing_te
     assert "medium" in run.step_runs[0].validation_result["results"][0]["errors"][0]
 
 
+def test_agent_configured_forbidden_terms_validator_rejects_blocked_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "forbidden_terms",
+                        "configuration": {"terms": ["Cloud"]},
+                    }
+                ]
+            ),
+            input_mapping={"description": {"source": "workflow_input", "path": "description"}},
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider({"artifact_name": "Team Todo", "deployment": "Cloud Deployment."})
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "forbidden_terms"
+    assert "Cloud" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
+def test_agent_configured_evidence_required_validator_rejects_unsupported_checked_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "evidence_required",
+                        "configuration": {
+                            "evidence_paths": ["requirement_analysis.in_scope"],
+                            "checked_terms": ["Cloud"],
+                        },
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {"in_scope": [{"description": "Aufgaben erfassen."}]},
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider({"artifact_name": "Team Todo", "deployment": "Cloud Deployment."})
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "evidence_required"
+    assert "Cloud" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
+def test_agent_configured_evidence_required_validator_ignores_absent_checked_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "evidence_required",
+                        "configuration": {
+                            "evidence_paths": ["requirement_analysis.in_scope"],
+                            "checked_terms": ["Cloud"],
+                        },
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {"in_scope": [{"description": "Aufgaben erfassen."}]},
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider({"artifact_name": "Team Todo", "context": "Aufgaben erfassen."})
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste."},
+    )
+
+    assert run.status == RUN_STATUS_SUCCEEDED
+
+
+def test_agent_configured_explicit_test_count_validator_rejects_missing_test_items() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "explicit_test_count",
+                        "configuration": {
+                            "test_requirements_path": "requirement_analysis.test_requirements",
+                            "output_path": "architecture_sheet.test_requirements",
+                        },
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {
+                        "test_requirements": [
+                            {"type": "unit"},
+                            {"type": "medium"},
+                        ]
+                    },
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "architecture_sheet": {
+                "artifact_name": "Team Todo",
+                "test_requirements": [{"type": "unit"}],
+            }
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "explicit_test_count"
+    assert "expected at least 2" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
+def test_agent_configured_cross_field_consistency_validator_rejects_missing_target_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "cross_field_consistency",
+                        "configuration": {
+                            "rules": [
+                                {
+                                    "source_path": "architecture_sheet.building_blocks",
+                                    "target_path": "architecture_sheet.arc42.building_block_view",
+                                    "term_field": "name",
+                                }
+                            ]
+                        },
+                    }
+                ]
+            ),
+            input_mapping={"description": {"source": "workflow_input", "path": "description"}},
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "architecture_sheet": {
+                "artifact_name": "Team Todo",
+                "building_blocks": [{"name": "AufgabenService"}],
+                "arc42": {"building_block_view": {"summary": "Django App mit Views."}},
+            }
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "cross_field_consistency"
+    assert "AufgabenService" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
 def test_disabled_and_conditioned_steps_are_skipped() -> None:
     version = _workflow_version()
     version.add_step(
