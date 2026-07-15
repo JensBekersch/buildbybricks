@@ -468,15 +468,6 @@ textarea {
   background: #edf8f6;
 }
 
-.sheet-lede {
-  margin: 0;
-  border-bottom: 1px solid #e9edf3;
-  padding: 16px 22px;
-  font-size: 15px;
-  color: #354052;
-  background: #fbfcfd;
-}
-
 .sheet-sections {
   display: grid;
   grid-template-columns: 1fr;
