@@ -331,6 +331,104 @@ def test_agent_configured_scope_evidence_validator_allows_supported_terms() -> N
     assert run.final_output["context"] == "Die REST API stellt Aufgaben fuer externe Clients bereit."
 
 
+def test_agent_configured_numeric_preservation_validator_rejects_missing_numbers() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "numeric_preservation",
+                        "configuration": {"source_path": "requirement_analysis"},
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {
+                        "input_summary": "Die Anwendung braucht mindestens 98 Prozent Testabdeckung.",
+                        "quality_requirements": [{"description": "Mindestens 98% Coverage."}],
+                    },
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "artifact_name": "Team Todo",
+            "test_strategy": "Die Tests sichern die Kernlogik ab.",
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste mit 98 Prozent Testabdeckung."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "numeric_preservation"
+    assert "98 prozent" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
+def test_agent_configured_test_requirement_coverage_validator_rejects_missing_test_terms() -> None:
+    version = _workflow_version()
+    version.add_step(
+        WorkflowStep(
+            version,
+            "Architecture Synthesizer",
+            "synthesize_architecture",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=_published_agent(
+                validators=[
+                    {
+                        "validator": "test_requirement_coverage",
+                        "configuration": {"requirement_analysis_path": "requirement_analysis"},
+                    }
+                ]
+            ),
+            input_mapping={
+                "description": {"source": "workflow_input", "path": "description"},
+                "requirement_analysis": {
+                    "source": "static",
+                    "value": {
+                        "input_summary": "Unit- und Medium-Tests mit 98 Prozent Coverage.",
+                        "test_requirements": [
+                            {"type": "unit", "description": "Unit-Tests fuer Fachlogik."},
+                            {"type": "medium", "description": "Medium-Tests fuer Django-Views."},
+                        ],
+                        "quality_requirements": [{"description": "Mindestens 98 Prozent Coverage."}],
+                    },
+                },
+            },
+            output_key="final",
+        )
+    )
+    provider = StructuredProvider(
+        {
+            "artifact_name": "Team Todo",
+            "test_strategy": "Unit-Tests erreichen 98 Prozent Coverage.",
+        }
+    )
+
+    run = LinearWorkflowEngine(provider_adapter=LLMProviderWorkflowAdapter(provider)).run(
+        version,
+        {"description": "Eine Todo-Liste mit Unit- und Medium-Tests."},
+    )
+
+    assert run.status == RUN_STATUS_FAILED
+    assert run.step_runs[0].validation_result["results"][0]["validator_id"] == "test_requirement_coverage"
+    assert "medium" in run.step_runs[0].validation_result["results"][0]["errors"][0]
+
+
 def test_disabled_and_conditioned_steps_are_skipped() -> None:
     version = _workflow_version()
     version.add_step(

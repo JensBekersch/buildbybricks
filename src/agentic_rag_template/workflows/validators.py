@@ -1,6 +1,7 @@
 """Reusable validators for workflow outputs."""
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Protocol
 
@@ -203,6 +204,65 @@ class ScopeEvidenceValidator:
         )
 
 
+class NumericPreservationValidator:
+    validator_id = "numeric_preservation"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        source = _get_path(context.initial_input, str(context.configuration.get("source_path", "requirement_analysis")))
+        source_numbers = _extract_numbers(" ".join(_flatten_text(source)))
+        if not source_numbers:
+            return ValidationResult(self.validator_id, True, metrics={"checked_number_count": 0})
+
+        output_numbers = set(_extract_numbers(" ".join(_flatten_text(value))))
+        ignored = set(str(item) for item in context.configuration.get("ignore_numbers", []))
+        required_numbers = [number for number in source_numbers if number not in ignored]
+        missing = [number for number in required_numbers if number not in output_numbers]
+
+        return ValidationResult(
+            self.validator_id,
+            not missing,
+            errors=[f"numeric requirement is missing from output: {number}" for number in missing],
+            metrics={
+                "checked_number_count": len(required_numbers),
+                "missing_number_count": len(missing),
+            },
+        )
+
+
+class TestRequirementCoverageValidator:
+    validator_id = "test_requirement_coverage"
+
+    def validate(self, value: Any, context: ValidationContext) -> ValidationResult:
+        requirement_analysis = _get_path(
+            context.initial_input,
+            str(context.configuration.get("requirement_analysis_path", "requirement_analysis")),
+        )
+        if not isinstance(requirement_analysis, dict):
+            return ValidationResult(self.validator_id, False, errors=["requirement_analysis must be available"])
+
+        output_text = _normalize_for_search(" ".join(_flatten_text(value)))
+        required_terms = _dedupe_terms(
+            _configured_required_terms(context.configuration)
+            + _test_requirement_terms(requirement_analysis.get("test_requirements"))
+            + _coverage_terms(requirement_analysis)
+        )
+        missing = [
+            term
+            for term in required_terms
+            if _normalize_for_search(term) not in output_text
+        ]
+
+        return ValidationResult(
+            self.validator_id,
+            not missing,
+            errors=[f"test requirement is missing from output: {term}" for term in missing],
+            metrics={
+                "checked_requirement_count": len(required_terms),
+                "missing_requirement_count": len(missing),
+            },
+        )
+
+
 class ValidatorRegistry:
     def __init__(self) -> None:
         self._validators: Dict[str, WorkflowValidator] = {}
@@ -224,6 +284,8 @@ class ValidatorRegistry:
         registry.register(NoAdditionalPropertiesValidator())
         registry.register(UniqueIdsValidator())
         registry.register(ScopeEvidenceValidator())
+        registry.register(NumericPreservationValidator())
+        registry.register(TestRequirementCoverageValidator())
         return registry
 
 
@@ -319,3 +381,61 @@ def _normalize_for_search(value: str) -> str:
     for source, replacement in replacements.items():
         normalized = normalized.replace(source, replacement)
     return normalized
+
+
+def _extract_numbers(text: str) -> List[str]:
+    numbers = []
+    for match in re.finditer(r"(?<![\w])\d+(?:[.,]\d+)?\s*(?:%|prozent|percent)?", text, flags=re.IGNORECASE):
+        normalized = match.group(0).strip().casefold().replace(",", ".")
+        normalized = re.sub(r"\s+", " ", normalized)
+        if normalized.endswith("%"):
+            normalized = normalized[:-1].strip() + " prozent"
+        if normalized.endswith(" percent"):
+            normalized = normalized[: -len(" percent")] + " prozent"
+        numbers.append(normalized)
+    return _dedupe_terms(numbers)
+
+
+def _configured_required_terms(configuration: Dict[str, Any]) -> List[str]:
+    return [str(term) for term in configuration.get("required_terms", []) if str(term).strip()]
+
+
+def _test_requirement_terms(test_requirements: Any) -> List[str]:
+    terms = []
+    for item in _list_items(test_requirements):
+        if isinstance(item, dict):
+            for key in ("type", "name", "coverage"):
+                terms.extend(_flatten_text(item.get(key)))
+            for text in _flatten_text(item.get("description")):
+                terms.extend(_extract_numbers(text))
+                terms.extend(_known_test_terms(text))
+        else:
+            terms.extend(_flatten_text(item))
+    return [term for term in terms if _is_searchable_term(term) or _extract_numbers(term)]
+
+
+def _coverage_terms(requirement_analysis: Dict[str, Any]) -> List[str]:
+    terms = []
+    for key in ("quality_goals", "quality_requirements", "acceptance_criteria", "core_facts"):
+        for text in _flatten_text(requirement_analysis.get(key)):
+            lowered = _normalize_for_search(text)
+            if "coverage" in lowered or "testabdeckung" in lowered or "test" in lowered:
+                terms.extend(_extract_numbers(text))
+    return terms
+
+
+def _list_items(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _known_test_terms(text: str) -> List[str]:
+    normalized = _normalize_for_search(text)
+    terms = []
+    for term in ("unit", "medium", "integration", "coverage", "testabdeckung"):
+        if term in normalized:
+            terms.append(term)
+    return terms

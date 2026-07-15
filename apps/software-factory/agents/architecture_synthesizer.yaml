@@ -71,3 +71,9 @@ validators:
         - REST API
         - Integration
         - Integrationen
+  - validator: numeric_preservation
+    configuration:
+      source_path: requirement_analysis
+  - validator: test_requirement_coverage
+    configuration:
+      requirement_analysis_path: requirement_analysis

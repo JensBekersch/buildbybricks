@@ -60,14 +60,21 @@ offen.
 - `no_additional_properties`
 - `unique_ids`
 - `scope_evidence`
+- `numeric_preservation`
+- `test_requirement_coverage`
 
 `scope_evidence` prueft Agent-Ausgaben gegen die Requirement-Analyse und kann
 pro Agent in YAML konfigurierte Watchlist-Begriffe sowie ausgeschlossene oder
 nicht belegte Inhalte blockieren. Damit werden Scope-Halluzinationen nicht nur
 per Prompt, sondern als maschinelles Quality Gate behandelt.
 
-Weitere Validatoren aus dem Zielbild, etwa Numeric Preservation, Explicit Test
-Count und Cross Field Consistency, sind noch offen.
+`numeric_preservation` stellt sicher, dass numerische Vorgaben aus der
+Requirement-Analyse, etwa 98 Prozent Testabdeckung oder Nutzerzahlen, im Output
+nicht verloren gehen. `test_requirement_coverage` gleicht Testtypen,
+Testbegriffe und Coverage-Zahlen gegen die erzeugte Architektur ab.
+
+Weitere Validatoren aus dem Zielbild, etwa Cross Field Consistency und
+kapitelspezifische arc42-Regeln, sind noch offen.
 
 ## Unterstuetzte Tasks
 
@@ -171,8 +178,9 @@ Ergebnis:
   Django-App-Struktur besitzt.
 - Ein produktiver Workflow-Provider-Adapter ist vorhanden, aber derzeit nur fuer
   Runtime-Provider mit strukturierter JSON-Erzeugung nutzbar.
-- Fachliche Scope-Validierung ist als generischer Validator vorhanden, aber noch
-  nicht vollstaendig fuer alle arc42-Kapitel und Korrekturschleifen ausgebaut.
+- Fachliche Scope-, Zahlen- und Testanforderungsvalidierung ist als generische
+  Validatoren vorhanden, aber noch nicht vollstaendig fuer alle arc42-Kapitel
+  und Korrekturschleifen ausgebaut.
 - Die bestehende Generatorfunktion nutzt den Workflow-Blueprint fuer
   Agentenwahl und Workflow-Metadaten, fuehrt aber deterministische
   Zwischenschritte wie Schema-Laden, Baseline-Erzeugung, Korrekturlauf und
@@ -190,7 +198,7 @@ Ergebnis:
 3. Admin-/Workflow-UI listenbasiert ergaenzen.
 4. Weitere Runtime-Provider fuer OpenAI-kompatible APIs, OpenAI, Anthropic oder
    Custom HTTP ergaenzen.
-5. Weitere Validatoren fuer Numeric Preservation, Test-Count-Abgleich und
-   Cross Field Consistency ergaenzen.
+5. Weitere Validatoren fuer Cross Field Consistency und kapitelspezifische
+   arc42-Regeln ergaenzen.
 6. Optional spaeter: Migration von Snapshot-Store zu Django Models, falls das
    Projekt zur vollwertigen Django-App umgebaut wird.
