@@ -130,6 +130,23 @@ def _emit_log(
     _emit_event(event_handler, EVENT_LOG, step, message, level=level, metadata=metadata)
 
 
+def _emit_step_output(
+    event_handler: Optional[ArchitectureGenerationEventHandler],
+    step: str,
+    output: Any,
+    message: str = "Schritt-Ergebnis wurde gespeichert.",
+) -> None:
+    _emit_log(
+        event_handler,
+        step,
+        message,
+        metadata={
+            "kind": "step_output",
+            "output": output,
+        },
+    )
+
+
 def generate_architecture_sheet(
     description: str,
     application: ApplicationInstance,
@@ -141,14 +158,32 @@ def generate_architecture_sheet(
     _emit_started(event_handler, "validate_description", "Beschreibung wird validiert.")
     normalized_description = " ".join(description.strip().split())
     mode = _normalize_generation_mode(generation_mode)
+    _emit_step_output(
+        event_handler,
+        "validate_description",
+        {
+            "description": normalized_description,
+            "generation_mode": mode,
+        },
+    )
     _emit_completed(event_handler, "validate_description", "Beschreibung ist verwendbar.")
 
     _emit_started(event_handler, "load_schema", "Architecture-Sheet-Schema wird geladen.")
     schema = _load_schema(application)
+    _emit_step_output(
+        event_handler,
+        "load_schema",
+        {
+            "schema_id": str(schema.get("$id", "")),
+            "schema_version": schema.get("properties", {}).get("schema_version", {}).get("const"),
+            "required": schema.get("required", []),
+        },
+    )
     _emit_completed(event_handler, "load_schema", "Architecture-Sheet-Schema wurde geladen.")
 
     _emit_started(event_handler, "load_method_sources", "Methodenwissen wird geladen.")
     sources = _load_method_sources(application)
+    _emit_step_output(event_handler, "load_method_sources", sources)
     _emit_completed(event_handler, "load_method_sources", "Methodenwissen wurde geladen.")
     trace = [
         "validated_description",
@@ -198,6 +233,7 @@ def generate_architecture_sheet(
 
     _emit_started(event_handler, "validate_contract", "Architecture Sheet wird gegen den Contract validiert.")
     validation = _validate_required_fields(sheet, schema)
+    _emit_step_output(event_handler, "validate_contract", validation)
     _emit_completed(event_handler, "validate_contract", "Architecture Sheet wurde gegen den Contract validiert.")
     trace.append("validated_architecture_sheet_contract")
 
@@ -292,6 +328,7 @@ def _try_generate_agentic_architecture_sheet(
             user_prompt=_build_requirements_analyst_user_prompt(description, method_sources),
         )
         analysis = _normalize_requirements_analysis(raw_analysis, description)
+        _emit_step_output(event_handler, "analyze_requirements", analysis)
         _emit_completed(event_handler, "analyze_requirements", "Requirement-Analyse wurde erstellt.")
         base_sheet = _build_sheet_from_requirements_analysis(description, analysis)
 
@@ -325,6 +362,7 @@ def _try_generate_agentic_architecture_sheet(
             }
 
         reviewed_sheet = _merge_known_schema_fields(base_sheet, candidate_sheet, schema, analysis=analysis)
+        _emit_step_output(event_handler, "synthesize_architecture", reviewed_sheet)
         _emit_completed(event_handler, "synthesize_architecture", "Architecture Sheet wurde synthetisiert.")
         review = {}
         warning = ""
@@ -343,6 +381,15 @@ def _try_generate_agentic_architecture_sheet(
                 initial_sheet=reviewed_sheet,
             )
             reviewed_sheet = review["sheet"]
+            _emit_step_output(
+                event_handler,
+                "review_architecture",
+                {
+                    key: value
+                    for key, value in review.items()
+                    if key != "sheet"
+                },
+            )
             warning = "" if review.get("passes") else "Architecture reviewer found issues."
             if warning:
                 _emit_failed(event_handler, "review_architecture", warning)
@@ -399,6 +446,15 @@ def _review_and_correct_architecture_sheet(
         review = _normalize_architecture_review(raw_review)
         review["attempt"] = attempt + 1
         reviews.append(review)
+        _emit_step_output(
+            event_handler,
+            "review_architecture",
+            {
+                "latest_review": review,
+                "reviews": reviews,
+            },
+            message=f"Review-Ergebnis fuer Versuch {attempt + 1} wurde gespeichert.",
+        )
 
         if review["passes"]:
             review["sheet"] = sheet
@@ -447,6 +503,15 @@ def _review_and_correct_architecture_sheet(
             candidate_sheet,
             schema,
             analysis=requirement_analysis,
+        )
+        _emit_step_output(
+            event_handler,
+            "synthesize_architecture",
+            {
+                "correction_attempt": attempt + 1,
+                "sheet": sheet,
+            },
+            message=f"Korrigiertes Architecture Sheet fuer Versuch {attempt + 1} wurde gespeichert.",
         )
 
     return {

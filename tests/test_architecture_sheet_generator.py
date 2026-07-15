@@ -445,7 +445,8 @@ def test_generate_architecture_sheet_emits_real_pipeline_events() -> None:
     )
 
     assert result.validation["valid"] is True
-    assert [(event.type, event.step) for event in events] == [
+    lifecycle_events = [event for event in events if event.type != EVENT_LOG]
+    assert [(event.type, event.step) for event in lifecycle_events] == [
         (EVENT_STEP_STARTED, "validate_description"),
         (EVENT_STEP_COMPLETED, "validate_description"),
         (EVENT_STEP_STARTED, "load_schema"),
@@ -453,21 +454,34 @@ def test_generate_architecture_sheet_emits_real_pipeline_events() -> None:
         (EVENT_STEP_STARTED, "load_method_sources"),
         (EVENT_STEP_COMPLETED, "load_method_sources"),
         (EVENT_STEP_STARTED, "analyze_requirements"),
-        (EVENT_LOG, "analyze_requirements"),
         (EVENT_STEP_COMPLETED, "analyze_requirements"),
         (EVENT_STEP_STARTED, "synthesize_architecture"),
-        (EVENT_LOG, "synthesize_architecture"),
         (EVENT_STEP_COMPLETED, "synthesize_architecture"),
         (EVENT_STEP_SKIPPED, "review_architecture"),
         (EVENT_STEP_STARTED, "validate_contract"),
         (EVENT_STEP_COMPLETED, "validate_contract"),
     ]
-    llm_events = [event for event in events if event.type == EVENT_LOG]
+    llm_events = [
+        event
+        for event in events
+        if event.type == EVENT_LOG and event.metadata.get("kind") == "llm_call"
+    ]
     assert [event.metadata["llm_step"] for event in llm_events] == [
         "requirement_analyst",
         "architecture_synthesizer",
     ]
     assert all(event.metadata["duration_seconds"] >= 0 for event in llm_events)
+    step_outputs = {
+        event.step: event.metadata["output"]
+        for event in events
+        if event.type == EVENT_LOG and event.metadata.get("kind") == "step_output"
+    }
+    assert step_outputs["validate_description"]["description"].startswith("Django-Webanwendung")
+    assert step_outputs["load_schema"]["schema_id"].endswith("/architecture-sheet.schema.json")
+    assert step_outputs["load_method_sources"][0]["location"].startswith("architecture-method/")
+    assert step_outputs["analyze_requirements"]["artifact_name"] == "Arbeitszeit Cockpit"
+    assert step_outputs["synthesize_architecture"]["artifact_name"] == "Arbeitszeit Cockpit"
+    assert step_outputs["validate_contract"]["valid"] is True
 
 
 def test_architecture_generation_events_update_job_state() -> None:

@@ -20,10 +20,6 @@ const architectureProgressElapsed = document.querySelector("#architecture-progre
 const architectureProgressSteps = document.querySelector("#architecture-progress-steps");
 const architectureEmpty = document.querySelector("#architecture-empty");
 const architectureResult = document.querySelector("#architecture-result");
-const architectureTitle = document.querySelector("#architecture-title");
-const architectureBusinessGoal = document.querySelector("#architecture-business-goal");
-const architectureValidation = document.querySelector("#architecture-validation");
-const architectureGeneration = document.querySelector("#architecture-generation");
 const agentStepList = document.querySelector("#agent-step-list");
 const agentViewerKicker = document.querySelector("#agent-viewer-kicker");
 const agentViewerTitle = document.querySelector("#agent-viewer-title");
@@ -521,6 +517,11 @@ function stepLogs(job, stepKey) {
   return (job.logs || []).filter((log) => (log.step || "") === stepKey);
 }
 
+function stepOutputFromLogs(logs) {
+  const outputLog = [...logs].reverse().find((log) => (log.metadata || {}).kind === "step_output");
+  return outputLog ? (outputLog.metadata || {}).output || null : null;
+}
+
 function stepDuration(step) {
   if (!step.started_at || !step.finished_at) {
     return "";
@@ -535,21 +536,21 @@ function buildAgentRunItems(job, payload) {
   const items = (job.steps || []).map((step) => {
     const logs = stepLogs(job, step.key);
     const llmLogs = logs.filter((log) => (log.metadata || {}).kind === "llm_call");
-    let output = null;
+    let output = stepOutputFromLogs(logs);
 
-    if (step.key === "analyze_requirements") {
+    if (!output && step.key === "analyze_requirements") {
       output = generation.requirement_analysis || null;
-    } else if (step.key === "synthesize_architecture") {
+    } else if (!output && step.key === "synthesize_architecture") {
       output = sheet && Object.keys(sheet).length > 0 ? sheet : null;
-    } else if (step.key === "review_architecture") {
+    } else if (!output && step.key === "review_architecture") {
       output = generation.architecture_review || null;
-    } else if (step.key === "validate_contract") {
+    } else if (!output && step.key === "validate_contract") {
       output = result.validation || null;
-    } else if (step.key === "load_method_sources") {
+    } else if (!output && step.key === "load_method_sources") {
       output = result.sources || null;
-    } else if (step.key === "load_schema") {
+    } else if (!output && step.key === "load_schema") {
       output = { schema_id: result.schema_id || "-", valid: (result.validation || {}).valid || false };
-    } else if (step.key === "validate_description") {
+    } else if (!output && step.key === "validate_description") {
       output = { description: job.description };
     }
 
@@ -587,31 +588,10 @@ function buildAgentRunItems(job, payload) {
 
 function renderAgentRuns(job, payload) {
   const result = payload || job.result || {};
-  const sheet = result.architecture_sheet || {};
-  const validation = result.validation || {};
-  const generation = result.generation || {};
-  const provider =
-    generation.provider ||
-    (generation.llm_provider && generation.llm_provider !== "none" ? generation.llm_provider : "") ||
-    job.llm_provider ||
-    generation.mode ||
-    "Agent";
-  const usedLlm = Boolean(
-    generation.used_llm ||
-      (generation.llm_provider && generation.llm_provider !== "none") ||
-      (job.llm_provider && job.llm_provider !== "none")
-  );
   const items = buildAgentRunItems(job, result);
 
   architectureEmpty.hidden = true;
   architectureResult.hidden = false;
-  architectureTitle.textContent = sheet.artifact_name || job.description || "Django Machine Job";
-  architectureBusinessGoal.textContent =
-    valueText(sheet.business_goal || sheet.input_summary || job.description) || "Noch kein finales Ergebnis.";
-  architectureValidation.textContent = validation.valid ? "Schema gueltig" : job.status;
-  architectureValidation.dataset.tone = validation.valid ? "ok" : job.status === "failed" ? "warn" : "neutral";
-  architectureGeneration.textContent = provider;
-  architectureGeneration.dataset.tone = usedLlm ? "accent" : "neutral";
 
   agentStepList.replaceChildren();
   items.forEach((item) => {
