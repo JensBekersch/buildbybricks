@@ -42,11 +42,14 @@ def save_software_factory_workflow_config(
 ) -> None:
     """Persist a raw workflow blueprint config."""
     workflow_dir = application.template_dir / "workflows"
-    workflow_dir.mkdir(parents=True, exist_ok=True)
-    workflow_blueprint_path(application, workflow_id).write_text(
-        yaml.safe_dump(workflow_config, sort_keys=False, allow_unicode=False),
-        encoding="utf-8",
-    )
+    try:
+        workflow_dir.mkdir(parents=True, exist_ok=True)
+        workflow_blueprint_path(application, workflow_id).write_text(
+            yaml.safe_dump(workflow_config, sort_keys=False, allow_unicode=False),
+            encoding="utf-8",
+        )
+    except OSError as error:
+        raise WorkflowBlueprintError(f"Workflow blueprint cannot be saved: {error}") from error
 
 
 def delete_software_factory_workflow_config(
@@ -54,7 +57,10 @@ def delete_software_factory_workflow_config(
     workflow_id: str,
 ) -> None:
     """Delete one workflow blueprint config."""
-    workflow_blueprint_path(application, workflow_id).unlink()
+    try:
+        workflow_blueprint_path(application, workflow_id).unlink()
+    except OSError as error:
+        raise WorkflowBlueprintError(f"Workflow blueprint cannot be deleted: {error}") from error
 
 
 def new_workflow_config(workflow_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
