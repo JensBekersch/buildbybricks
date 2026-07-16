@@ -8,6 +8,7 @@ import yaml
 from agentic_rag_template.applications import ApplicationInstance
 from agentic_rag_template.workflows.models import (
     STEP_TYPE_AGENT,
+    VERSION_STATUS_DRAFT,
     VERSION_STATUS_PUBLISHED,
     AgentDefinition,
     AgentVersion,
@@ -21,12 +22,71 @@ class WorkflowBlueprintError(RuntimeError):
     """Raised when a workflow blueprint cannot be loaded."""
 
 
+def workflow_blueprint_path(application: ApplicationInstance, workflow_id: str) -> Path:
+    """Return the YAML path for one configured workflow blueprint."""
+    return application.template_dir / "workflows" / f"{workflow_id}.yaml"
+
+
+def load_software_factory_workflow_config(
+    application: ApplicationInstance,
+    workflow_id: str,
+) -> Dict[str, Any]:
+    """Load the raw YAML config for one workflow blueprint."""
+    return _load_yaml(workflow_blueprint_path(application, workflow_id))
+
+
+def save_software_factory_workflow_config(
+    application: ApplicationInstance,
+    workflow_id: str,
+    workflow_config: Dict[str, Any],
+) -> None:
+    """Persist a raw workflow blueprint config."""
+    workflow_dir = application.template_dir / "workflows"
+    workflow_dir.mkdir(parents=True, exist_ok=True)
+    workflow_blueprint_path(application, workflow_id).write_text(
+        yaml.safe_dump(workflow_config, sort_keys=False, allow_unicode=False),
+        encoding="utf-8",
+    )
+
+
+def delete_software_factory_workflow_config(
+    application: ApplicationInstance,
+    workflow_id: str,
+) -> None:
+    """Delete one workflow blueprint config."""
+    workflow_blueprint_path(application, workflow_id).unlink()
+
+
+def new_workflow_config(workflow_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a draft workflow config from an admin API payload."""
+    return _workflow_config_from_payload(
+        {
+            "name": workflow_id.replace("_", " ").replace("-", " ").title(),
+            "slug": workflow_id.replace("_", "-"),
+            "description": "",
+            "workflow_status": "active",
+            "status": VERSION_STATUS_DRAFT,
+            "version": 1,
+            "change_summary": "Initial draft workflow.",
+            "created_by": "workflow-admin-ui",
+            "final_output_key": "",
+            "steps": [],
+        },
+        payload,
+    )
+
+
+def update_workflow_config(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Update an existing draft workflow config from an admin API payload."""
+    return _workflow_config_from_payload(dict(existing), payload)
+
+
 def load_software_factory_workflow(
     application: ApplicationInstance,
     workflow_id: str = "architecture_sheet",
 ) -> WorkflowVersion:
     """Load one configured Software Factory workflow as a WorkflowVersion."""
-    workflow_config = _load_yaml(application.template_dir / "workflows" / f"{workflow_id}.yaml")
+    workflow_config = load_software_factory_workflow_config(application, workflow_id)
     workflow = Workflow(
         name=str(workflow_config.get("name", workflow_id)),
         slug=str(workflow_config.get("slug", workflow_id.replace("_", "-"))),
@@ -122,3 +182,31 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise WorkflowBlueprintError(f"YAML blueprint must be an object: {path}")
     return payload
+
+
+def _workflow_config_from_payload(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    scalar_fields = {
+        "name",
+        "slug",
+        "description",
+        "workflow_status",
+        "status",
+        "change_summary",
+        "created_by",
+        "final_output_key",
+    }
+
+    for field in scalar_fields:
+        if field in payload:
+            existing[field] = str(payload.get(field, "")).strip()
+
+    if "version" in payload:
+        existing["version"] = int(payload.get("version") or 1)
+
+    if "steps" in payload:
+        steps = payload.get("steps")
+        if not isinstance(steps, list):
+            raise WorkflowBlueprintError("steps must be a list")
+        existing["steps"] = steps
+
+    return existing

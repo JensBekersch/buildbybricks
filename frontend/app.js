@@ -40,6 +40,7 @@ const architectureJobList = document.querySelector("#architecture-job-list");
 const architectureJobLogs = document.querySelector("#architecture-job-logs");
 const architectureTrace = document.querySelector("#architecture-trace");
 const refreshWorkflowsButton = document.querySelector("#refresh-workflows");
+const createWorkflowDraftButton = document.querySelector("#create-workflow-draft");
 const refreshWorkflowRunsButton = document.querySelector("#refresh-workflow-runs");
 const validateWorkflowButton = document.querySelector("#validate-workflow");
 const startWorkflowTestRunButton = document.querySelector("#start-workflow-test-run");
@@ -48,6 +49,14 @@ const workflowList = document.querySelector("#workflow-list");
 const workflowDetailTitle = document.querySelector("#workflow-detail-title");
 const workflowValidationBadge = document.querySelector("#workflow-validation-badge");
 const workflowDetailMeta = document.querySelector("#workflow-detail-meta");
+const workflowEditorMode = document.querySelector("#workflow-editor-mode");
+const workflowEditorId = document.querySelector("#workflow-editor-id");
+const workflowEditorName = document.querySelector("#workflow-editor-name");
+const workflowEditorSlug = document.querySelector("#workflow-editor-slug");
+const workflowEditorDescription = document.querySelector("#workflow-editor-description");
+const workflowEditorFinalOutput = document.querySelector("#workflow-editor-final-output");
+const saveWorkflowButton = document.querySelector("#save-workflow");
+const deleteWorkflowButton = document.querySelector("#delete-workflow");
 const workflowStepCount = document.querySelector("#workflow-step-count");
 const workflowStepList = document.querySelector("#workflow-step-list");
 const workflowStepDetail = document.querySelector("#workflow-step-detail");
@@ -98,6 +107,36 @@ async function postJson(url, body) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
+  }
+
+  return payload;
+}
+
+async function putJson(url, body) {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
+  }
+
+  return payload;
+}
+
+async function deleteJson(url) {
+  const response = await fetch(url, {
+    method: "DELETE",
   });
   const payload = await response.json();
 
@@ -558,6 +597,37 @@ async function loadWorkflowAdmin() {
   }
 }
 
+function prepareNewWorkflowDraft() {
+  activeWorkflowId = "";
+  activeWorkflowDetail = null;
+  activeWorkflowStepKey = "";
+  activeWorkflowRunId = "";
+  activeWorkflowRun = null;
+  activeWorkflowArtifactKey = "";
+  renderWorkflowList(workflows);
+  renderWorkflowEditor({
+    id: "",
+    name: "",
+    slug: "",
+    description: "",
+    status: "draft",
+    final_output_key: "",
+    is_new: true,
+  });
+  workflowDetailTitle.textContent = "Neuer Workflow";
+  workflowValidationBadge.textContent = "Draft";
+  workflowValidationBadge.dataset.tone = "neutral";
+  workflowDetailMeta.replaceChildren();
+  workflowStepCount.textContent = "0";
+  workflowStepList.replaceChildren(createElement("li", "empty-state", "Noch keine Steps konfiguriert."));
+  workflowStepDetail.textContent = "Speichere den Workflow zuerst. Danach koennen Steps konfiguriert werden.";
+  workflowRunList.replaceChildren(createElement("li", "empty-state", "Noch keine Runs."));
+  workflowArtifactList.replaceChildren(createElement("li", "empty-state", "Noch keine Step-Outputs."));
+  workflowArtifactTitle.textContent = "Output Viewer";
+  workflowArtifactViewer.textContent = "Noch kein Workflow ausgewaehlt.";
+  workflowAdminStatus.textContent = "Neuer Draft vorbereitet.";
+}
+
 function renderWorkflowList(items) {
   workflowList.replaceChildren();
 
@@ -621,6 +691,15 @@ function renderWorkflowDetail(payload) {
   appendMeta(workflowDetailMeta, "Status", workflowVersion.status || "-");
   appendMeta(workflowDetailMeta, "Final Output", workflowVersion.final_output_key || "-");
   appendMeta(workflowDetailMeta, "Beschreibung", workflow.description || "-");
+  renderWorkflowEditor({
+    id: payload.workflow_id || "",
+    name: workflow.name || "",
+    slug: workflow.slug || "",
+    description: workflow.description || "",
+    status: workflowVersion.status || "",
+    final_output_key: workflowVersion.final_output_key || "",
+    is_new: false,
+  });
 
   workflowStepList.replaceChildren();
   if (steps.length === 0) {
@@ -658,6 +737,76 @@ function renderWorkflowDetail(payload) {
   const selectedStep = steps.find((step) => step.step_key === activeWorkflowStepKey) || steps[0];
   if (selectedStep) {
     renderWorkflowStepDetail(selectedStep);
+  }
+}
+
+function renderWorkflowEditor(workflow) {
+  const published = workflow.status === "published";
+  workflowEditorId.value = workflow.id || "";
+  workflowEditorName.value = workflow.name || "";
+  workflowEditorSlug.value = workflow.slug || "";
+  workflowEditorDescription.value = workflow.description || "";
+  workflowEditorFinalOutput.value = workflow.final_output_key || "";
+  workflowEditorMode.textContent = workflow.is_new ? "Neuer Draft" : workflow.status || "draft";
+  workflowEditorMode.dataset.tone = published ? "locked" : "draft";
+  workflowEditorId.disabled = !workflow.is_new;
+  saveWorkflowButton.disabled = published;
+  deleteWorkflowButton.disabled = workflow.is_new || published;
+}
+
+function workflowEditorPayload() {
+  return {
+    id: workflowEditorId.value.trim(),
+    name: workflowEditorName.value.trim(),
+    slug: workflowEditorSlug.value.trim(),
+    description: workflowEditorDescription.value.trim(),
+    final_output_key: workflowEditorFinalOutput.value.trim(),
+    status: "draft",
+  };
+}
+
+async function saveWorkflowDraft() {
+  const payload = workflowEditorPayload();
+
+  if (!payload.id) {
+    workflowAdminStatus.textContent = "Workflow-ID ist erforderlich.";
+    workflowEditorId.focus();
+    return;
+  }
+
+  saveWorkflowButton.disabled = true;
+  workflowAdminStatus.textContent = activeWorkflowId ? "Workflow wird gespeichert." : "Workflow wird angelegt.";
+
+  try {
+    const response = activeWorkflowId
+      ? await putJson(appPath(activeAppId, "workflows", activeWorkflowId), payload)
+      : await postJson(appPath(activeAppId, "workflows"), payload);
+
+    activeWorkflowId = response.workflow_id;
+    activeWorkflowDetail = response.workflow;
+    workflowAdminStatus.textContent = `Workflow ${response.workflow_id} wurde gespeichert.`;
+    await loadWorkflowAdmin();
+  } finally {
+    saveWorkflowButton.disabled = false;
+  }
+}
+
+async function deleteWorkflowDraft() {
+  if (!activeWorkflowId) {
+    return;
+  }
+
+  deleteWorkflowButton.disabled = true;
+  workflowAdminStatus.textContent = "Workflow wird geloescht.";
+
+  try {
+    await deleteJson(appPath(activeAppId, "workflows", activeWorkflowId));
+    workflowAdminStatus.textContent = `Workflow ${activeWorkflowId} wurde geloescht.`;
+    activeWorkflowId = "";
+    activeWorkflowDetail = null;
+    await loadWorkflowAdmin();
+  } finally {
+    deleteWorkflowButton.disabled = false;
   }
 }
 
@@ -1328,6 +1477,31 @@ refreshWorkflowsButton.addEventListener("click", async () => {
   try {
     await loadWorkflowAdmin();
     setRuntimeStatus("Workflows aktualisiert", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+createWorkflowDraftButton.addEventListener("click", () => {
+  prepareNewWorkflowDraft();
+  setRuntimeStatus("Workflow Draft vorbereitet", "ok");
+});
+
+saveWorkflowButton.addEventListener("click", async () => {
+  try {
+    await saveWorkflowDraft();
+    setRuntimeStatus("Workflow gespeichert", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+deleteWorkflowButton.addEventListener("click", async () => {
+  try {
+    await deleteWorkflowDraft();
+    setRuntimeStatus("Workflow geloescht", "ok");
   } catch (error) {
     workflowAdminStatus.textContent = error.message;
     setRuntimeStatus(error.message, "error");

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import threading
-from urllib import request
+from urllib import error, request
 
 from agentic_rag_template.app import create_server
 from agentic_rag_template.config import Settings
@@ -220,6 +220,159 @@ def test_workflow_admin_api_queues_generic_workflow_run_for_worker() -> None:
         server.shutdown()
         server.server_close()
         thread.join(timeout=15)
+
+
+def test_workflow_admin_api_creates_updates_and_deletes_draft_workflows(tmp_path) -> None:
+    settings = _isolated_settings(tmp_path)
+    server = create_server(settings, workflow_store=FakeWorkflowStore())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        create_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows",
+            data=json.dumps(
+                {
+                    "id": "demo_workflow",
+                    "name": "Demo Workflow",
+                    "slug": "demo-workflow",
+                    "description": "Ein editierbarer Draft Workflow.",
+                    "final_output_key": "demo_output",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(create_request, timeout=15) as response:
+            assert response.status == 201
+            created = json.loads(response.read().decode("utf-8"))
+
+        assert created["workflow_id"] == "demo_workflow"
+        assert created["workflow"]["status"] == "draft"
+        assert created["workflow"]["workflow"]["name"] == "Demo Workflow"
+        assert (tmp_path / "apps" / "software-factory" / "workflows" / "demo_workflow.yaml").is_file()
+
+        update_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/demo_workflow",
+            data=json.dumps(
+                {
+                    "name": "Demo Workflow aktualisiert",
+                    "description": "Draft wurde angepasst.",
+                    "final_output_key": "updated_output",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        with request.urlopen(update_request, timeout=15) as response:
+            assert response.status == 200
+            updated = json.loads(response.read().decode("utf-8"))
+
+        assert updated["workflow"]["workflow"]["name"] == "Demo Workflow aktualisiert"
+        assert updated["workflow"]["final_output_key"] == "updated_output"
+
+        delete_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/demo_workflow",
+            method="DELETE",
+        )
+        with request.urlopen(delete_request, timeout=15) as response:
+            assert response.status == 200
+            deleted = json.loads(response.read().decode("utf-8"))
+
+        assert deleted["deleted"] is True
+        assert not (tmp_path / "apps" / "software-factory" / "workflows" / "demo_workflow.yaml").exists()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=15)
+
+
+def test_workflow_admin_api_rejects_published_workflow_mutation(tmp_path) -> None:
+    settings = _isolated_settings(tmp_path, published_workflow=True)
+    server = create_server(settings, workflow_store=FakeWorkflowStore())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        update_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/published_workflow",
+            data=json.dumps({"name": "Soll nicht geaendert werden"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+
+        try:
+            request.urlopen(update_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+        else:
+            raise AssertionError("Published workflow update must fail")
+
+        delete_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/published_workflow",
+            method="DELETE",
+        )
+        try:
+            request.urlopen(delete_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+        else:
+            raise AssertionError("Published workflow delete must fail")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=15)
+
+
+def _isolated_settings(tmp_path, published_workflow=False):
+    apps_dir = tmp_path / "apps"
+    app_dir = apps_dir / "software-factory"
+    workflow_dir = app_dir / "workflows"
+    workflow_dir.mkdir(parents=True)
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "data").mkdir()
+    (tmp_path / "template").mkdir()
+    (app_dir / "app_profile.json").write_text(
+        json.dumps(
+            {
+                "name": "Software Factory",
+                "description": "Workflow Factory Tests",
+                "default_collection": "software-factory",
+                "default_top_k": 3,
+                "answer_policy": "Only local sources.",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    if published_workflow:
+        (workflow_dir / "published_workflow.yaml").write_text(
+            "\n".join(
+                [
+                    "name: Published Workflow",
+                    "slug: published-workflow",
+                    "description: Immutable workflow.",
+                    "workflow_status: active",
+                    "status: published",
+                    "version: 1",
+                    "final_output_key: result",
+                    "steps: []",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+    return Settings(
+        frontend_dir=tmp_path / "frontend",
+        apps_dir=apps_dir,
+        data_dir=tmp_path / "data",
+        template_dir=tmp_path / "template",
+        host="127.0.0.1",
+        port=0,
+    )
 
 
 def _workflow_fake_responses():
