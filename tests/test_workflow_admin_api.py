@@ -288,6 +288,59 @@ def test_workflow_admin_api_creates_updates_and_deletes_draft_workflows(tmp_path
         thread.join(timeout=15)
 
 
+def test_workflow_admin_api_opens_invalid_workflow_for_repair(tmp_path) -> None:
+    settings = _isolated_settings(tmp_path)
+    workflow_path = tmp_path / "apps" / "software-factory" / "workflows" / "broken_workflow.yaml"
+    workflow_path.write_text(
+        "\n".join(
+            [
+                "name: Broken Workflow",
+                "slug: broken-workflow",
+                "status: draft",
+                "version: 1",
+                "steps:",
+                "  - step_key: broken_agent",
+                "    name: Broken Agent",
+                "    step_type: AGENT",
+                "    position: 1",
+                "    output_key: broken_output",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    server = create_server(settings, workflow_store=FakeWorkflowStore())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/workflows",
+            timeout=15,
+        ) as response:
+            listed = json.loads(response.read().decode("utf-8"))
+
+        broken_summary = next(item for item in listed["workflows"] if item["id"] == "broken_workflow")
+        assert broken_summary["status"] == "invalid"
+
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/workflows/broken_workflow",
+            timeout=15,
+        ) as response:
+            detail = json.loads(response.read().decode("utf-8"))
+
+        assert detail["workflow_id"] == "broken_workflow"
+        assert detail["validation"]["valid"] is False
+        assert detail["workflow"]["workflow"]["name"] == "Broken Workflow"
+        assert detail["workflow"]["steps"][0]["step_key"] == "broken_agent"
+        assert detail["workflow"]["steps"][0]["agent_version"] is None
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=15)
+
+
 def test_workflow_admin_api_rejects_published_workflow_mutation(tmp_path) -> None:
     settings = _isolated_settings(tmp_path, published_workflow=True)
     server = create_server(settings, workflow_store=FakeWorkflowStore())

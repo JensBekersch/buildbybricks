@@ -921,7 +921,12 @@ function renderWorkflowList(items) {
     button.className = "admin-list-button";
     button.dataset.active = workflow.id === activeWorkflowId ? "true" : "false";
     button.append(title, meta);
-    button.addEventListener("click", () => openWorkflow(workflow.id));
+    button.addEventListener("click", () => {
+      openWorkflow(workflow.id).catch((error) => {
+        workflowAdminStatus.textContent = error.message;
+        setRuntimeStatus(error.message, "error");
+      });
+    });
     item.append(button);
     workflowList.append(item);
   });

@@ -968,9 +968,24 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         )
 
     def _send_workflow_detail_response(self, application: ApplicationInstance, workflow_id: str) -> None:
-        workflow_version = self._load_workflow_or_404(application, workflow_id)
-        if workflow_version is None:
+        try:
+            workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+        except WorkflowBlueprintError as error:
+            try:
+                workflow_config = load_software_factory_workflow_config(application, workflow_id)
+            except WorkflowBlueprintError as config_error:
+                self._send_json({"error": str(config_error)}, status=HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(
+                {
+                    "app_id": application.id,
+                    "workflow_id": workflow_id,
+                    "workflow": self._raw_workflow_config_to_admin_payload(workflow_id, workflow_config),
+                    "validation": {"valid": False, "errors": [str(error)], "warnings": []},
+                }
+            )
             return
+
         self._send_json(
             {
                 "app_id": application.id,
@@ -1405,6 +1420,52 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             "path": (application.template_dir / "workflows" / f"{workflow_id}.yaml")
             .relative_to(application.template_dir)
             .as_posix(),
+        }
+
+    def _raw_workflow_config_to_admin_payload(
+        self,
+        workflow_id: str,
+        workflow_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "workflow": {
+                "name": str(workflow_config.get("name", workflow_id)),
+                "slug": str(workflow_config.get("slug", workflow_id.replace("_", "-"))),
+                "description": str(workflow_config.get("description", "")),
+                "status": str(workflow_config.get("workflow_status", "active")),
+            },
+            "version_number": int(workflow_config.get("version", 1) or 1),
+            "status": str(workflow_config.get("status", "draft")),
+            "change_summary": str(workflow_config.get("change_summary", "")),
+            "created_by": str(workflow_config.get("created_by", "")),
+            "published_at": None,
+            "created_at": None,
+            "final_output_key": str(workflow_config.get("final_output_key", "")),
+            "steps": [
+                self._raw_step_config_to_admin_payload(step)
+                for step in workflow_config.get("steps", [])
+                if isinstance(step, dict)
+            ],
+        }
+
+    def _raw_step_config_to_admin_payload(self, step_config: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "name": str(step_config.get("name", "")),
+            "step_key": str(step_config.get("step_key", "")),
+            "step_type": str(step_config.get("step_type", "TASK")),
+            "position": int(step_config.get("position", 0) or 0),
+            "description": str(step_config.get("description", "")),
+            "is_enabled": bool(step_config.get("is_enabled", True)),
+            "agent": str(step_config.get("agent", "")),
+            "agent_version": None,
+            "task_definition": dict(step_config.get("task", {})),
+            "input_mapping": dict(step_config.get("input_mapping", {})),
+            "output_key": str(step_config.get("output_key", "")),
+            "condition_expression": dict(step_config.get("condition_expression", {})),
+            "timeout_seconds": int(step_config.get("timeout_seconds", 300) or 300),
+            "retry_policy": dict(step_config.get("retry_policy", {})),
+            "failure_strategy": str(step_config.get("failure_strategy", "STOP_WORKFLOW")),
+            "configuration": dict(step_config.get("configuration", {})),
         }
 
     def _validate_workflow_version(self, workflow_version: WorkflowVersion) -> Dict[str, Any]:
