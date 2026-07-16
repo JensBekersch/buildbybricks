@@ -145,6 +145,27 @@ def add_step_from_template(
     return workflow
 
 
+def delete_step_from_workflow(workflow_config: Dict[str, Any], step_key: str) -> Dict[str, Any]:
+    """Remove one workflow step if no other step references it."""
+    workflow = dict(workflow_config)
+    existing_steps = list(workflow.get("steps", []))
+    if not all(isinstance(step, dict) for step in existing_steps):
+        raise WorkflowBlueprintError("Workflow steps must be objects")
+
+    if not any(str(step.get("step_key", "")) == step_key for step in existing_steps):
+        raise WorkflowBlueprintError(f"Workflow step is missing: {step_key}")
+
+    referencing_steps = _steps_referencing_step(existing_steps, step_key)
+    if referencing_steps:
+        joined = ", ".join(referencing_steps)
+        raise WorkflowBlueprintError(f"Workflow step is still referenced by: {joined}")
+
+    workflow["steps"] = _normalize_step_positions(
+        [step for step in existing_steps if str(step.get("step_key", "")) != step_key]
+    )
+    return workflow
+
+
 def load_software_factory_workflow(
     application: ApplicationInstance,
     workflow_id: str = "architecture_sheet",
@@ -316,6 +337,27 @@ def _normalize_step_positions(steps: List[Dict[str, Any]]) -> List[Dict[str, Any
         updated["position"] = index
         normalized.append(updated)
     return normalized
+
+
+def _steps_referencing_step(steps: List[Dict[str, Any]], step_key: str) -> List[str]:
+    referencing_steps = []
+    for step in steps:
+        current_step_key = str(step.get("step_key", ""))
+        if current_step_key == step_key:
+            continue
+        input_mapping = step.get("input_mapping", {})
+        if isinstance(input_mapping, dict) and _mapping_references_step(input_mapping, step_key):
+            referencing_steps.append(current_step_key or "<unknown>")
+    return referencing_steps
+
+
+def _mapping_references_step(mapping: Dict[str, Any], step_key: str) -> bool:
+    for value in mapping.values():
+        if not isinstance(value, dict):
+            continue
+        if value.get("source") == "step_output" and value.get("step_key") == step_key:
+            return True
+    return False
 
 
 def _workflow_config_from_payload(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
