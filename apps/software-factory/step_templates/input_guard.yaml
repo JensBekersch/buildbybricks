@@ -1,0 +1,18 @@
+id: input_guard
+name: Input Guard
+category: TASK
+description: Prueft Pflichtfelder und bereitet Eingaben fuer den Workflow auf.
+step_type: TASK
+defaults:
+  name: Eingabe pruefen
+  step_key_prefix: input_guard
+  output_key: validated_input
+  task:
+    task_type: echo
+  input_mapping:
+    description:
+      source: workflow_input
+      path: description
+  configuration:
+    required_inputs:
+      - description

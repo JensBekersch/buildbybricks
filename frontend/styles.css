@@ -358,8 +358,26 @@ textarea {
   background: #fbfcfd;
 }
 
+.workflow-step-editor {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d7e4e2;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f7fcfb;
+}
+
 .workflow-editor .section-heading {
   margin-bottom: 2px;
+}
+
+.workflow-step-editor .section-heading {
+  margin-bottom: 2px;
+}
+
+.workflow-step-editor h3 {
+  margin: 0;
+  font-size: 15px;
 }
 
 .workflow-editor textarea {
@@ -386,6 +404,12 @@ textarea {
   border-color: #c9a46d;
   color: #7a4a12;
   background: #fff8eb;
+}
+
+.muted-text {
+  margin: 0;
+  font-size: 12px;
+  color: #667085;
 }
 
 #workflow-test-payload {

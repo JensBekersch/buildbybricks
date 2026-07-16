@@ -1,0 +1,20 @@
+id: command_test_runner
+name: Command/Test Runner
+category: TASK
+description: Fuehrt spaeter erlaubte Test-, Lint- oder Build-Kommandos kontrolliert aus.
+step_type: TASK
+defaults:
+  name: Tests ausfuehren
+  step_key_prefix: run_tests
+  output_key: test_result
+  task:
+    task_type: command_runner
+  input_mapping:
+    command:
+      source: static
+      value: pytest
+  configuration:
+    allowed_commands:
+      - pytest
+      - python -m pytest
+    timeout_seconds: 900

@@ -23,9 +23,12 @@ from agentic_rag_template.observability import render_prometheus_metrics
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.software_factory.workflow_blueprints import (
     WorkflowBlueprintError,
+    add_step_from_template,
     delete_software_factory_workflow_config,
+    list_step_templates,
     load_software_factory_workflow,
     load_software_factory_workflow_config,
+    load_step_template,
     new_workflow_config,
     save_software_factory_workflow_config,
     update_workflow_config,
@@ -134,6 +137,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/workflows":
                 self._send_json(self._list_workflows(application))
+                return
+
+            if app_route["remainder"] == "/step-templates":
+                self._send_json(self._list_step_templates(application))
                 return
 
             workflow_run_route = self._parse_workflow_run_route(app_route["remainder"])
@@ -245,6 +252,16 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 workflow_action["workflow_id"],
                 workflow_action["action"],
             )
+            return
+
+        workflow_step_action = self._parse_workflow_step_action_route(app_route["remainder"] if app_route else "")
+        if workflow_step_action is not None:
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_workflow_step_created_response(application, workflow_step_action["workflow_id"])
             return
 
         architecture_job_action = self._parse_architecture_job_action_route(
@@ -818,6 +835,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             workflows.append(self._workflow_summary(application, workflow_id, workflow_version))
         return {"app_id": application.id, "workflows": workflows}
 
+    def _list_step_templates(self, application: ApplicationInstance) -> Dict[str, Any]:
+        try:
+            templates = list_step_templates(application)
+        except WorkflowBlueprintError as error:
+            return {"app_id": application.id, "templates": [], "error": str(error)}
+
+        return {"app_id": application.id, "templates": templates}
+
     def _send_workflow_detail_response(self, application: ApplicationInstance, workflow_id: str) -> None:
         workflow_version = self._load_workflow_or_404(application, workflow_id)
         if workflow_version is None:
@@ -934,6 +959,52 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         delete_software_factory_workflow_config(application, workflow_id)
         self._send_json({"app_id": application.id, "workflow_id": workflow_id, "deleted": True})
+
+    def _send_workflow_step_created_response(self, application: ApplicationInstance, workflow_id: str) -> None:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        payload = self._read_json_body()
+        template_id = str(payload.get("template_id", "")).strip()
+        if not template_id:
+            self._send_json({"error": "template_id is required"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if not self._is_safe_workflow_id(template_id):
+            self._send_json({"error": "template_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            workflow_config = load_software_factory_workflow_config(application, workflow_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        if str(workflow_config.get("status", "")) == VERSION_STATUS_PUBLISHED:
+            self._send_json(
+                {"error": "published workflow versions are immutable"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+
+        try:
+            template = load_step_template(application, template_id)
+            updated_config = add_step_from_template(workflow_config, template, payload)
+            save_software_factory_workflow_config(application, workflow_id, updated_config)
+            workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+        except (ValueError, WorkflowBlueprintError) as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "workflow": workflow_version.to_dict(),
+                "validation": self._validate_workflow_version(workflow_version),
+            },
+            status=HTTPStatus.CREATED,
+        )
 
     def _send_workflow_action_response(
         self,
@@ -1183,6 +1254,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             and parts[2] in {"validate", "test-runs", "runs"}
         ):
             return {"workflow_id": parts[1], "action": parts[2]}
+
+        return None
+
+    def _parse_workflow_step_action_route(self, remainder: str) -> Optional[Dict[str, str]]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 3 and parts[0] == "workflows" and parts[1] and parts[2] == "steps":
+            return {"workflow_id": parts[1]}
 
         return None
 

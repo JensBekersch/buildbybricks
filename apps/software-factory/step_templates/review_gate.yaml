@@ -1,0 +1,19 @@
+id: review_gate
+name: Review Gate
+category: CONTROL
+description: Bewertet ein Review-Ergebnis und entscheidet ueber Fortsetzung oder Korrektur.
+step_type: CONTROL
+defaults:
+  name: Review Gate auswerten
+  step_key_prefix: review_gate
+  output_key: review_decision
+  input_mapping:
+    review:
+      source: step_output
+      step_key: review_step
+      path: validated_output
+  configuration:
+    pass_when:
+      field: review.passed
+      equals: true
+    failure_strategy: STOP_WORKFLOW

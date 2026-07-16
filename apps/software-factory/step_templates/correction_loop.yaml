@@ -1,0 +1,17 @@
+id: correction_loop
+name: Correction Loop
+category: CONTROL
+description: Startet begrenzte Korrekturlaufe auf Basis eines Review-Ergebnisses.
+step_type: CONTROL
+defaults:
+  name: Korrekturlauf steuern
+  step_key_prefix: correction_loop
+  output_key: correction_decision
+  input_mapping:
+    review:
+      source: step_output
+      step_key: review_step
+      path: validated_output
+  configuration:
+    max_iterations: 2
+    retry_on_review_failure: true

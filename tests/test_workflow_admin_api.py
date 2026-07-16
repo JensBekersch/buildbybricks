@@ -320,6 +320,78 @@ def test_workflow_admin_api_rejects_published_workflow_mutation(tmp_path) -> Non
             assert http_error.code == 409
         else:
             raise AssertionError("Published workflow delete must fail")
+
+        add_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/published_workflow/steps",
+            data=json.dumps({"template_id": "input_guard"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            request.urlopen(add_step_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+        else:
+            raise AssertionError("Published workflow step mutation must fail")
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=15)
+
+
+def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> None:
+    settings = _isolated_settings(tmp_path)
+    server = create_server(settings, workflow_store=FakeWorkflowStore())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/step-templates",
+            timeout=15,
+        ) as response:
+            templates = json.loads(response.read().decode("utf-8"))
+
+        assert [template["id"] for template in templates["templates"]] == ["input_guard"]
+
+        create_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows",
+            data=json.dumps(
+                {
+                    "id": "step_demo",
+                    "name": "Step Demo",
+                    "slug": "step-demo",
+                    "description": "Draft fuer Step Tests.",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(create_request, timeout=15) as response:
+            assert response.status == 201
+
+        add_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps",
+            data=json.dumps(
+                {
+                    "template_id": "input_guard",
+                    "step_key": "validate_description",
+                    "name": "Beschreibung pruefen",
+                    "output_key": "validated_description",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(add_step_request, timeout=15) as response:
+            assert response.status == 201
+            updated = json.loads(response.read().decode("utf-8"))
+
+        assert updated["workflow"]["steps"][0]["step_key"] == "validate_description"
+        assert updated["workflow"]["steps"][0]["step_type"] == "TASK"
+        assert updated["workflow"]["steps"][0]["output_key"] == "validated_description"
+        assert updated["workflow"]["steps"][0]["task_definition"] == {"task_type": "echo"}
     finally:
         server.shutdown()
         server.server_close()
@@ -330,7 +402,9 @@ def _isolated_settings(tmp_path, published_workflow=False):
     apps_dir = tmp_path / "apps"
     app_dir = apps_dir / "software-factory"
     workflow_dir = app_dir / "workflows"
+    step_template_dir = app_dir / "step_templates"
     workflow_dir.mkdir(parents=True)
+    step_template_dir.mkdir(parents=True)
     (tmp_path / "frontend").mkdir()
     (tmp_path / "data").mkdir()
     (tmp_path / "template").mkdir()
@@ -364,6 +438,33 @@ def _isolated_settings(tmp_path, published_workflow=False):
             ),
             encoding="utf-8",
         )
+
+    (step_template_dir / "input_guard.yaml").write_text(
+        "\n".join(
+            [
+                "id: input_guard",
+                "name: Input Guard",
+                "category: TASK",
+                "description: Prueft Eingaben.",
+                "step_type: TASK",
+                "defaults:",
+                "  name: Eingabe pruefen",
+                "  step_key_prefix: input_guard",
+                "  output_key: validated_input",
+                "  task:",
+                "    task_type: echo",
+                "  input_mapping:",
+                "    description:",
+                "      source: workflow_input",
+                "      path: description",
+                "  configuration:",
+                "    required_inputs:",
+                "      - description",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     return Settings(
         frontend_dir=tmp_path / "frontend",
