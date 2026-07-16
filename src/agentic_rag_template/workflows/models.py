@@ -260,6 +260,7 @@ class WorkflowStep:
     position: int
     description: str = ""
     is_enabled: bool = True
+    agent_id: str = ""
     agent_version: Optional[AgentVersion] = None
     task_definition: Dict[str, Any] = field(default_factory=dict)
     input_mapping: Dict[str, Any] = field(default_factory=dict)
@@ -278,6 +279,7 @@ class WorkflowStep:
             "position": self.position,
             "description": self.description,
             "is_enabled": self.is_enabled,
+            "agent": self.agent_id,
             "agent_version": self.agent_version.to_dict() if include_agent and self.agent_version else None,
             "task_definition": self.task_definition,
             "input_mapping": self.input_mapping,
@@ -304,6 +306,7 @@ class WorkflowStep:
             position=int(payload.get("position", 0)),
             description=str(payload.get("description", "")),
             is_enabled=bool(payload.get("is_enabled", True)),
+            agent_id=str(payload.get("agent", "")),
             agent_version=AgentVersion.from_dict(agent_payload) if isinstance(agent_payload, dict) else None,
             task_definition=dict(payload.get("task_definition", {})),
             input_mapping=dict(payload.get("input_mapping", {})),
