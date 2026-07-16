@@ -10,6 +10,16 @@ from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
 )
 from agentic_rag_template.software_factory.worker import ArchitectureGenerationWorker
+from agentic_rag_template.workflows.models import (
+    STEP_TYPE_AGENT,
+    VERSION_STATUS_PUBLISHED,
+    AgentDefinition,
+    AgentVersion,
+    Workflow,
+    WorkflowRun,
+    WorkflowStep,
+    WorkflowVersion,
+)
 
 
 class DummyResult:
@@ -23,6 +33,9 @@ class DummyProvider:
 
     def generate_answer(self, request):
         raise NotImplementedError
+
+    def generate_json(self, system_prompt, user_prompt):
+        return {"artifact_name": "Team Todo"}
 
 
 class DummyArtifact:
@@ -73,6 +86,67 @@ class DummyStore:
         self.saved_jobs.append(job.to_dict())
 
 
+class DummyWorkflowStore:
+    def __init__(self, workflow_run=None):
+        self.workflow_run = workflow_run
+        self.saved_runs = []
+        self.initialized = False
+        self.claimed = False
+
+    def initialize(self):
+        self.initialized = True
+
+    def claim_next_run(self, workflow_slug=None):
+        if self.claimed:
+            return None
+        self.claimed = True
+        if self.workflow_run is None:
+            return None
+        self.workflow_run.start()
+        return self.workflow_run
+
+    def save_run(self, workflow_run):
+        self.workflow_run = WorkflowRun.from_dict(workflow_run.to_dict())
+        self.saved_runs.append(workflow_run.to_dict())
+
+
+def _workflow_run() -> WorkflowRun:
+    agent_version = AgentVersion(
+        agent=AgentDefinition(name="Requirement Analyst", slug="requirement-analyst"),
+        version_number=1,
+        status=VERSION_STATUS_PUBLISHED,
+        system_prompt="System",
+        user_prompt_template="Input: {{ description }}",
+        input_contract={"required": ["description"]},
+        output_schema={"type": "object", "required": ["artifact_name"]},
+        model_configuration={"provider": "fake", "model": "fake-json"},
+    )
+    workflow_version = WorkflowVersion(
+        workflow=Workflow(name="Architecture Sheet", slug="architecture-sheet"),
+        version_number=1,
+        status=VERSION_STATUS_PUBLISHED,
+        final_output_key="requirements",
+    )
+    workflow_version.steps = [
+        WorkflowStep(
+            workflow_version,
+            "Analyse",
+            "analysis",
+            STEP_TYPE_AGENT,
+            1,
+            agent_version=agent_version,
+            input_mapping={"description": {"source": "workflow_input", "path": "description"}},
+            output_key="requirements",
+        )
+    ]
+    return WorkflowRun(
+        workflow_version=workflow_version,
+        initial_input={"description": "Eine einfache Team Todo Liste."},
+        id="workflow-run-1",
+        started_by="test",
+    )
+
+
 def test_architecture_worker_processes_claimed_job(monkeypatch) -> None:
     job = ArchitectureGenerationJob.create(
         "Eine einfache Team Todo Liste.",
@@ -106,6 +180,7 @@ def test_architecture_worker_processes_claimed_job(monkeypatch) -> None:
     worker = ArchitectureGenerationWorker(
         settings=Settings(),
         job_store=store,
+        workflow_store=DummyWorkflowStore(),
         llm_provider_factory=lambda settings: DummyProvider(),
         artifact_store_factory=lambda application: DummyArtifactStore(),
     )
@@ -123,14 +198,17 @@ def test_architecture_worker_processes_claimed_job(monkeypatch) -> None:
 
 def test_architecture_worker_returns_false_without_queued_job() -> None:
     store = DummyStore()
+    workflow_store = DummyWorkflowStore()
     worker = ArchitectureGenerationWorker(
         settings=Settings(),
         job_store=store,
+        workflow_store=workflow_store,
         llm_provider_factory=lambda settings: DummyProvider(),
         artifact_store_factory=lambda application: DummyArtifactStore(),
     )
 
     assert worker.process_next() is False
+    assert workflow_store.claimed is True
 
 
 def test_architecture_worker_marks_job_failed_on_error(monkeypatch) -> None:
@@ -151,6 +229,7 @@ def test_architecture_worker_marks_job_failed_on_error(monkeypatch) -> None:
     worker = ArchitectureGenerationWorker(
         settings=Settings(),
         job_store=store,
+        workflow_store=DummyWorkflowStore(),
         llm_provider_factory=lambda settings: DummyProvider(),
         artifact_store_factory=lambda application: DummyArtifactStore(),
     )
@@ -183,6 +262,7 @@ def test_architecture_worker_does_not_complete_canceled_job(monkeypatch) -> None
     worker = ArchitectureGenerationWorker(
         settings=Settings(),
         job_store=store,
+        workflow_store=DummyWorkflowStore(),
         llm_provider_factory=lambda settings: DummyProvider(),
         artifact_store_factory=lambda application: DummyArtifactStore(),
     )
@@ -193,3 +273,23 @@ def test_architecture_worker_does_not_complete_canceled_job(monkeypatch) -> None
     assert job.status == JOB_STATUS_CANCELED
     assert job.result is None
     assert store.saved_jobs[-1]["status"] == JOB_STATUS_CANCELED
+
+
+def test_worker_processes_generic_workflow_run_when_no_architecture_job() -> None:
+    architecture_store = DummyStore()
+    workflow_store = DummyWorkflowStore(_workflow_run())
+    worker = ArchitectureGenerationWorker(
+        settings=Settings(),
+        job_store=architecture_store,
+        workflow_store=workflow_store,
+        llm_provider_factory=lambda settings: DummyProvider(),
+        artifact_store_factory=lambda application: DummyArtifactStore(),
+    )
+
+    processed = worker.process_next()
+
+    assert processed is True
+    assert workflow_store.saved_runs[-1]["id"] == "workflow-run-1"
+    assert workflow_store.saved_runs[-1]["status"] == "succeeded"
+    assert workflow_store.saved_runs[-1]["final_output"] == {"artifact_name": "Team Todo"}
+    assert workflow_store.saved_runs[-1]["artifacts"][0]["artifact_key"] == "requirements"

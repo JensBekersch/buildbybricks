@@ -6,6 +6,8 @@ import yaml
 from agentic_rag_template.config import Settings
 from agentic_rag_template.ingestion import discover_collections, load_documents
 from agentic_rag_template.applications import FileApplicationRegistry
+from agentic_rag_template.software_factory import load_software_factory_workflow
+from agentic_rag_template.workflows.workflow_validation import WorkflowVersionValidator
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -155,6 +157,42 @@ def test_software_factory_requirement_analyst_agent_config_is_loadable() -> None
     assert "{{ user_description }}" in config["prompt"]["user_template"]
     assert "{% if method_sources %}" in config["prompt"]["user_template"]
     assert any(rule["id"] == "preserve_explicit_test_cases" for rule in config["review_rules"])
+
+
+def test_software_factory_architecture_sheet_workflow_blueprint_is_loadable() -> None:
+    settings = Settings(
+        apps_dir=PROJECT_ROOT / "apps",
+        data_dir=PROJECT_ROOT / "data",
+        template_dir=PROJECT_ROOT / "template",
+    )
+    application = FileApplicationRegistry(settings).get("software-factory")
+
+    workflow_version = load_software_factory_workflow(application, "architecture_sheet")
+    validation = WorkflowVersionValidator().validate(workflow_version)
+
+    assert validation.valid is True
+    assert workflow_version.workflow.slug == "architecture-sheet"
+    assert workflow_version.version_number == 1
+    assert workflow_version.final_output_key == "architecture_sheet"
+    assert [step.step_key for step in workflow_version.steps] == [
+        "validate_description",
+        "load_schema",
+        "load_method_sources",
+        "analyze_requirements",
+        "synthesize_architecture",
+        "review_architecture",
+        "validate_contract",
+    ]
+    agent_steps = [step for step in workflow_version.steps if step.agent_version is not None]
+    assert [step.agent_version.agent.slug for step in agent_steps] == [
+        "requirement-analyst",
+        "architecture-synthesizer",
+        "architecture-reviewer",
+    ]
+    assert agent_steps[0].agent_version.version_number == 2
+    assert "Requirement Analyst" in agent_steps[0].agent_version.system_prompt
+    assert "Architecture Synthesizer" in agent_steps[1].agent_version.system_prompt
+    assert "Architecture Reviewer" in agent_steps[2].agent_version.system_prompt
 
 
 def test_software_factory_examples_document_good_and_bad_outputs() -> None:

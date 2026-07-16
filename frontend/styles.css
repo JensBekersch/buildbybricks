@@ -110,6 +110,26 @@ textarea {
   color: #5a6472;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.view-tabs button {
+  min-height: 34px;
+  border-color: #c4cad3;
+  color: #344054;
+  background: #ffffff;
+}
+
+.view-tabs button:hover,
+.view-tabs button[data-active="true"] {
+  border-color: #2a8c82;
+  color: #174844;
+  background: #edf8f6;
+}
+
 .runtime-status {
   min-width: 136px;
   border: 1px solid #c4cad3;
@@ -192,6 +212,131 @@ textarea {
   grid-template-columns: minmax(280px, 350px) minmax(460px, 1fr) minmax(260px, 330px);
   gap: 16px;
   align-items: start;
+}
+
+.workflow-admin {
+  display: grid;
+  grid-template-columns: minmax(260px, 330px) minmax(440px, 1fr) minmax(340px, 420px);
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-panel {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.admin-panel:first-child {
+  border-top: 4px solid #2a8c82;
+}
+
+.admin-panel:nth-child(2) {
+  border-top: 4px solid #1f5f8b;
+}
+
+.admin-panel:nth-child(3) {
+  border-top: 4px solid #ba6b2b;
+}
+
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.admin-list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.step-definition-list {
+  max-height: 460px;
+}
+
+.run-list {
+  max-height: 220px;
+}
+
+.artifact-list {
+  max-height: 260px;
+}
+
+.admin-list-button {
+  display: grid;
+  width: 100%;
+  min-height: 0;
+  gap: 3px;
+  border-color: #e1e6ee;
+  padding: 9px 10px;
+  text-align: left;
+  color: #263241;
+  background: #ffffff;
+}
+
+.admin-list-button:hover,
+.admin-list-button[data-active="true"] {
+  border-color: #83b9b2;
+  color: #173f3b;
+  background: #f0faf8;
+}
+
+.admin-list-button strong,
+.admin-list-button span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-list-button strong {
+  font-size: 13px;
+}
+
+.admin-list-button span {
+  font-size: 12px;
+  color: #657181;
+}
+
+.admin-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-meta div {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #e1e6ee;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fbfcfd;
+}
+
+.admin-meta dt {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.admin-meta dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #263241;
+}
+
+#workflow-test-payload {
+  min-height: 180px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 
 .architecture-panel {
@@ -802,7 +947,8 @@ textarea {
 }
 
 @media (max-width: 1180px) {
-  .architecture-workbench {
+  .architecture-workbench,
+  .workflow-admin {
     grid-template-columns: 1fr;
   }
 
@@ -816,6 +962,13 @@ textarea {
   }
 
   .agent-step-list {
+    max-height: none;
+  }
+
+  .admin-list,
+  .step-definition-list,
+  .run-list,
+  .artifact-list {
     max-height: none;
   }
 }
@@ -843,5 +996,15 @@ textarea {
   .app-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .view-tabs,
+  .admin-actions,
+  .admin-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .view-tabs {
+    display: grid;
   }
 }

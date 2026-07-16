@@ -18,6 +18,7 @@ from agentic_rag_template.software_factory.jobs import (
     EVENT_STEP_STARTED,
     ArchitectureGenerationEvent,
 )
+from agentic_rag_template.software_factory.workflow_blueprints import load_software_factory_workflow
 
 
 ArchitectureGenerationEventHandler = Callable[[ArchitectureGenerationEvent], None]
@@ -54,7 +55,7 @@ class ArchitectureSheetResult:
     generation: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "architecture_sheet": self.sheet,
             "schema_id": self.schema_id,
             "validation": self.validation,
@@ -62,10 +63,48 @@ class ArchitectureSheetResult:
             "trace": self.trace,
             "generation": self.generation,
         }
+        payload["validated_artifacts"] = build_frontend_artifact_contract(payload)
+        return payload
 
 
 class ArchitectureSheetGenerationError(RuntimeError):
     """Raised when an architecture sheet cannot be generated safely."""
+
+
+def build_frontend_artifact_contract(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return the validated artifacts consumed by the Workflow Factory frontend."""
+    generation = payload.get("generation", {}) if isinstance(payload, dict) else {}
+    artifacts = [
+        {
+            "key": "requirements_analysis",
+            "label": "Requirements Analysis",
+            "producer_step": "analyze_requirements",
+            "artifact_type": "json",
+            "payload_path": "generation.requirement_analysis",
+            "content": generation.get("requirement_analysis"),
+        },
+        {
+            "key": "architecture_sheet",
+            "label": "Architecture Sheet",
+            "producer_step": "synthesize_architecture",
+            "artifact_type": "json",
+            "payload_path": "architecture_sheet",
+            "content": payload.get("architecture_sheet"),
+        },
+        {
+            "key": "architecture_review",
+            "label": "Architecture Review",
+            "producer_step": "review_architecture",
+            "artifact_type": "json",
+            "payload_path": "generation.architecture_review",
+            "content": generation.get("architecture_review"),
+        },
+    ]
+    return [
+        artifact
+        for artifact in artifacts
+        if artifact["content"] not in (None, "", [])
+    ]
 
 
 def _emit_event(
@@ -186,7 +225,8 @@ def generate_architecture_sheet(
     sources = _load_method_sources(application)
     _emit_step_output(event_handler, "load_method_sources", sources)
     _emit_completed(event_handler, "load_method_sources", "Methodenwissen wurde geladen.")
-    requirement_analyst_agent = ConfiguredAgent.load(application, "requirement_analyst")
+    workflow_version = load_software_factory_workflow(application, "architecture_sheet")
+    configured_agents = _load_configured_workflow_agents(application, workflow_version)
     trace = [
         "validated_description",
         "loaded_architecture_sheet_schema",
@@ -198,6 +238,7 @@ def generate_architecture_sheet(
         "llm_provider": getattr(llm_provider, "name", "none") if llm_provider else "none",
         "llm_model": getattr(llm_provider, "model", "none") if llm_provider else "none",
         "warnings": [],
+        "workflow": _workflow_summary(workflow_version, include_review=mode == "agentic_with_review"),
     }
 
     agentic_sheet = _try_generate_agentic_architecture_sheet(
@@ -207,7 +248,9 @@ def generate_architecture_sheet(
         llm_provider=llm_provider,
         include_review=mode == "agentic_with_review",
         event_handler=event_handler,
-        requirement_analyst_agent=requirement_analyst_agent,
+        requirement_analyst_agent=configured_agents["requirement_analyst"],
+        architecture_synthesizer_agent=configured_agents["architecture_synthesizer"],
+        architecture_reviewer_agent=configured_agents["architecture_reviewer"],
     )
 
     if agentic_sheet["sheet"] is None:
@@ -226,7 +269,9 @@ def generate_architecture_sheet(
         else "requirement_analyst -> architecture_synthesizer"
     )
     generation["agent_configs"] = {
-        "requirement_analyst": requirement_analyst_agent.summary(),
+        agent_id: agent.summary()
+        for agent_id, agent in configured_agents.items()
+        if include_review_agent(agent_id, mode)
     }
     generation["requirement_analysis"] = agentic_sheet["analysis"]
     if agentic_sheet["review"]:
@@ -274,6 +319,38 @@ def _load_method_sources(application: ApplicationInstance) -> List[Dict[str, Any
     ]
 
 
+def _load_configured_workflow_agents(
+    application: ApplicationInstance,
+    workflow_version: Any,
+) -> Dict[str, ConfiguredAgent]:
+    agents: Dict[str, ConfiguredAgent] = {}
+    for step in workflow_version.steps:
+        if step.agent_version is None:
+            continue
+        agent_id = step.agent_version.agent.slug.replace("-", "_")
+        agents[agent_id] = ConfiguredAgent.load(application, agent_id)
+    return agents
+
+
+def _workflow_summary(workflow_version: Any, include_review: bool) -> Dict[str, Any]:
+    steps = [
+        step.step_key
+        for step in sorted(workflow_version.steps, key=lambda item: item.position)
+        if include_review or step.step_key != "review_architecture"
+    ]
+    return {
+        "id": workflow_version.workflow.slug,
+        "name": workflow_version.workflow.name,
+        "version": workflow_version.version_number,
+        "status": workflow_version.status,
+        "steps": steps,
+    }
+
+
+def include_review_agent(agent_id: str, mode: str) -> bool:
+    return mode == "agentic_with_review" or agent_id != "architecture_reviewer"
+
+
 def _normalize_generation_mode(generation_mode: str) -> str:
     allowed_modes = {"agentic", "agentic_with_review"}
     mode = (generation_mode or "agentic_with_review").strip().lower().replace("-", "_")
@@ -294,6 +371,8 @@ def _try_generate_agentic_architecture_sheet(
     include_review: bool,
     event_handler: Optional[ArchitectureGenerationEventHandler],
     requirement_analyst_agent: ConfiguredAgent,
+    architecture_synthesizer_agent: ConfiguredAgent,
+    architecture_reviewer_agent: ConfiguredAgent,
 ) -> Dict[str, Any]:
     if llm_provider is None or llm_provider.name == "deterministic":
         _emit_failed(event_handler, "analyze_requirements", "Architecture sheet generation requires a structured LLM provider.")
@@ -342,20 +421,18 @@ def _try_generate_agentic_architecture_sheet(
 
         current_step = "synthesize_architecture"
         _emit_started(event_handler, "synthesize_architecture", "Architecture Synthesizer wird aufgerufen.")
-        raw_sheet = _call_generate_json_with_metrics(
-            generate_json=generate_json,
+        raw_sheet = architecture_synthesizer_agent.run_json(
             llm_provider=llm_provider,
+            context={
+                "description": description,
+                "requirement_analysis": analysis,
+                "base_sheet": base_sheet,
+                "schema": _compact_schema_contract(schema),
+                "method_sources": method_sources,
+            },
             event_handler=event_handler,
             step="synthesize_architecture",
             llm_step="architecture_synthesizer",
-            system_prompt=_build_architecture_synthesizer_system_prompt(),
-            user_prompt=_build_architecture_synthesizer_user_prompt(
-                description=description,
-                requirement_analysis=analysis,
-                base_sheet=base_sheet,
-                schema=_compact_schema_contract(schema),
-                method_sources=method_sources,
-            ),
         )
         candidate_sheet = raw_sheet.get("architecture_sheet", raw_sheet)
 
@@ -387,6 +464,7 @@ def _try_generate_agentic_architecture_sheet(
                 schema=schema,
                 method_sources=method_sources,
                 initial_sheet=reviewed_sheet,
+                architecture_reviewer_agent=architecture_reviewer_agent,
             )
             reviewed_sheet = review["sheet"]
             _emit_step_output(
@@ -433,23 +511,22 @@ def _review_and_correct_architecture_sheet(
     schema: Dict[str, Any],
     method_sources: List[Dict[str, Any]],
     initial_sheet: Dict[str, Any],
+    architecture_reviewer_agent: ConfiguredAgent,
 ) -> Dict[str, Any]:
     sheet = initial_sheet
     reviews: List[Dict[str, Any]] = []
 
     for attempt in range(MAX_REVIEW_CORRECTION_ATTEMPTS + 1):
-        raw_review = _call_generate_json_with_metrics(
-            generate_json=generate_json,
+        raw_review = architecture_reviewer_agent.run_json(
             llm_provider=llm_provider,
+            context={
+                "description": description,
+                "requirement_analysis": requirement_analysis,
+                "architecture_sheet": sheet,
+            },
             event_handler=event_handler,
             step="review_architecture",
             llm_step="architecture_reviewer",
-            system_prompt=_build_architecture_reviewer_system_prompt(),
-            user_prompt=_build_architecture_reviewer_user_prompt(
-                description=description,
-                requirement_analysis=requirement_analysis,
-                sheet=sheet,
-            ),
         )
         review = _normalize_architecture_review(raw_review)
         review["attempt"] = attempt + 1
@@ -621,83 +698,6 @@ def _compact_method_sources(method_sources: List[Dict[str, Any]]) -> List[Dict[s
         }
         for source in method_sources[:5]
     ]
-
-
-def _build_architecture_synthesizer_system_prompt() -> str:
-    return "\n".join(
-        [
-            "Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.",
-            "Erzeuge ausschliesslich valides JSON.",
-            "Schreibe alle beschreibenden Texte konsequent auf Deutsch.",
-            "Verwende keine englischen Platzhalter wie Team Members, High, Medium, Core Functionality oder Project Shell.",
-            "Erzeuge ein vollstaendiges Architecture Sheet nach Schema.",
-            "Nutze die Requirement-Analyse als fuehrende Quelle.",
-            "Verwende als Architektur nur Inhalte aus in_scope und core_facts.",
-            "Inhalte aus out_of_scope, explicitly_excluded_terms oder not_evidenced duerfen nicht als Baustein, Szenario, Qualitaetsziel, Risiko oder Entscheidung erscheinen.",
-            "Alle Bausteine, Szenarien, Datenmodelle und Tests muessen zur beschriebenen Anwendung passen.",
-            "Beschreibungen duerfen nicht duenn sein: business_goal, solution_strategy, data_view, security_view, test_strategy und deployment_view sollen jeweils mehrere konkrete Saetze enthalten.",
-            "Array-Eintraege sollen spezifisch und verwertbar sein, nicht nur Buzzwords oder Prioritaetswoerter.",
-            "Zukuenftige oder optionale Schnittstellen gehoeren nur in assumptions/open_questions oder external_systems, nicht in current_interfaces.",
-            "Erzeuge zusaetzlich ein vollstaendiges arc42-Objekt mit allen 12 Kapiteln.",
-        ]
-    )
-
-
-def _build_architecture_synthesizer_user_prompt(
-    description: str,
-    requirement_analysis: Dict[str, Any],
-    base_sheet: Dict[str, Any],
-    schema: Dict[str, Any],
-    method_sources: List[Dict[str, Any]],
-) -> str:
-    return "\n\n".join(
-        [
-            f"Beschreibung:\n{description}",
-            f"Requirement-Analyse:\n{json.dumps(requirement_analysis, ensure_ascii=True)}",
-            f"Schema-Vertrag:\n{json.dumps(schema, ensure_ascii=True)}",
-            f"Methodenhinweise:\n{json.dumps(_compact_method_sources(method_sources), ensure_ascii=True)}",
-            f"Schema-kompatible Baseline:\n{json.dumps(base_sheet, ensure_ascii=True)}",
-            (
-                "Gib nur das vollstaendige Architecture-Sheet-JSON zurueck. "
-                "Alle Freitexte muessen deutsch sein. Verwende die Baseline als Mindestniveau und reichere sie fachlich aus, "
-                "ohne Scope-fremde Features zu erfinden."
-            ),
-        ]
-    )
-
-
-def _build_architecture_reviewer_system_prompt() -> str:
-    return "\n".join(
-        [
-            "Du bist der Architecture Reviewer einer agentischen Django-Softwarefabrik.",
-            "Erzeuge ausschliesslich valides JSON.",
-            "Pruefe, ob das Architecture Sheet fachlich zur Beschreibung und Requirement-Analyse passt.",
-            "Markiere generische Platzhalter, englische fachliche Inhalte, erfundene Features, Scope-Verletzungen, fehlende Kernobjekte und zu duenne Beschreibungen.",
-            "Pruefe jedes Feature gegen input_summary, in_scope, out_of_scope, not_evidenced und explicitly_excluded_terms.",
-            "Begriffe wie Projektmanagement, Cloud, Team-Zuordnung, Loeschen, Ersteller oder Zustaendiger muessen fehlschlagen, wenn sie nicht belegt oder ausgeschlossen sind.",
-            "Pruefe, ob das arc42-Objekt alle 12 Kapitel enthaelt und Kapitel 8, 10 und 12 nicht leer sind.",
-            "Ein Sheet besteht den Review nur, wenn es konsequent deutsch, konkret und fuer Folgeagenten verwendbar ist.",
-            "Gib passes, findings und required_corrections zurueck.",
-        ]
-    )
-
-
-def _build_architecture_reviewer_user_prompt(
-    description: str,
-    requirement_analysis: Dict[str, Any],
-    sheet: Dict[str, Any],
-) -> str:
-    return "\n\n".join(
-        [
-            f"Beschreibung:\n{description}",
-            f"Requirement-Analyse:\n{json.dumps(requirement_analysis, ensure_ascii=True)}",
-            f"Architecture Sheet:\n{json.dumps(sheet, ensure_ascii=True)}",
-            (
-                "Bewerte streng als JSON: "
-                "{\"passes\": boolean, \"findings\": [string], \"required_corrections\": [string]}"
-            ),
-        ]
-    )
 
 
 def _build_architecture_correction_system_prompt() -> str:

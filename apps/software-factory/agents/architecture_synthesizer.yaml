@@ -1,0 +1,114 @@
+id: architecture_synthesizer
+name: Architecture Synthesizer
+version: 1
+description: >
+  Erzeugt aus einer validierten Requirement-Analyse ein arc42-orientiertes
+  Architecture Sheet fuer Django-Anwendungen. Der Agent darf nur den
+  belegten Scope der Requirement-Analyse verwenden.
+
+input_contract:
+  required:
+    - description
+    - requirement_analysis
+    - base_sheet
+    - schema
+    - method_sources
+
+output_contract:
+  format: json
+  required:
+    - architecture_sheet
+
+prompt:
+  system: |
+    Du bist der Architecture Synthesizer einer agentischen Django-Softwarefabrik.
+    Erzeuge ausschliesslich valides JSON.
+    Schreibe alle beschreibenden Texte konsequent auf Deutsch.
+    Verwende keine englischen Platzhalter wie Team Members, High, Medium, Core Functionality oder Project Shell.
+    Erstelle ein konkretes Architecture Sheet fuer eine Django-Anwendung.
+    Nutze ausschliesslich Requirement-Analyse, Baseline, Schema-Vertrag und Methodenhinweise.
+    Erfinde keine Features, Rollen, Schnittstellen, Datenobjekte oder Integrationen.
+    Inhalte aus not_evidenced, not_requested oder explicitly_excluded duerfen nicht als Architektur-Scope verwendet werden.
+    Gib JSON mit dem Top-Level-Feld architecture_sheet zurueck.
+
+  user_template: |
+    Beschreibung:
+    {{ description }}
+
+    Requirement-Analyse:
+    {{ requirement_analysis }}
+
+    Schema-kompatible Baseline:
+    {{ base_sheet }}
+
+    Schema-Vertrag:
+    {{ schema }}
+
+    Methodenhinweise:
+    {{ method_sources }}
+
+    Gib nur JSON zurueck.
+
+review_rules:
+  - id: only_in_scope_requirements
+    severity: error
+    description: Architektur darf nur belegten in_scope verwenden.
+  - id: no_excluded_or_unrequested_features
+    severity: error
+    description: Ausgeschlossene oder nicht verlangte Inhalte duerfen nicht als Architektur erscheinen.
+
+validators:
+  - validator: scope_evidence
+    configuration:
+      requirement_analysis_path: requirement_analysis
+      watched_terms:
+        - Projektmanagement
+        - Cloud
+        - Team-Zuordnung
+        - Loeschen
+        - Ersteller
+        - Zustaendiger
+        - REST API
+        - Integration
+        - Integrationen
+  - validator: forbidden_terms
+    configuration:
+      term_source_paths:
+        - requirement_analysis.out_of_scope
+        - requirement_analysis.not_evidenced
+        - requirement_analysis.explicitly_excluded
+        - requirement_analysis.explicitly_excluded_terms
+        - requirement_analysis.not_requested
+  - validator: evidence_required
+    configuration:
+      evidence_paths:
+        - requirement_analysis.input_summary
+        - requirement_analysis.in_scope
+        - requirement_analysis.core_facts
+        - requirement_analysis.test_requirements
+        - requirement_analysis.quality_requirements
+      checked_terms:
+        - Projektmanagement
+        - Cloud
+        - Team-Zuordnung
+        - Loeschen
+        - Ersteller
+        - Zustaendiger
+        - REST API
+        - Integration
+        - Integrationen
+  - validator: numeric_preservation
+    configuration:
+      source_path: requirement_analysis
+  - validator: test_requirement_coverage
+    configuration:
+      requirement_analysis_path: requirement_analysis
+  - validator: cross_field_consistency
+    configuration:
+      rules:
+        - source_path: architecture_sheet.building_blocks
+          target_path: architecture_sheet.arc42.building_block_view
+          term_field: name
+        - source_path: architecture_sheet.runtime_scenarios
+          target_path: architecture_sheet.arc42.runtime_view
+          term_field: name

@@ -1,0 +1,129 @@
+id: architecture_sheet
+name: Architecture Sheet
+slug: architecture-sheet
+description: >
+  Erzeugt ein arc42-orientiertes Architecture Sheet fuer eine beschriebene
+  Django-Anwendung.
+version: 1
+status: published
+final_output_key: architecture_sheet
+
+steps:
+  - step_key: validate_description
+    name: Beschreibung validieren
+    step_type: TASK
+    position: 1
+    task:
+      task_type: echo
+    input_mapping:
+      description:
+        source: workflow_input
+        path: description
+    output_key: validated_description
+    configuration:
+      required_inputs:
+        - description
+
+  - step_key: load_schema
+    name: Architecture-Sheet-Schema laden
+    step_type: TASK
+    position: 2
+    task:
+      task_type: echo
+    input_mapping:
+      schema:
+        source: static
+        value: architecture_sheet.schema.json
+    output_key: architecture_schema
+
+  - step_key: load_method_sources
+    name: Methodenwissen laden
+    step_type: TASK
+    position: 3
+    task:
+      task_type: echo
+    input_mapping:
+      collection:
+        source: static
+        value: architecture-method
+    output_key: method_sources
+
+  - step_key: analyze_requirements
+    name: Anforderungen analysieren
+    step_type: AGENT
+    position: 4
+    agent: requirement_analyst
+    input_mapping:
+      user_description:
+        source: step_output
+        step_key: validate_description
+        path: validated_output.description
+      method_sources:
+        source: step_output
+        step_key: load_method_sources
+        path: validated_output
+    output_key: requirements_analysis
+
+  - step_key: synthesize_architecture
+    name: Architecture Sheet erzeugen
+    step_type: AGENT
+    position: 5
+    agent: architecture_synthesizer
+    input_mapping:
+      description:
+        source: step_output
+        step_key: validate_description
+        path: validated_output.description
+      requirement_analysis:
+        source: step_output
+        step_key: analyze_requirements
+        path: validated_output
+      base_sheet:
+        source: static
+        value: deterministic_baseline_from_requirements
+      schema:
+        source: step_output
+        step_key: load_schema
+        path: validated_output
+      method_sources:
+        source: step_output
+        step_key: load_method_sources
+        path: validated_output
+    output_key: architecture_sheet
+
+  - step_key: review_architecture
+    name: Architecture Review ausfuehren
+    step_type: AGENT
+    position: 6
+    agent: architecture_reviewer
+    input_mapping:
+      description:
+        source: step_output
+        step_key: validate_description
+        path: validated_output.description
+      requirement_analysis:
+        source: step_output
+        step_key: analyze_requirements
+        path: validated_output
+      architecture_sheet:
+        source: step_output
+        step_key: synthesize_architecture
+        path: validated_output
+    output_key: architecture_review
+
+  - step_key: validate_contract
+    name: Schema validieren
+    step_type: VALIDATION
+    position: 7
+    input_mapping:
+      architecture_sheet:
+        source: step_output
+        step_key: synthesize_architecture
+        path: validated_output
+    output_key: contract_validation
+    configuration:
+      validators:
+        - validator: required_fields
+          configuration:
+            required:
+              - architecture_sheet
