@@ -26,6 +26,8 @@ from agentic_rag_template.software_factory.workflow_blueprints import (
     add_step_from_template,
     delete_software_factory_workflow_config,
     delete_step_from_workflow,
+    find_llm_profile,
+    list_llm_profiles,
     list_step_templates,
     load_software_factory_workflow,
     load_software_factory_workflow_config,
@@ -143,6 +145,10 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
             if app_route["remainder"] == "/step-templates":
                 self._send_json(self._list_step_templates(application))
+                return
+
+            if app_route["remainder"] == "/llm-profiles":
+                self._send_json(self._list_llm_profiles(application))
                 return
 
             workflow_run_route = self._parse_workflow_run_route(app_route["remainder"])
@@ -873,6 +879,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         return {"app_id": application.id, "templates": templates}
 
+    def _list_llm_profiles(self, application: ApplicationInstance) -> Dict[str, Any]:
+        try:
+            profiles = list_llm_profiles(application)
+        except WorkflowBlueprintError as error:
+            return {"app_id": application.id, "profiles": [], "error": str(error)}
+
+        return {"app_id": application.id, "profiles": profiles}
+
     def _send_workflow_detail_response(self, application: ApplicationInstance, workflow_id: str) -> None:
         workflow_version = self._load_workflow_or_404(application, workflow_id)
         if workflow_version is None:
@@ -1109,6 +1123,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             return
 
         payload = self._read_json_body()
+        llm_profile_id = str(payload.get("llm_profile", "")).strip()
+        if llm_profile_id:
+            try:
+                llm_profile = find_llm_profile(application, llm_profile_id)
+            except WorkflowBlueprintError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            payload["model_configuration"] = self._model_configuration_from_llm_profile(llm_profile)
+
         try:
             updated_config = update_step_in_workflow(workflow_config, step_key, payload)
             save_software_factory_workflow_config(application, workflow_id, updated_config)
@@ -1324,6 +1347,18 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             "step_count": len(run.step_runs),
             "artifact_count": len(run.artifacts),
         }
+
+    def _model_configuration_from_llm_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        configuration = {
+            "provider": profile.get("provider", ""),
+            "model": profile.get("model", ""),
+            "response_format": profile.get("response_format", "json"),
+            "parameters": dict(profile.get("parameters", {})),
+        }
+        for field in ("api_base_url", "timeout_seconds", "max_tokens"):
+            if profile.get(field):
+                configuration[field] = profile[field]
+        return configuration
 
     def _send_metrics_response(self) -> None:
         try:

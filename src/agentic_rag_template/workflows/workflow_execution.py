@@ -125,13 +125,18 @@ class LinearWorkflowEngine:
         prompts = self.prompt_builder.build(agent_version, resolved_input)
         step_run.rendered_system_prompt = prompts["system_prompt"]
         step_run.rendered_user_prompt = prompts["user_prompt"]
-        model_configuration = agent_version.model_configuration
+        model_configuration = dict(agent_version.model_configuration)
+        model_configuration.update(dict(step_run.workflow_step.configuration.get("model_configuration", {})))
         response = self.provider_adapter.invoke(
             WorkflowLLMRequest(
                 system_prompt=step_run.rendered_system_prompt,
                 user_prompt=step_run.rendered_user_prompt,
                 provider=str(model_configuration.get("provider", "")),
                 model=str(model_configuration.get("model", "")),
+                api_base_url=str(model_configuration.get("api_base_url", "")),
+                api_key=str(model_configuration.get("api_key", "")),
+                timeout_seconds=int(model_configuration.get("timeout_seconds", 0) or 0),
+                max_tokens=int(model_configuration.get("max_tokens", 0) or 0),
                 parameters=dict(model_configuration.get("parameters", {})),
                 response_format=str(model_configuration.get("response_format", "json")),
             )

@@ -1,0 +1,32 @@
+profiles:
+  - id: default_runtime
+    name: Runtime Default
+    provider: deterministic
+    model: local-deterministic-v1
+    description: Verwendet die globale Runtime-Konfiguration beziehungsweise den deterministischen Offline-Modus.
+    response_format: json
+    parameters: {}
+
+  - id: local_qwen3_14b
+    name: Lokales Ollama qwen3:14b
+    provider: ollama
+    model: qwen3:14b
+    api_base_url: http://ollama:11434
+    timeout_seconds: 3600
+    max_tokens: 4096
+    description: Lokales Ollama-Modell fuer tiefere Agentenarbeit auf dem Server.
+    response_format: json
+    parameters:
+      temperature: 0.1
+
+  - id: local_llama31
+    name: Lokales Ollama llama3.1
+    provider: ollama
+    model: llama3.1
+    api_base_url: http://ollama:11434
+    timeout_seconds: 3600
+    max_tokens: 4096
+    description: Alternative lokale Ollama-Konfiguration.
+    response_format: json
+    parameters:
+      temperature: 0.1

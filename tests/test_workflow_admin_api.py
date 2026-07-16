@@ -378,6 +378,13 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
             templates = json.loads(response.read().decode("utf-8"))
 
         assert [template["id"] for template in templates["templates"]] == ["input_guard"]
+        with request.urlopen(
+            f"http://{host}:{port}/apps/software-factory/llm-profiles",
+            timeout=15,
+        ) as response:
+            profiles = json.loads(response.read().decode("utf-8"))
+
+        assert [profile["id"] for profile in profiles["profiles"]] == ["local_qwen"]
 
         create_request = request.Request(
             f"http://{host}:{port}/apps/software-factory/workflows",
@@ -450,6 +457,7 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
                     "output_key": "processed_description",
                     "timeout_seconds": 600,
                     "failure_strategy": "STOP_WORKFLOW",
+                    "llm_profile": "local_qwen",
                     "task": {"task_type": "echo"},
                     "input_mapping": {
                         "description": {
@@ -473,7 +481,10 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
         assert edited_step["name"] == "Beschreibung verarbeiten"
         assert edited_step["output_key"] == "processed_description"
         assert edited_step["timeout_seconds"] == 600
-        assert edited_step["configuration"] == {"required_inputs": ["description"]}
+        assert edited_step["configuration"]["required_inputs"] == ["description"]
+        assert edited_step["configuration"]["llm_profile"] == "local_qwen"
+        assert edited_step["configuration"]["model_configuration"]["provider"] == "ollama"
+        assert edited_step["configuration"]["model_configuration"]["model"] == "qwen3:14b"
 
         blocked_rename_request = request.Request(
             f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/validate_description",
@@ -583,6 +594,25 @@ def _isolated_settings(tmp_path, published_workflow=False):
                 "  configuration:",
                 "    required_inputs:",
                 "      - description",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (app_dir / "llm_profiles.yaml").write_text(
+        "\n".join(
+            [
+                "profiles:",
+                "  - id: local_qwen",
+                "    name: Lokales Qwen",
+                "    provider: ollama",
+                "    model: qwen3:14b",
+                "    api_base_url: http://ollama:11434",
+                "    timeout_seconds: 3600",
+                "    max_tokens: 4096",
+                "    response_format: json",
+                "    parameters:",
+                "      temperature: 0.1",
                 "",
             ]
         ),
