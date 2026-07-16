@@ -532,6 +532,83 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
         thread.join(timeout=15)
 
 
+def test_workflow_admin_api_creates_updates_and_deletes_llm_profiles(tmp_path) -> None:
+    settings = _isolated_settings(tmp_path)
+    server = create_server(settings, workflow_store=FakeWorkflowStore())
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        host, port = server.server_address
+        create_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/llm-profiles",
+            data=json.dumps(
+                {
+                    "id": "openai_test",
+                    "name": "OpenAI Test",
+                    "provider": "openai",
+                    "model": "gpt-test",
+                    "api_base_url": "https://api.example.test/v1",
+                    "api_key": "secret",
+                    "timeout_seconds": 120,
+                    "max_tokens": 2048,
+                    "response_format": "json",
+                    "description": "Externes Testprofil.",
+                    "parameters": {"temperature": 0.2},
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(create_request, timeout=15) as response:
+            assert response.status == 201
+            created = json.loads(response.read().decode("utf-8"))
+
+        assert created["profile"]["id"] == "openai_test"
+        assert created["profile"]["api_key_configured"] is True
+        assert "api_key" not in created["profile"]
+
+        update_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/llm-profiles/openai_test",
+            data=json.dumps(
+                {
+                    "name": "OpenAI Test Updated",
+                    "provider": "openai",
+                    "model": "gpt-test-updated",
+                    "api_base_url": "https://api.example.test/v1",
+                    "timeout_seconds": 180,
+                    "max_tokens": 4096,
+                    "response_format": "json",
+                    "parameters": {"temperature": 0.1},
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        with request.urlopen(update_request, timeout=15) as response:
+            assert response.status == 200
+            updated = json.loads(response.read().decode("utf-8"))
+
+        assert updated["profile"]["name"] == "OpenAI Test Updated"
+        assert updated["profile"]["model"] == "gpt-test-updated"
+        assert updated["profile"]["api_key_configured"] is True
+
+        delete_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/llm-profiles/openai_test",
+            method="DELETE",
+        )
+        with request.urlopen(delete_request, timeout=15) as response:
+            assert response.status == 200
+            deleted = json.loads(response.read().decode("utf-8"))
+
+        assert deleted["deleted"] is True
+        assert [profile["id"] for profile in deleted["profiles"]] == ["local_qwen"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=15)
+
+
 def _isolated_settings(tmp_path, published_workflow=False):
     apps_dir = tmp_path / "apps"
     app_dir = apps_dir / "software-factory"

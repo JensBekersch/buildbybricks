@@ -19,7 +19,81 @@
       <nav class="view-tabs" aria-label="Arbeitsbereiche">
         <button id="show-generator-view" type="button" data-active="true">Generator</button>
         <button id="show-admin-view" type="button">Workflow Admin</button>
+        <button id="show-llm-view" type="button">LLM Konfig</button>
       </nav>
+
+      <section id="llm-config-view" class="llm-config-view view" hidden>
+        <aside class="architecture-panel admin-panel" aria-label="LLM Profile">
+          <div class="section-heading">
+            <div>
+              <p class="panel-kicker">LLM</p>
+              <h2>Profile</h2>
+            </div>
+            <div class="button-row">
+              <button id="create-llm-profile" class="ghost-button" type="button">Neu</button>
+              <button id="refresh-llm-profiles" class="ghost-button" type="button">Aktualisieren</button>
+            </div>
+          </div>
+          <ol id="llm-profile-list" class="admin-list"></ol>
+        </aside>
+
+        <section class="architecture-panel admin-panel" aria-label="LLM Profil bearbeiten">
+          <div class="section-heading">
+            <div>
+              <p class="panel-kicker">Konfiguration</p>
+              <h2 id="llm-profile-title">Profil auswaehlen</h2>
+            </div>
+            <span id="llm-profile-badge">-</span>
+          </div>
+
+          <section class="workflow-editor" aria-label="LLM Profil Formular">
+            <label for="llm-profile-id">ID</label>
+            <input id="llm-profile-id" type="text" autocomplete="off" placeholder="local_qwen3_14b">
+
+            <label for="llm-profile-name">Name</label>
+            <input id="llm-profile-name" type="text" autocomplete="off" placeholder="Lokales Qwen">
+
+            <label for="llm-profile-provider">Provider</label>
+            <select id="llm-profile-provider">
+              <option value="deterministic">deterministic</option>
+              <option value="ollama">ollama</option>
+              <option value="openai">openai</option>
+              <option value="anthropic">anthropic</option>
+              <option value="custom_api">custom_api</option>
+            </select>
+
+            <label for="llm-profile-model">Modell</label>
+            <input id="llm-profile-model" type="text" autocomplete="off" placeholder="qwen3:14b">
+
+            <label for="llm-profile-api-base-url">API Base URL</label>
+            <input id="llm-profile-api-base-url" type="text" autocomplete="off" placeholder="http://ollama:11434">
+
+            <label for="llm-profile-api-key">API Key</label>
+            <input id="llm-profile-api-key" type="password" autocomplete="off" placeholder="Leer lassen, um bestehenden Key zu behalten">
+
+            <label for="llm-profile-timeout">Timeout Sekunden</label>
+            <input id="llm-profile-timeout" type="number" min="0" step="1">
+
+            <label for="llm-profile-max-tokens">Tokenbudget</label>
+            <input id="llm-profile-max-tokens" type="number" min="0" step="1">
+
+            <label for="llm-profile-response-format">Response Format</label>
+            <input id="llm-profile-response-format" type="text" autocomplete="off" placeholder="json">
+
+            <label for="llm-profile-description">Beschreibung</label>
+            <textarea id="llm-profile-description" rows="4" spellcheck="false"></textarea>
+
+            <label for="llm-profile-parameters">Parameter JSON</label>
+            <textarea id="llm-profile-parameters" rows="6" spellcheck="false"></textarea>
+
+            <div class="admin-actions">
+              <button id="save-llm-profile" type="button">Profil speichern</button>
+              <button id="delete-llm-profile" class="danger-button" type="button">Profil loeschen</button>
+            </div>
+            <p id="llm-profile-status" class="form-status" role="status"></p>
+          </section>
+        </section>
+      </section>
 
       <section id="workflow-admin-view" class="workflow-admin view" hidden>
         <aside class="architecture-panel admin-panel" aria-label="Workflows">

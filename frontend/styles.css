@@ -230,6 +230,13 @@ textarea {
   align-items: start;
 }
 
+.llm-config-view {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) minmax(520px, 760px);
+  gap: 16px;
+  align-items: start;
+}
+
 .admin-panel {
   display: grid;
   gap: 16px;
@@ -419,6 +426,12 @@ textarea {
 
 .workflow-editor textarea {
   min-height: 96px;
+}
+
+#llm-profile-parameters {
+  min-height: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 
 #workflow-editor-mode {
