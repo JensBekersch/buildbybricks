@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checka
 
 from agentic_rag_template.workflows.models import (
     AgentVersion,
+    RUN_STATUS_PENDING,
+    RUN_STATUS_RUNNING,
     VERSION_STATUS_PUBLISHED,
     WorkflowArtifact,
     WorkflowRun,
@@ -46,6 +48,9 @@ class WorkflowStore(Protocol):
 
     def list_runs(self, workflow_slug: Optional[str] = None, limit: int = 50) -> List[WorkflowRun]:
         """List workflow runs, optionally scoped to one workflow."""
+
+    def claim_next_run(self, workflow_slug: Optional[str] = None) -> Optional[WorkflowRun]:
+        """Claim one pending workflow run for worker execution."""
 
     def list_validated_artifacts(self, run_id: str) -> List[WorkflowArtifact]:
         """List validated artifacts for a workflow run."""
@@ -158,7 +163,7 @@ class PostgresWorkflowStore:
                 cursor.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_workflow_runs_status
-                    ON workflow_runs (status)
+                    ON workflow_runs (status, started_at)
                     """
                 )
                 cursor.execute(
@@ -453,6 +458,50 @@ class PostgresWorkflowStore:
                 )
                 rows = cursor.fetchall()
         return [WorkflowRun.from_dict(_row_payload(row)) for row in rows]
+
+    def claim_next_run(self, workflow_slug: Optional[str] = None) -> Optional[WorkflowRun]:
+        params: Dict[str, Any] = {"pending_status": RUN_STATUS_PENDING}
+        workflow_filter = ""
+        if workflow_slug:
+            workflow_filter = "AND workflow_slug = %(workflow_slug)s"
+            params["workflow_slug"] = workflow_slug
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT payload
+                    FROM workflow_runs
+                    WHERE status = %(pending_status)s
+                    {workflow_filter}
+                    ORDER BY started_at ASC NULLS FIRST
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                    """,
+                    params,
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                run = WorkflowRun.from_dict(_row_payload(row))
+                run.start()
+                cursor.execute(
+                    """
+                    UPDATE workflow_runs
+                    SET status = %(status)s,
+                        payload = %(payload)s,
+                        started_at = %(started_at)s,
+                        finished_at = %(finished_at)s
+                    WHERE id = %(id)s
+                    """,
+                    {
+                        "id": run.id,
+                        "status": RUN_STATUS_RUNNING,
+                        "payload": self.json_wrapper(run.to_dict()),
+                        "started_at": run.started_at,
+                        "finished_at": run.finished_at,
+                    },
+                )
+        return run
 
     def list_validated_artifacts(self, run_id: str) -> List[WorkflowArtifact]:
         with self._connect() as connection:

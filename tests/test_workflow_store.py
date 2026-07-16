@@ -1,6 +1,7 @@
 import pytest
 
 from agentic_rag_template.workflows.models import (
+    RUN_STATUS_RUNNING,
     RUN_STATUS_SUCCEEDED,
     STEP_STATUS_SUCCEEDED,
     STEP_TYPE_AGENT,
@@ -46,9 +47,24 @@ class FakeCursor:
             self.connection.agent_versions[key] = params["payload"]
         elif normalized_sql.startswith("INSERT INTO WORKFLOW_RUNS"):
             self.connection.workflow_runs[params["id"]] = params["payload"]
+        elif normalized_sql.startswith("UPDATE WORKFLOW_RUNS"):
+            current = dict(self.connection.workflow_runs[params["id"]])
+            current.update(params["payload"])
+            self.connection.workflow_runs[params["id"]] = current
         elif normalized_sql.startswith("INSERT INTO WORKFLOW_ARTIFACTS"):
             key = (params["workflow_run_id"], params["artifact_key"])
             self.connection.workflow_artifacts[key] = params["payload"]
+        elif normalized_sql.startswith("SELECT PAYLOAD FROM WORKFLOW_RUNS WHERE STATUS"):
+            rows = [
+                payload
+                for payload in self.connection.workflow_runs.values()
+                if payload["status"] == params["pending_status"]
+                and (
+                    "workflow_slug" not in params
+                    or payload["workflow_version"]["workflow"]["slug"] == params["workflow_slug"]
+                )
+            ]
+            self.connection.fetchone_result = (rows[0],) if rows else None
         elif normalized_sql.startswith("SELECT PAYLOAD FROM WORKFLOW_VERSIONS WHERE WORKFLOW_SLUG"):
             payload = self.connection.workflow_versions.get((params["workflow_slug"], params["version_number"]))
             self.connection.fetchone_result = (payload,) if payload else None
@@ -306,3 +322,32 @@ def test_postgres_workflow_store_saves_and_loads_run_snapshot_and_artifacts() ->
     assert artifacts[0].artifact_key == "requirements"
     assert artifacts[0].content == {"artifact_name": "Todo"}
     assert [run.id for run in runs] == ["run-1"]
+
+
+def test_postgres_workflow_store_claims_next_pending_run() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+    version = _workflow_version()
+    run = WorkflowRun(workflow_version=version, initial_input={"description": "Eine Todo-App."}, id="run-1")
+
+    store.save_run(run)
+    claimed = store.claim_next_run(workflow_slug="django-machine")
+
+    assert claimed is not None
+    assert claimed.id == "run-1"
+    assert claimed.status == RUN_STATUS_RUNNING
+    assert claimed.started_at is not None
+    assert store.get_run("run-1").status == RUN_STATUS_RUNNING
+
+
+def test_postgres_workflow_store_does_not_claim_non_pending_run() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+    version = _workflow_version()
+    run = WorkflowRun(workflow_version=version, initial_input={"description": "Eine Todo-App."}, id="run-1")
+    run.start()
+    run.succeed({"artifact_name": "Todo"})
+
+    store.save_run(run)
+
+    assert store.claim_next_run(workflow_slug="django-machine") is None

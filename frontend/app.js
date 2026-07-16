@@ -43,6 +43,7 @@ const refreshWorkflowsButton = document.querySelector("#refresh-workflows");
 const refreshWorkflowRunsButton = document.querySelector("#refresh-workflow-runs");
 const validateWorkflowButton = document.querySelector("#validate-workflow");
 const startWorkflowTestRunButton = document.querySelector("#start-workflow-test-run");
+const queueWorkflowRunButton = document.querySelector("#queue-workflow-run");
 const workflowList = document.querySelector("#workflow-list");
 const workflowDetailTitle = document.querySelector("#workflow-detail-title");
 const workflowValidationBadge = document.querySelector("#workflow-validation-badge");
@@ -858,6 +859,36 @@ async function startWorkflowTestRun() {
   }
 }
 
+async function queueWorkflowRun() {
+  if (!activeWorkflowId) {
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(workflowTestPayload.value || "{}");
+  } catch (error) {
+    workflowAdminStatus.textContent = "Run-Payload ist kein gueltiges JSON.";
+    return;
+  }
+
+  const queuedPayload = {
+    description: payload.description || "",
+    input: payload.input || {},
+    started_by: payload.started_by || "workflow-admin-ui",
+  };
+  workflowAdminStatus.textContent = "Worker-Run wird angelegt.";
+  queueWorkflowRunButton.disabled = true;
+  try {
+    const response = await postJson(appPath(activeAppId, "workflows", activeWorkflowId, "runs"), queuedPayload);
+    activeWorkflowRunId = response.run.id;
+    workflowAdminStatus.textContent = `Worker-Run ${response.run.id} wartet auf Ausfuehrung.`;
+    await loadWorkflowRuns();
+  } finally {
+    queueWorkflowRunButton.disabled = false;
+  }
+}
+
 function renderWorkflowTestPayload() {
   workflowTestPayload.value = renderJson({
     description: "Eine einfache Team-Todo-Liste mit Aufgaben und Status.",
@@ -1327,6 +1358,16 @@ startWorkflowTestRunButton.addEventListener("click", async () => {
   try {
     await startWorkflowTestRun();
     setRuntimeStatus("Testlauf abgeschlossen", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+queueWorkflowRunButton.addEventListener("click", async () => {
+  try {
+    await queueWorkflowRun();
+    setRuntimeStatus("Worker-Run angelegt", "ok");
   } catch (error) {
     workflowAdminStatus.textContent = error.message;
     setRuntimeStatus(error.message, "error");

@@ -38,6 +38,7 @@ from agentic_rag_template.software_factory import (
 from agentic_rag_template.template_config import load_application_profile
 from agentic_rag_template.workflows.models import WorkflowRun, WorkflowVersion
 from agentic_rag_template.workflows.providers import FakeLLMProviderAdapter
+from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStoreError
 from agentic_rag_template.workflows.workflow_execution import LinearWorkflowEngine
 from agentic_rag_template.workflows.workflow_validation import WorkflowVersionValidator
 
@@ -62,12 +63,12 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         *args: Any,
         settings: Settings,
         architecture_job_store: Any = None,
-        workflow_admin_runs: Optional[Dict[str, WorkflowRun]] = None,
+        workflow_store: Any = None,
         **kwargs: Any,
     ) -> None:
         self.settings = settings
         self.architecture_job_store = architecture_job_store
-        self.workflow_admin_runs = workflow_admin_runs if workflow_admin_runs is not None else {}
+        self.workflow_store = workflow_store
         super().__init__(*args, directory=str(settings.frontend_dir), **kwargs)
 
     def do_GET(self) -> None:
@@ -822,7 +823,11 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             engine = LinearWorkflowEngine(provider_adapter=FakeLLMProviderAdapter(responses))
             run = engine.run(workflow_version, initial_input)
             run.started_by = str(payload.get("started_by", "workflow-admin-api"))
-            self.workflow_admin_runs[self._workflow_run_store_key(application, workflow_id, run.id)] = run
+            try:
+                self._workflow_store().save_run(run)
+            except WorkflowStoreError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
             self._send_json(
                 {
                     "app_id": application.id,
@@ -830,6 +835,40 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                     "run": run.to_dict(),
                 },
                 status=HTTPStatus.CREATED,
+            )
+            return
+
+        if action == "runs":
+            payload = self._read_json_body()
+            initial_input = payload.get("input", {})
+            if not isinstance(initial_input, dict):
+                self._send_json({"error": "input must be an object"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            description = str(payload.get("description", "")).strip()
+            if description and "description" not in initial_input:
+                initial_input = {**initial_input, "description": description}
+            if "description" not in initial_input:
+                self._send_json({"error": "description is required"}, status=HTTPStatus.BAD_REQUEST)
+                return
+
+            run = WorkflowRun(
+                workflow_version=workflow_version,
+                initial_input=initial_input,
+                started_by=str(payload.get("started_by", "workflow-admin-api")),
+            )
+            try:
+                self._workflow_store().save_run(run)
+            except WorkflowStoreError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
+
+            self._send_json(
+                {
+                    "app_id": application.id,
+                    "workflow_id": workflow_id,
+                    "run": run.to_dict(),
+                },
+                status=HTTPStatus.ACCEPTED,
             )
             return
 
@@ -844,10 +883,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         if not self._is_safe_workflow_id(workflow_id):
             self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
             return
+        workflow_version = self._load_workflow_or_404(application, workflow_id)
+        if workflow_version is None:
+            return
 
         if run_id:
-            run = self.workflow_admin_runs.get(self._workflow_run_store_key(application, workflow_id, run_id))
+            try:
+                run = self._workflow_store().get_run(run_id)
+            except WorkflowStoreError as error:
+                self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+                return
             if run is None:
+                self._send_json({"error": "workflow run not found"}, status=HTTPStatus.NOT_FOUND)
+                return
+            if run.workflow_version.workflow.slug != workflow_version.workflow.slug:
                 self._send_json({"error": "workflow run not found"}, status=HTTPStatus.NOT_FOUND)
                 return
             self._send_json(
@@ -859,12 +908,11 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             )
             return
 
-        runs = [
-            run
-            for key, run in self.workflow_admin_runs.items()
-            if key.startswith(self._workflow_run_store_prefix(application, workflow_id))
-        ]
-        runs.sort(key=lambda item: item.started_at or item.finished_at or item.workflow_version.created_at, reverse=True)
+        try:
+            runs = self._workflow_store().list_runs(workflow_slug=workflow_version.workflow.slug)
+        except WorkflowStoreError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
         self._send_json(
             {
                 "app_id": application.id,
@@ -931,12 +979,6 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             "artifact_count": len(run.artifacts),
         }
 
-    def _workflow_run_store_prefix(self, application: ApplicationInstance, workflow_id: str) -> str:
-        return f"{application.id}:{workflow_id}:"
-
-    def _workflow_run_store_key(self, application: ApplicationInstance, workflow_id: str, run_id: str) -> str:
-        return f"{self._workflow_run_store_prefix(application, workflow_id)}{run_id}"
-
     def _send_metrics_response(self) -> None:
         try:
             jobs = self._architecture_job_store().list(limit=500)
@@ -986,7 +1028,7 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             len(parts) == 3
             and parts[0] == "workflows"
             and parts[1]
-            and parts[2] in {"validate", "test-runs"}
+            and parts[2] in {"validate", "test-runs", "runs"}
         ):
             return {"workflow_id": parts[1], "action": parts[2]}
 
@@ -1055,6 +1097,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         self.architecture_job_store.initialize()
         return self.architecture_job_store
 
+    def _workflow_store(self) -> Any:
+        if self.workflow_store is not None:
+            return self.workflow_store
+
+        self.workflow_store = PostgresWorkflowStore(self.settings.database_url)
+        self.workflow_store.initialize()
+        return self.workflow_store
+
     def _is_safe_collection_name(self, collection: str) -> bool:
         return bool(SAFE_COLLECTION_PATTERN.fullmatch(collection))
 
@@ -1115,17 +1165,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         return True
 
 
-def create_server(settings: Optional[Settings] = None, architecture_job_store: Any = None) -> ThreadingHTTPServer:
+def create_server(
+    settings: Optional[Settings] = None,
+    architecture_job_store: Any = None,
+    workflow_store: Any = None,
+) -> ThreadingHTTPServer:
     """Create a local HTTP server for API and frontend requests."""
     active_settings = settings or create_app_settings()
     frontend_dir = Path(active_settings.frontend_dir)
     frontend_dir.mkdir(parents=True, exist_ok=True)
-    workflow_admin_runs: Dict[str, WorkflowRun] = {}
     handler = partial(
         AgenticRagRequestHandler,
         settings=active_settings,
         architecture_job_store=architecture_job_store,
-        workflow_admin_runs=workflow_admin_runs,
+        workflow_store=workflow_store,
     )
     return ThreadingHTTPServer((active_settings.host, active_settings.port), handler)
 
