@@ -1,5 +1,9 @@
 const appDescription = document.querySelector("#app-description");
 const runtimeStatus = document.querySelector("#runtime-status");
+const showGeneratorViewButton = document.querySelector("#show-generator-view");
+const showAdminViewButton = document.querySelector("#show-admin-view");
+const architectureView = document.querySelector("#architecture-view");
+const workflowAdminView = document.querySelector("#workflow-admin-view");
 
 const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
@@ -35,6 +39,23 @@ const architectureSources = document.querySelector("#architecture-sources");
 const architectureJobList = document.querySelector("#architecture-job-list");
 const architectureJobLogs = document.querySelector("#architecture-job-logs");
 const architectureTrace = document.querySelector("#architecture-trace");
+const refreshWorkflowsButton = document.querySelector("#refresh-workflows");
+const refreshWorkflowRunsButton = document.querySelector("#refresh-workflow-runs");
+const validateWorkflowButton = document.querySelector("#validate-workflow");
+const startWorkflowTestRunButton = document.querySelector("#start-workflow-test-run");
+const workflowList = document.querySelector("#workflow-list");
+const workflowDetailTitle = document.querySelector("#workflow-detail-title");
+const workflowValidationBadge = document.querySelector("#workflow-validation-badge");
+const workflowDetailMeta = document.querySelector("#workflow-detail-meta");
+const workflowStepCount = document.querySelector("#workflow-step-count");
+const workflowStepList = document.querySelector("#workflow-step-list");
+const workflowStepDetail = document.querySelector("#workflow-step-detail");
+const workflowTestPayload = document.querySelector("#workflow-test-payload");
+const workflowAdminStatus = document.querySelector("#workflow-admin-status");
+const workflowRunList = document.querySelector("#workflow-run-list");
+const workflowArtifactList = document.querySelector("#workflow-artifact-list");
+const workflowArtifactTitle = document.querySelector("#workflow-artifact-title");
+const workflowArtifactViewer = document.querySelector("#workflow-artifact-viewer");
 
 let applications = [];
 let runtimeConfig = null;
@@ -44,6 +65,13 @@ let activeArchitectureJob = null;
 let activeAgentStepKey = "";
 let architectureEventSource = null;
 let architecturePollingTimer = null;
+let workflows = [];
+let activeWorkflowId = "";
+let activeWorkflowDetail = null;
+let activeWorkflowRunId = "";
+let activeWorkflowRun = null;
+let activeWorkflowStepKey = "";
+let activeWorkflowArtifactKey = "";
 
 function appPath(appId, ...segments) {
   return ["/apps", appId, ...segments]
@@ -108,6 +136,18 @@ function renderApplicationDescription() {
     : "Software Factory";
 }
 
+function switchView(viewName) {
+  const adminActive = viewName === "admin";
+  workflowAdminView.hidden = !adminActive;
+  architectureView.hidden = adminActive;
+  showAdminViewButton.dataset.active = adminActive ? "true" : "false";
+  showGeneratorViewButton.dataset.active = adminActive ? "false" : "true";
+
+  if (adminActive && workflows.length === 0) {
+    loadWorkflowAdmin().catch((error) => setRuntimeStatus(error.message, "error"));
+  }
+}
+
 async function loadApplications() {
   const payload = await getJson("/apps");
   applications = payload.applications || [];
@@ -146,6 +186,10 @@ function createElement(tagName, className, text = "") {
     element.textContent = text;
   }
   return element;
+}
+
+function renderJson(value) {
+  return JSON.stringify(value, null, 2);
 }
 
 function formatElapsedTime(startedAt, finishedAt = "") {
@@ -497,6 +541,394 @@ function displayPriority(priority) {
     return "niedrig";
   }
   return priority;
+}
+
+async function loadWorkflowAdmin() {
+  workflowAdminStatus.textContent = "Workflows werden geladen.";
+  const payload = await getJson(appPath(activeAppId, "workflows"));
+  workflows = payload.workflows || [];
+  renderWorkflowList(workflows);
+  workflowAdminStatus.textContent = `${workflows.length} Workflow(s) geladen.`;
+
+  if (!activeWorkflowId && workflows.length > 0) {
+    await openWorkflow(workflows[0].id);
+  } else if (activeWorkflowId) {
+    await openWorkflow(activeWorkflowId);
+  }
+}
+
+function renderWorkflowList(items) {
+  workflowList.replaceChildren();
+
+  if (!items || items.length === 0) {
+    workflowList.append(createElement("li", "empty-state", "Keine Workflows gefunden."));
+    return;
+  }
+
+  items.forEach((workflow) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const title = createElement("strong", "", workflow.name || workflow.id);
+    const meta = createElement(
+      "span",
+      "",
+      [
+        `v${workflow.version_number || "-"}`,
+        workflow.status || "-",
+        (workflow.validation || {}).valid ? "valide" : "mit Fehlern",
+      ].join(" · ")
+    );
+
+    button.type = "button";
+    button.className = "admin-list-button";
+    button.dataset.active = workflow.id === activeWorkflowId ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => openWorkflow(workflow.id));
+    item.append(button);
+    workflowList.append(item);
+  });
+}
+
+async function openWorkflow(workflowId) {
+  activeWorkflowId = workflowId;
+  activeWorkflowRunId = "";
+  activeWorkflowRun = null;
+  activeWorkflowArtifactKey = "";
+
+  const payload = await getJson(appPath(activeAppId, "workflows", workflowId));
+  activeWorkflowDetail = payload.workflow;
+  renderWorkflowList(workflows);
+  renderWorkflowDetail(payload);
+  renderWorkflowTestPayload();
+  await loadWorkflowRuns();
+}
+
+function renderWorkflowDetail(payload) {
+  const workflowVersion = payload.workflow || {};
+  const workflow = workflowVersion.workflow || {};
+  const validation = payload.validation || {};
+  const steps = workflowVersion.steps || [];
+
+  workflowDetailTitle.textContent = workflow.name || payload.workflow_id || "Workflow";
+  workflowValidationBadge.textContent = validation.valid ? "Schema gueltig" : "Schemafehler";
+  workflowValidationBadge.dataset.tone = validation.valid ? "ok" : "warn";
+  workflowStepCount.textContent = String(steps.length);
+  workflowDetailMeta.replaceChildren();
+  appendMeta(workflowDetailMeta, "ID", payload.workflow_id || "-");
+  appendMeta(workflowDetailMeta, "Slug", workflow.slug || "-");
+  appendMeta(workflowDetailMeta, "Version", workflowVersion.version_number ? `v${workflowVersion.version_number}` : "-");
+  appendMeta(workflowDetailMeta, "Status", workflowVersion.status || "-");
+  appendMeta(workflowDetailMeta, "Final Output", workflowVersion.final_output_key || "-");
+  appendMeta(workflowDetailMeta, "Beschreibung", workflow.description || "-");
+
+  workflowStepList.replaceChildren();
+  if (steps.length === 0) {
+    workflowStepList.append(createElement("li", "empty-state", "Keine Steps konfiguriert."));
+  }
+
+  steps.forEach((step) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const agent = step.agent_version ? step.agent_version.agent || {} : null;
+    const title = createElement("strong", "", step.name || step.step_key);
+    const meta = createElement(
+      "span",
+      "",
+      [
+        `#${step.position}`,
+        step.step_type,
+        step.output_key ? `Output: ${step.output_key}` : "",
+        agent ? `Agent: ${agent.name || agent.slug}` : "Task",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    );
+
+    button.type = "button";
+    button.className = "admin-list-button";
+    button.dataset.stepKey = step.step_key;
+    button.dataset.active = step.step_key === activeWorkflowStepKey ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => renderWorkflowStepDetail(step));
+    item.append(button);
+    workflowStepList.append(item);
+  });
+
+  const selectedStep = steps.find((step) => step.step_key === activeWorkflowStepKey) || steps[0];
+  if (selectedStep) {
+    renderWorkflowStepDetail(selectedStep);
+  }
+}
+
+function appendMeta(container, label, value) {
+  const group = document.createElement("div");
+  group.append(createElement("dt", "", label));
+  group.append(createElement("dd", "", valueText(value)));
+  container.append(group);
+}
+
+function renderWorkflowStepDetail(step) {
+  activeWorkflowStepKey = step.step_key;
+  workflowStepList.querySelectorAll("button").forEach((button) => {
+    button.dataset.active = button.dataset.stepKey === step.step_key ? "true" : "false";
+  });
+  workflowStepDetail.textContent = renderJson({
+    step_key: step.step_key,
+    name: step.name,
+    step_type: step.step_type,
+    position: step.position,
+    output_key: step.output_key,
+    input_mapping: step.input_mapping,
+    task_definition: step.task_definition,
+    configuration: step.configuration,
+    agent: step.agent_version
+      ? {
+          name: (step.agent_version.agent || {}).name,
+          slug: (step.agent_version.agent || {}).slug,
+          version_number: step.agent_version.version_number,
+          input_contract: step.agent_version.input_contract,
+          output_schema: step.agent_version.output_schema,
+          validators: step.agent_version.validators,
+          model_configuration: step.agent_version.model_configuration,
+        }
+      : null,
+  });
+}
+
+async function validateActiveWorkflow() {
+  if (!activeWorkflowId) {
+    return;
+  }
+  workflowAdminStatus.textContent = "Workflow wird validiert.";
+  const payload = await postJson(appPath(activeAppId, "workflows", activeWorkflowId, "validate"), {});
+  workflowAdminStatus.textContent = payload.validation.valid
+    ? "Workflow ist strukturell gueltig."
+    : `Workflow hat ${payload.validation.errors.length} Fehler.`;
+  workflowArtifactTitle.textContent = "Validierung";
+  workflowArtifactViewer.textContent = renderJson(payload.validation);
+}
+
+async function loadWorkflowRuns() {
+  if (!activeWorkflowId) {
+    return;
+  }
+
+  const payload = await getJson(appPath(activeAppId, "workflows", activeWorkflowId, "runs"));
+  renderWorkflowRuns(payload.runs || []);
+}
+
+function renderWorkflowRuns(runs) {
+  workflowRunList.replaceChildren();
+  workflowArtifactList.replaceChildren();
+
+  if (!runs || runs.length === 0) {
+    workflowRunList.append(createElement("li", "empty-state", "Noch keine Admin-Testlaeufe."));
+    workflowArtifactList.append(createElement("li", "empty-state", "Noch keine Step-Outputs."));
+    workflowArtifactTitle.textContent = "Output Viewer";
+    workflowArtifactViewer.textContent = "Starte einen Testlauf oder waehle einen vorhandenen Run aus.";
+    return;
+  }
+
+  runs.forEach((run) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const title = createElement("strong", "", run.id);
+    const meta = createElement(
+      "span",
+      "",
+      [run.status, formatDateTime(run.started_at || run.finished_at), `${run.artifact_count || 0} Artefakte`]
+        .filter(Boolean)
+        .join(" · ")
+    );
+
+    button.type = "button";
+    button.className = "admin-list-button";
+    button.dataset.active = run.id === activeWorkflowRunId ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => openWorkflowRun(run.id));
+    item.append(button);
+    workflowRunList.append(item);
+  });
+}
+
+async function openWorkflowRun(runId) {
+  activeWorkflowRunId = runId;
+  activeWorkflowArtifactKey = "";
+  const payload = await getJson(appPath(activeAppId, "workflows", activeWorkflowId, "runs", runId));
+  activeWorkflowRun = payload.run;
+  await loadWorkflowRuns();
+  renderWorkflowRunArtifacts(activeWorkflowRun);
+}
+
+function renderWorkflowRunArtifacts(run) {
+  workflowArtifactList.replaceChildren();
+  const artifacts = run.artifacts || [];
+  const stepRuns = run.step_runs || [];
+
+  if (artifacts.length === 0) {
+    workflowArtifactList.append(createElement("li", "empty-state", "Dieser Run hat keine Artefakte."));
+  }
+
+  artifacts.forEach((artifact) => {
+    const stepRun = stepRuns.find((item) => item.workflow_step.step_key === artifact.step_key) || null;
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    const title = createElement("strong", "", artifact.artifact_key);
+    const meta = createElement(
+      "span",
+      "",
+      [artifact.step_key, artifact.artifact_type, artifact.is_validated ? "validiert" : ""]
+        .filter(Boolean)
+        .join(" · ")
+    );
+
+    button.type = "button";
+    button.className = "admin-list-button";
+    button.dataset.artifactKey = artifact.artifact_key;
+    button.dataset.active = artifact.artifact_key === activeWorkflowArtifactKey ? "true" : "false";
+    button.append(title, meta);
+    button.addEventListener("click", () => renderWorkflowArtifact(run, artifact, stepRun));
+    item.append(button);
+    workflowArtifactList.append(item);
+  });
+
+  const selectedArtifact =
+    artifacts.find((artifact) => artifact.artifact_key === activeWorkflowArtifactKey) || artifacts[0];
+  if (selectedArtifact) {
+    const selectedStepRun = stepRuns.find((item) => item.workflow_step.step_key === selectedArtifact.step_key) || null;
+    renderWorkflowArtifact(run, selectedArtifact, selectedStepRun);
+  }
+}
+
+function renderWorkflowArtifact(run, artifact, stepRun) {
+  activeWorkflowArtifactKey = artifact.artifact_key;
+  workflowArtifactList.querySelectorAll("button").forEach((button) => {
+    button.dataset.active = button.dataset.artifactKey === artifact.artifact_key ? "true" : "false";
+  });
+  workflowArtifactTitle.textContent = `${artifact.artifact_key} · ${artifact.step_key || "Run"}`;
+  workflowArtifactViewer.textContent = renderJson({
+    run: {
+      id: run.id,
+      status: run.status,
+      started_at: run.started_at,
+      finished_at: run.finished_at,
+      error_summary: run.error_summary,
+    },
+    artifact,
+    step_run: stepRun
+      ? {
+          status: stepRun.status,
+          resolved_input: stepRun.resolved_input,
+          parsed_output: stepRun.parsed_output,
+          validated_output: stepRun.validated_output,
+          validation_result: stepRun.validation_result,
+          model_metadata: stepRun.model_metadata,
+          error_message: stepRun.error_message,
+          rendered_system_prompt: stepRun.rendered_system_prompt,
+          rendered_user_prompt: stepRun.rendered_user_prompt,
+        }
+      : null,
+  });
+}
+
+async function startWorkflowTestRun() {
+  if (!activeWorkflowId) {
+    return;
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(workflowTestPayload.value || "{}");
+  } catch (error) {
+    workflowAdminStatus.textContent = "Testlauf-Payload ist kein gueltiges JSON.";
+    return;
+  }
+
+  workflowAdminStatus.textContent = "Testlauf wird gestartet.";
+  startWorkflowTestRunButton.disabled = true;
+  try {
+    const response = await postJson(appPath(activeAppId, "workflows", activeWorkflowId, "test-runs"), payload);
+    activeWorkflowRunId = response.run.id;
+    activeWorkflowRun = response.run;
+    workflowAdminStatus.textContent = `Testlauf ${response.run.id} ist ${response.run.status}.`;
+    await loadWorkflowRuns();
+    renderWorkflowRunArtifacts(response.run);
+  } finally {
+    startWorkflowTestRunButton.disabled = false;
+  }
+}
+
+function renderWorkflowTestPayload() {
+  workflowTestPayload.value = renderJson({
+    description: "Eine einfache Team-Todo-Liste mit Aufgaben und Status.",
+    responses: workflowFakeResponses(),
+  });
+}
+
+function workflowFakeResponses() {
+  return [
+    {
+      parsed_output: {
+        schema_version: "2.0.0",
+        artifact_name: "Team-Todo-Liste",
+        business_goal: {
+          description: "Teammitglieder verwalten eine gemeinsam sichtbare Aufgabenliste.",
+          evidence: { source: "input" },
+        },
+        input_summary: "Eine einfache Team-Todo-Liste mit Aufgaben und Status.",
+        roles: [{ name: "Teammitglieder", description: "Nutzen die gemeinsame Aufgabenliste." }],
+        domain_entities: [{ name: "Aufgabe", description: "Aufgabenbeschreibung und Status." }],
+        enumerations: [{ name: "Aufgabenstatus", values: ["offen", "in Bearbeitung", "fertig"] }],
+        functional_requirements: [
+          { description: "Aufgabe erfassen." },
+          { description: "Aufgabenliste anzeigen." },
+          { description: "Status aendern." },
+        ],
+        crud_requirements: [],
+        validation_rules: [],
+        security_rules: [],
+        ui_requirements: [],
+        technical_constraints: [],
+        delivery_requirements: [],
+        test_requirements: [],
+        quality_requirements: [],
+        in_scope: ["Aufgabe", "Aufgabe erfassen", "Status aendern", "Aufgabenliste anzeigen"],
+        explicitly_excluded: [],
+        not_requested: [],
+        not_evidenced: [],
+        future_ideas: [],
+        core_facts: ["Aufgabe", "Aufgabe erfassen", "Status aendern"],
+        risks: [],
+        assumptions: [],
+        open_questions: [],
+        readiness: "ready",
+      },
+    },
+    {
+      parsed_output: {
+        architecture_sheet: {
+          artifact_name: "Team-Todo-Liste",
+          business_goal: "Teammitglieder verwalten eine gemeinsam sichtbare Aufgabenliste.",
+          requirement_version: "2.0.0",
+          building_blocks: [{ name: "Aufgabe", responsibility: "Speichert Beschreibung und Status." }],
+          runtime_scenarios: [
+            { name: "Aufgabe erfassen", steps: ["Beschreibung eingeben.", "Aufgabe speichern."] },
+          ],
+          arc42: {
+            building_block_view: "Der Baustein Aufgabe kapselt Beschreibung und Status.",
+            runtime_view: "Im Szenario Aufgabe erfassen wird eine Beschreibung gespeichert.",
+          },
+        },
+      },
+    },
+    {
+      parsed_output: {
+        passes: true,
+        findings: [],
+        required_corrections: [],
+      },
+    },
+  ];
 }
 
 function agentStepTitle(step) {
@@ -854,6 +1286,50 @@ retryArchitectureJobButton.addEventListener("click", async () => {
     if (activeArchitectureJob) {
       renderArchitectureJob(activeArchitectureJob);
     }
+  }
+});
+
+showGeneratorViewButton.addEventListener("click", () => switchView("generator"));
+
+showAdminViewButton.addEventListener("click", () => switchView("admin"));
+
+refreshWorkflowsButton.addEventListener("click", async () => {
+  try {
+    await loadWorkflowAdmin();
+    setRuntimeStatus("Workflows aktualisiert", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+refreshWorkflowRunsButton.addEventListener("click", async () => {
+  try {
+    await loadWorkflowRuns();
+    setRuntimeStatus("Runs aktualisiert", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+validateWorkflowButton.addEventListener("click", async () => {
+  try {
+    await validateActiveWorkflow();
+    setRuntimeStatus("Workflow validiert", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+startWorkflowTestRunButton.addEventListener("click", async () => {
+  try {
+    await startWorkflowTestRun();
+    setRuntimeStatus("Testlauf abgeschlossen", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
   }
 });
 

@@ -16,6 +16,75 @@
         <div class="runtime-status" id="runtime-status">Verbinden...</div>
       </header>
 
+      <nav class="view-tabs" aria-label="Arbeitsbereiche">
+        <button id="show-generator-view" type="button" data-active="true">Generator</button>
+        <button id="show-admin-view" type="button">Workflow Admin</button>
+      </nav>
+
+      <section id="workflow-admin-view" class="workflow-admin view" hidden>
+        <aside class="architecture-panel admin-panel" aria-label="Workflows">
+          <div class="section-heading">
+            <div>
+              <p class="panel-kicker">Admin</p>
+              <h2>Workflows</h2>
+            </div>
+            <button id="refresh-workflows" class="ghost-button" type="button">Aktualisieren</button>
+          </div>
+          <ol id="workflow-list" class="admin-list"></ol>
+        </aside>
+
+        <section class="architecture-panel admin-panel" aria-label="Workflow Details">
+          <div class="section-heading">
+            <div>
+              <p class="panel-kicker">Version</p>
+              <h2 id="workflow-detail-title">Workflow auswaehlen</h2>
+            </div>
+            <span id="workflow-validation-badge">-</span>
+          </div>
+          <dl id="workflow-detail-meta" class="admin-meta"></dl>
+
+          <div class="section-heading">
+            <h2>Steps & Agenten</h2>
+            <span id="workflow-step-count">0</span>
+          </div>
+          <ol id="workflow-step-list" class="admin-list step-definition-list"></ol>
+
+          <section class="viewer-section">
+            <h3>Step-Konfiguration</h3>
+            <pre id="workflow-step-detail" class="viewer-json">Noch kein Step ausgewaehlt.</pre>
+          </section>
+        </section>
+
+        <aside class="architecture-panel admin-panel" aria-label="Runs und Step Outputs">
+          <div class="section-heading">
+            <div>
+              <p class="panel-kicker">Debug</p>
+              <h2>Runs</h2>
+            </div>
+            <button id="refresh-workflow-runs" class="ghost-button" type="button">Runs laden</button>
+          </div>
+          <div class="admin-actions">
+            <button id="validate-workflow" type="button">Validieren</button>
+            <button id="start-workflow-test-run" type="button">Testlauf starten</button>
+          </div>
+          <label for="workflow-test-payload">Testlauf-Payload</label>
+          <textarea id="workflow-test-payload" rows="8" spellcheck="false"></textarea>
+          <p id="workflow-admin-status" class="form-status" role="status"></p>
+
+          <ol id="workflow-run-list" class="admin-list run-list"></ol>
+
+          <section class="viewer-section">
+            <h3>Step-Outputs</h3>
+            <ol id="workflow-artifact-list" class="admin-list artifact-list"></ol>
+          </section>
+
+          <section class="viewer-section">
+            <h3 id="workflow-artifact-title">Output Viewer</h3>
+            <pre id="workflow-artifact-viewer" class="viewer-json">Waehle einen Run und danach ein Artefakt aus.</pre>
+          </section>
+        </aside>
+      </section>
+
       <section id="architecture-view" class="architecture-workbench view">
         <aside class="architecture-panel architecture-input" aria-label="Workflow Factory Generator">
           <div class="panel-kicker">Software Factory</div>
@@ -154,6 +223,6 @@
         </aside>
       </section>
     </main>
-    <script src="app.js?v=architecture-jobs"></script>
+    <script src="app.js?v=workflow-admin"></script>
   </body>
 </html>
