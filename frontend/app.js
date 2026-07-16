@@ -74,6 +74,7 @@ const workflowEditStepName = document.querySelector("#workflow-edit-step-name");
 const workflowEditStepType = document.querySelector("#workflow-edit-step-type");
 const workflowEditStepOutputKey = document.querySelector("#workflow-edit-step-output-key");
 const workflowEditStepAgent = document.querySelector("#workflow-edit-step-agent");
+const workflowEditStepLlmProfile = document.querySelector("#workflow-edit-step-llm-profile");
 const workflowEditStepTimeout = document.querySelector("#workflow-edit-step-timeout");
 const workflowEditStepFailureStrategy = document.querySelector("#workflow-edit-step-failure-strategy");
 const workflowEditStepInputMapping = document.querySelector("#workflow-edit-step-input-mapping");
@@ -97,6 +98,7 @@ let architectureEventSource = null;
 let architecturePollingTimer = null;
 let workflows = [];
 let workflowStepTemplates = [];
+let llmProfiles = [];
 let activeWorkflowId = "";
 let activeWorkflowDetail = null;
 let activeWorkflowRunId = "";
@@ -602,6 +604,7 @@ function displayPriority(priority) {
 async function loadWorkflowAdmin() {
   workflowAdminStatus.textContent = "Workflows werden geladen.";
   await loadWorkflowStepTemplates();
+  await loadLlmProfiles();
   const payload = await getJson(appPath(activeAppId, "workflows"));
   workflows = payload.workflows || [];
   renderWorkflowList(workflows);
@@ -612,6 +615,27 @@ async function loadWorkflowAdmin() {
   } else if (activeWorkflowId) {
     await openWorkflow(activeWorkflowId);
   }
+}
+
+async function loadLlmProfiles() {
+  const payload = await getJson(appPath(activeAppId, "llm-profiles"));
+  llmProfiles = payload.profiles || [];
+  renderLlmProfileOptions();
+}
+
+function renderLlmProfileOptions() {
+  workflowEditStepLlmProfile.replaceChildren();
+  const emptyOption = document.createElement("option");
+  emptyOption.value = "";
+  emptyOption.textContent = "Agent Default";
+  workflowEditStepLlmProfile.append(emptyOption);
+
+  llmProfiles.forEach((profile) => {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = `${profile.name} · ${profile.provider}/${profile.model}`;
+    workflowEditStepLlmProfile.append(option);
+  });
 }
 
 async function loadWorkflowStepTemplates() {
@@ -1025,6 +1049,7 @@ function renderWorkflowStepEditor(step, disabled = false) {
   workflowEditStepType.value = step ? step.step_type || "TASK" : "TASK";
   workflowEditStepOutputKey.value = step ? step.output_key || "" : "";
   workflowEditStepAgent.value = step ? step.agent || "" : "";
+  workflowEditStepLlmProfile.value = step ? (step.configuration || {}).llm_profile || "" : "";
   workflowEditStepTimeout.value = step ? String(step.timeout_seconds || 300) : "";
   workflowEditStepFailureStrategy.value = step ? step.failure_strategy || "" : "";
   workflowEditStepInputMapping.value = step ? renderJson(step.input_mapping || {}) : "";
@@ -1037,6 +1062,7 @@ function renderWorkflowStepEditor(step, disabled = false) {
     workflowEditStepType,
     workflowEditStepOutputKey,
     workflowEditStepAgent,
+    workflowEditStepLlmProfile,
     workflowEditStepTimeout,
     workflowEditStepFailureStrategy,
     workflowEditStepInputMapping,
@@ -1063,6 +1089,7 @@ function workflowStepEditorPayload() {
     step_type: workflowEditStepType.value,
     output_key: workflowEditStepOutputKey.value.trim(),
     agent: workflowEditStepAgent.value.trim(),
+    llm_profile: workflowEditStepLlmProfile.value,
     timeout_seconds: Number(workflowEditStepTimeout.value || 300),
     failure_strategy: workflowEditStepFailureStrategy.value.trim(),
     input_mapping: parseJsonEditor(workflowEditStepInputMapping),

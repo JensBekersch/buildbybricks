@@ -33,6 +33,41 @@ def step_template_path(application: ApplicationInstance, template_id: str) -> Pa
     return application.template_dir / "step_templates" / f"{template_id}.yaml"
 
 
+def llm_profiles_path(application: ApplicationInstance) -> Path:
+    """Return the YAML path for configured LLM profiles."""
+    return application.template_dir / "llm_profiles.yaml"
+
+
+def list_llm_profiles(application: ApplicationInstance) -> List[Dict[str, Any]]:
+    """Load configured LLM profiles for an application."""
+    path = llm_profiles_path(application)
+    if not path.is_file():
+        return []
+
+    payload = _load_yaml(path)
+    profiles = payload.get("profiles", [])
+    if not isinstance(profiles, list):
+        raise WorkflowBlueprintError("LLM profiles must be a list")
+
+    result = []
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            raise WorkflowBlueprintError("LLM profile must be an object")
+        profile_id = str(profile.get("id", "")).strip()
+        if not profile_id:
+            raise WorkflowBlueprintError("LLM profile id is required")
+        result.append(_llm_profile_to_dict(profile))
+    return result
+
+
+def find_llm_profile(application: ApplicationInstance, profile_id: str) -> Dict[str, Any]:
+    """Find one configured LLM profile."""
+    for profile in list_llm_profiles(application):
+        if profile["id"] == profile_id:
+            return profile
+    raise WorkflowBlueprintError(f"LLM profile is missing: {profile_id}")
+
+
 def list_step_templates(application: ApplicationInstance) -> List[Dict[str, Any]]:
     """Load all configured step templates for an application."""
     template_dir = application.template_dir / "step_templates"
@@ -423,10 +458,48 @@ def _updated_step_config(existing: Dict[str, Any], payload: Dict[str, Any]) -> D
             raise WorkflowBlueprintError(f"{field} must be an object")
         updated[field] = value
 
+    if "llm_profile" in payload:
+        configuration = dict(updated.get("configuration", {}))
+        llm_profile = str(payload.get("llm_profile", "")).strip()
+        if llm_profile:
+            configuration["llm_profile"] = llm_profile
+        else:
+            configuration.pop("llm_profile", None)
+        updated["configuration"] = configuration
+
+    if "model_configuration" in payload:
+        value = payload.get("model_configuration")
+        if value in (None, ""):
+            configuration = dict(updated.get("configuration", {}))
+            configuration.pop("model_configuration", None)
+            updated["configuration"] = configuration
+        elif isinstance(value, dict):
+            configuration = dict(updated.get("configuration", {}))
+            configuration["model_configuration"] = value
+            updated["configuration"] = configuration
+        else:
+            raise WorkflowBlueprintError("model_configuration must be an object")
+
     if str(updated.get("step_type", "")) == STEP_TYPE_AGENT and not str(updated.get("agent", "")).strip():
         raise WorkflowBlueprintError("agent is required for AGENT steps")
 
     return updated
+
+
+def _llm_profile_to_dict(profile: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": str(profile.get("id", "")).strip(),
+        "name": str(profile.get("name", profile.get("id", ""))),
+        "provider": str(profile.get("provider", "deterministic")),
+        "model": str(profile.get("model", "")),
+        "api_base_url": str(profile.get("api_base_url", "")),
+        "api_key_configured": bool(profile.get("api_key", "")),
+        "timeout_seconds": int(profile.get("timeout_seconds", 0) or 0),
+        "max_tokens": int(profile.get("max_tokens", 0) or 0),
+        "response_format": str(profile.get("response_format", "json")),
+        "parameters": dict(profile.get("parameters", {})),
+        "description": str(profile.get("description", "")),
+    }
 
 
 def _workflow_config_from_payload(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
