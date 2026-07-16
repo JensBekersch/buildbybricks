@@ -106,6 +106,51 @@
             <h3>Step-Konfiguration</h3>
             <pre id="workflow-step-detail" class="viewer-json">Noch kein Step ausgewaehlt.</pre>
           </section>
+
+          <section class="workflow-step-editor" aria-label="Step bearbeiten">
+            <div class="section-heading">
+              <h3>Step bearbeiten</h3>
+              <span id="workflow-step-editor-mode">-</span>
+            </div>
+
+            <label for="workflow-edit-step-key">Step Key</label>
+            <input id="workflow-edit-step-key" type="text" autocomplete="off">
+
+            <label for="workflow-edit-step-name">Name</label>
+            <input id="workflow-edit-step-name" type="text" autocomplete="off">
+
+            <label for="workflow-edit-step-type">Step Type</label>
+            <select id="workflow-edit-step-type">
+              <option value="TASK">TASK</option>
+              <option value="AGENT">AGENT</option>
+              <option value="VALIDATION">VALIDATION</option>
+              <option value="CONTROL">CONTROL</option>
+              <option value="HUMAN_REVIEW">HUMAN_REVIEW</option>
+            </select>
+
+            <label for="workflow-edit-step-output-key">Output Key</label>
+            <input id="workflow-edit-step-output-key" type="text" autocomplete="off">
+
+            <label for="workflow-edit-step-agent">Agent ID</label>
+            <input id="workflow-edit-step-agent" type="text" autocomplete="off">
+
+            <label for="workflow-edit-step-timeout">Timeout Sekunden</label>
+            <input id="workflow-edit-step-timeout" type="number" min="1" step="1">
+
+            <label for="workflow-edit-step-failure-strategy">Failure Strategy</label>
+            <input id="workflow-edit-step-failure-strategy" type="text" autocomplete="off">
+
+            <label for="workflow-edit-step-input-mapping">Input Mapping JSON</label>
+            <textarea id="workflow-edit-step-input-mapping" rows="7" spellcheck="false"></textarea>
+
+            <label for="workflow-edit-step-task">Task JSON</label>
+            <textarea id="workflow-edit-step-task" rows="5" spellcheck="false"></textarea>
+
+            <label for="workflow-edit-step-configuration">Configuration JSON</label>
+            <textarea id="workflow-edit-step-configuration" rows="7" spellcheck="false"></textarea>
+
+            <button id="save-workflow-step" type="button">Step speichern</button>
+          </section>
         </section>
 
         <aside class="architecture-panel admin-panel" aria-label="Runs und Step Outputs">

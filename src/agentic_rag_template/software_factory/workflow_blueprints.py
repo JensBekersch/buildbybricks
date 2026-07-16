@@ -166,6 +166,39 @@ def delete_step_from_workflow(workflow_config: Dict[str, Any], step_key: str) ->
     return workflow
 
 
+def update_step_in_workflow(
+    workflow_config: Dict[str, Any],
+    step_key: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Update one workflow step in a draft workflow config."""
+    workflow = dict(workflow_config)
+    existing_steps = list(workflow.get("steps", []))
+    if not all(isinstance(step, dict) for step in existing_steps):
+        raise WorkflowBlueprintError("Workflow steps must be objects")
+
+    target_index = next(
+        (index for index, step in enumerate(existing_steps) if str(step.get("step_key", "")) == step_key),
+        -1,
+    )
+    if target_index < 0:
+        raise WorkflowBlueprintError(f"Workflow step is missing: {step_key}")
+
+    updated_step = _updated_step_config(existing_steps[target_index], payload)
+    updated_step_key = str(updated_step.get("step_key", ""))
+    if updated_step_key != step_key:
+        if any(str(step.get("step_key", "")) == updated_step_key for step in existing_steps):
+            raise WorkflowBlueprintError(f"Workflow step already exists: {updated_step_key}")
+        referencing_steps = _steps_referencing_step(existing_steps, step_key)
+        if referencing_steps:
+            joined = ", ".join(referencing_steps)
+            raise WorkflowBlueprintError(f"Workflow step key is still referenced by: {joined}")
+
+    existing_steps[target_index] = updated_step
+    workflow["steps"] = _normalize_step_positions(existing_steps)
+    return workflow
+
+
 def load_software_factory_workflow(
     application: ApplicationInstance,
     workflow_id: str = "architecture_sheet",
@@ -203,6 +236,7 @@ def _workflow_step_from_config(
 ) -> WorkflowStep:
     step_type = str(config.get("step_type", "TASK"))
     agent_version = None
+    agent_id = ""
     if step_type == STEP_TYPE_AGENT:
         agent_id = str(config.get("agent", ""))
         if not agent_id:
@@ -217,6 +251,7 @@ def _workflow_step_from_config(
         position=int(config.get("position", 0)),
         description=str(config.get("description", "")),
         is_enabled=bool(config.get("is_enabled", True)),
+        agent_id=agent_id,
         agent_version=agent_version,
         task_definition=dict(config.get("task", {})),
         input_mapping=dict(config.get("input_mapping", {})),
@@ -358,6 +393,40 @@ def _mapping_references_step(mapping: Dict[str, Any], step_key: str) -> bool:
         if value.get("source") == "step_output" and value.get("step_key") == step_key:
             return True
     return False
+
+
+def _updated_step_config(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(existing)
+
+    for field in ("step_key", "name", "step_type", "output_key", "description", "failure_strategy", "agent"):
+        if field in payload:
+            value = str(payload.get(field, "")).strip()
+            if value:
+                updated[field] = value
+            elif field in {"description", "failure_strategy", "agent"}:
+                updated.pop(field, None)
+
+    if "position" in payload:
+        updated["position"] = int(payload.get("position") or existing.get("position") or 0)
+
+    if "timeout_seconds" in payload:
+        updated["timeout_seconds"] = int(payload.get("timeout_seconds") or 300)
+
+    for field in ("task", "input_mapping", "condition_expression", "retry_policy", "configuration"):
+        if field not in payload:
+            continue
+        value = payload.get(field)
+        if value in (None, ""):
+            updated.pop(field, None)
+            continue
+        if not isinstance(value, dict):
+            raise WorkflowBlueprintError(f"{field} must be an object")
+        updated[field] = value
+
+    if str(updated.get("step_type", "")) == STEP_TYPE_AGENT and not str(updated.get("agent", "")).strip():
+        raise WorkflowBlueprintError("agent is required for AGENT steps")
+
+    return updated
 
 
 def _workflow_config_from_payload(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:

@@ -411,6 +411,12 @@ textarea {
   font-size: 15px;
 }
 
+.workflow-step-editor textarea {
+  min-height: 96px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
 .workflow-editor textarea {
   min-height: 96px;
 }

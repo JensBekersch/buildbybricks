@@ -68,6 +68,18 @@ const addWorkflowStepButton = document.querySelector("#add-workflow-step");
 const workflowStepTemplateDescription = document.querySelector("#workflow-step-template-description");
 const workflowStepList = document.querySelector("#workflow-step-list");
 const workflowStepDetail = document.querySelector("#workflow-step-detail");
+const workflowStepEditorMode = document.querySelector("#workflow-step-editor-mode");
+const workflowEditStepKey = document.querySelector("#workflow-edit-step-key");
+const workflowEditStepName = document.querySelector("#workflow-edit-step-name");
+const workflowEditStepType = document.querySelector("#workflow-edit-step-type");
+const workflowEditStepOutputKey = document.querySelector("#workflow-edit-step-output-key");
+const workflowEditStepAgent = document.querySelector("#workflow-edit-step-agent");
+const workflowEditStepTimeout = document.querySelector("#workflow-edit-step-timeout");
+const workflowEditStepFailureStrategy = document.querySelector("#workflow-edit-step-failure-strategy");
+const workflowEditStepInputMapping = document.querySelector("#workflow-edit-step-input-mapping");
+const workflowEditStepTask = document.querySelector("#workflow-edit-step-task");
+const workflowEditStepConfiguration = document.querySelector("#workflow-edit-step-configuration");
+const saveWorkflowStepButton = document.querySelector("#save-workflow-step");
 const workflowTestPayload = document.querySelector("#workflow-test-payload");
 const workflowAdminStatus = document.querySelector("#workflow-admin-status");
 const workflowRunList = document.querySelector("#workflow-run-list");
@@ -667,6 +679,7 @@ function prepareNewWorkflowDraft() {
   workflowDetailMeta.replaceChildren();
   workflowStepCount.textContent = "0";
   addWorkflowStepButton.disabled = true;
+  renderWorkflowStepEditor(null, true);
   workflowStepList.replaceChildren(createElement("li", "empty-state", "Noch keine Steps konfiguriert."));
   workflowStepDetail.textContent = "Speichere den Workflow zuerst. Danach koennen Steps konfiguriert werden.";
   workflowRunList.replaceChildren(createElement("li", "empty-state", "Noch keine Runs."));
@@ -807,6 +820,7 @@ function renderWorkflowDetail(payload) {
   } else {
     activeWorkflowStepKey = "";
     workflowStepDetail.textContent = "Noch kein Step konfiguriert.";
+    renderWorkflowStepEditor(null, workflowVersion.status === "published");
   }
 }
 
@@ -935,6 +949,38 @@ async function deleteWorkflowStep(stepKey) {
   setRuntimeStatus("Step geloescht", "ok");
 }
 
+async function saveWorkflowStep() {
+  if (!activeWorkflowId || !activeWorkflowStepKey) {
+    workflowAdminStatus.textContent = "Bitte zuerst einen Step auswaehlen.";
+    return;
+  }
+
+  let payload;
+  try {
+    payload = workflowStepEditorPayload();
+  } catch (error) {
+    workflowAdminStatus.textContent = `Step-Konfiguration ist kein gueltiges JSON: ${error.message}`;
+    return;
+  }
+
+  saveWorkflowStepButton.disabled = true;
+  workflowAdminStatus.textContent = `Step ${activeWorkflowStepKey} wird gespeichert.`;
+
+  try {
+    const response = await putJson(
+      appPath(activeAppId, "workflows", activeWorkflowId, "steps", activeWorkflowStepKey),
+      payload
+    );
+    activeWorkflowDetail = response.workflow;
+    activeWorkflowStepKey = response.step_key;
+    workflowAdminStatus.textContent = `Step ${response.step_key} wurde gespeichert.`;
+    await loadWorkflowAdmin();
+  } finally {
+    const workflowVersion = activeWorkflowDetail || {};
+    saveWorkflowStepButton.disabled = (workflowVersion.status || "") === "published";
+  }
+}
+
 function appendMeta(container, label, value) {
   const group = document.createElement("div");
   group.append(createElement("dt", "", label));
@@ -947,6 +993,7 @@ function renderWorkflowStepDetail(step) {
   workflowStepList.querySelectorAll("button").forEach((button) => {
     button.dataset.active = button.dataset.stepKey === step.step_key ? "true" : "false";
   });
+  renderWorkflowStepEditor(step, (activeWorkflowDetail || {}).status === "published");
   workflowStepDetail.textContent = renderJson({
     step_key: step.step_key,
     name: step.name,
@@ -968,6 +1015,60 @@ function renderWorkflowStepDetail(step) {
         }
       : null,
   });
+}
+
+function renderWorkflowStepEditor(step, disabled = false) {
+  const fieldDisabled = disabled || !step;
+  workflowStepEditorMode.textContent = step ? step.step_type || "-" : "-";
+  workflowEditStepKey.value = step ? step.step_key || "" : "";
+  workflowEditStepName.value = step ? step.name || "" : "";
+  workflowEditStepType.value = step ? step.step_type || "TASK" : "TASK";
+  workflowEditStepOutputKey.value = step ? step.output_key || "" : "";
+  workflowEditStepAgent.value = step ? step.agent || "" : "";
+  workflowEditStepTimeout.value = step ? String(step.timeout_seconds || 300) : "";
+  workflowEditStepFailureStrategy.value = step ? step.failure_strategy || "" : "";
+  workflowEditStepInputMapping.value = step ? renderJson(step.input_mapping || {}) : "";
+  workflowEditStepTask.value = step ? renderJson(step.task_definition || {}) : "";
+  workflowEditStepConfiguration.value = step ? renderJson(step.configuration || {}) : "";
+
+  [
+    workflowEditStepKey,
+    workflowEditStepName,
+    workflowEditStepType,
+    workflowEditStepOutputKey,
+    workflowEditStepAgent,
+    workflowEditStepTimeout,
+    workflowEditStepFailureStrategy,
+    workflowEditStepInputMapping,
+    workflowEditStepTask,
+    workflowEditStepConfiguration,
+    saveWorkflowStepButton,
+  ].forEach((field) => {
+    field.disabled = fieldDisabled;
+  });
+}
+
+function parseJsonEditor(textarea, fallback = {}) {
+  const raw = textarea.value.trim();
+  if (!raw) {
+    return fallback;
+  }
+  return JSON.parse(raw);
+}
+
+function workflowStepEditorPayload() {
+  return {
+    step_key: workflowEditStepKey.value.trim(),
+    name: workflowEditStepName.value.trim(),
+    step_type: workflowEditStepType.value,
+    output_key: workflowEditStepOutputKey.value.trim(),
+    agent: workflowEditStepAgent.value.trim(),
+    timeout_seconds: Number(workflowEditStepTimeout.value || 300),
+    failure_strategy: workflowEditStepFailureStrategy.value.trim(),
+    input_mapping: parseJsonEditor(workflowEditStepInputMapping),
+    task: parseJsonEditor(workflowEditStepTask),
+    configuration: parseJsonEditor(workflowEditStepConfiguration),
+  };
 }
 
 async function validateActiveWorkflow() {
@@ -1639,6 +1740,16 @@ addWorkflowStepButton.addEventListener("click", async () => {
   try {
     await addWorkflowStepFromTemplate();
     setRuntimeStatus("Step hinzugefuegt", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+saveWorkflowStepButton.addEventListener("click", async () => {
+  try {
+    await saveWorkflowStep();
+    setRuntimeStatus("Step gespeichert", "ok");
   } catch (error) {
     workflowAdminStatus.textContent = error.message;
     setRuntimeStatus(error.message, "error");

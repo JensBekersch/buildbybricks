@@ -334,6 +334,19 @@ def test_workflow_admin_api_rejects_published_workflow_mutation(tmp_path) -> Non
         else:
             raise AssertionError("Published workflow step mutation must fail")
 
+        update_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/published_workflow/steps/any_step",
+            data=json.dumps({"name": "Soll nicht geaendert werden"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        try:
+            request.urlopen(update_step_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+        else:
+            raise AssertionError("Published workflow step update must fail")
+
         delete_step_request = request.Request(
             f"http://{host}:{port}/apps/software-factory/workflows/published_workflow/steps/any_step",
             method="DELETE",
@@ -426,6 +439,56 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
         )
         with request.urlopen(add_referencing_step_request, timeout=15) as response:
             assert response.status == 201
+
+        update_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/consume_description",
+            data=json.dumps(
+                {
+                    "step_key": "consume_description",
+                    "name": "Beschreibung verarbeiten",
+                    "step_type": "TASK",
+                    "output_key": "processed_description",
+                    "timeout_seconds": 600,
+                    "failure_strategy": "STOP_WORKFLOW",
+                    "task": {"task_type": "echo"},
+                    "input_mapping": {
+                        "description": {
+                            "source": "step_output",
+                            "step_key": "validate_description",
+                            "path": "validated_output.description",
+                        }
+                    },
+                    "configuration": {"required_inputs": ["description"]},
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        with request.urlopen(update_step_request, timeout=15) as response:
+            assert response.status == 200
+            edited = json.loads(response.read().decode("utf-8"))
+
+        edited_step = edited["workflow"]["steps"][1]
+        assert edited_step["step_key"] == "consume_description"
+        assert edited_step["name"] == "Beschreibung verarbeiten"
+        assert edited_step["output_key"] == "processed_description"
+        assert edited_step["timeout_seconds"] == 600
+        assert edited_step["configuration"] == {"required_inputs": ["description"]}
+
+        blocked_rename_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/validate_description",
+            data=json.dumps({"step_key": "validate_input"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="PUT",
+        )
+        try:
+            request.urlopen(blocked_rename_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+            payload = json.loads(http_error.read().decode("utf-8"))
+            assert payload["error"] == "Workflow step key is still referenced by: consume_description"
+        else:
+            raise AssertionError("Referenced workflow step rename must fail")
 
         blocked_delete_request = request.Request(
             f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/validate_description",
