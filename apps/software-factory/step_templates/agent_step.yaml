@@ -1,0 +1,15 @@
+id: agent_step
+name: Agent Step
+category: AGENT
+description: Fuehrt einen per YAML konfigurierten Agenten aus.
+step_type: AGENT
+defaults:
+  name: Agent ausfuehren
+  step_key_prefix: agent_step
+  output_key: agent_output
+  agent: requirement_analyst
+  input_mapping:
+    input:
+      source: workflow_input
+      path: description
+  configuration: {}

@@ -58,3 +58,27 @@ CONTROL Steps erzeugen normalerweise keine fachlichen Artefakte, sondern Ablaufe
 ## Immutability-Regel
 
 Veroeffentlichte Workflow-Versionen sind unveraenderlich. Aenderungen passieren in Drafts oder in neuen Versionen. Dadurch bleiben alte Runs reproduzierbar und Debug-Ergebnisse nachvollziehbar.
+
+## Step Templates
+
+Wiederverwendbare Step-Vorlagen liegen je App unter `step_templates/*.yaml`. Ein Template beschreibt:
+
+- fachlichen Namen und Beschreibung
+- Step-Typ
+- Default-Name, Step-Key-Prefix und Output-Key
+- Default-Task, Agent, Input-Mapping und Konfiguration
+
+Der Adminbereich erzeugt daraus konkrete Steps in Draft-Workflows. Dadurch muessen typische Bausteine nicht manuell als YAML geschrieben werden, bleiben aber weiterhin konfigurierbar.
+
+Aktuelle Start-Templates:
+
+- `input_guard`
+- `schema_loader`
+- `method_knowledge_loader`
+- `agent_step`
+- `artifact_validator`
+- `review_gate`
+- `correction_loop`
+- `artifact_publisher`
+- `git_repository_reader`
+- `command_test_runner`

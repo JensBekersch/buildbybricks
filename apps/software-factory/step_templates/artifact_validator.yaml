@@ -1,0 +1,20 @@
+id: artifact_validator
+name: Artifact Validator
+category: VALIDATION
+description: Prueft ein Artefakt gegen Schema- und Validator-Regeln.
+step_type: VALIDATION
+defaults:
+  name: Artefakt validieren
+  step_key_prefix: validate_artifact
+  output_key: artifact_validation
+  input_mapping:
+    artifact:
+      source: step_output
+      step_key: previous_step
+      path: validated_output
+  configuration:
+    validators:
+      - validator: required_fields
+        configuration:
+          required:
+            - artifact

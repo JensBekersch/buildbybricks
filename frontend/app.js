@@ -58,6 +58,14 @@ const workflowEditorFinalOutput = document.querySelector("#workflow-editor-final
 const saveWorkflowButton = document.querySelector("#save-workflow");
 const deleteWorkflowButton = document.querySelector("#delete-workflow");
 const workflowStepCount = document.querySelector("#workflow-step-count");
+const workflowStepTemplateCount = document.querySelector("#workflow-step-template-count");
+const workflowStepTemplate = document.querySelector("#workflow-step-template");
+const workflowStepKey = document.querySelector("#workflow-step-key");
+const workflowStepName = document.querySelector("#workflow-step-name");
+const workflowStepOutputKey = document.querySelector("#workflow-step-output-key");
+const workflowStepAgent = document.querySelector("#workflow-step-agent");
+const addWorkflowStepButton = document.querySelector("#add-workflow-step");
+const workflowStepTemplateDescription = document.querySelector("#workflow-step-template-description");
 const workflowStepList = document.querySelector("#workflow-step-list");
 const workflowStepDetail = document.querySelector("#workflow-step-detail");
 const workflowTestPayload = document.querySelector("#workflow-test-payload");
@@ -76,6 +84,7 @@ let activeAgentStepKey = "";
 let architectureEventSource = null;
 let architecturePollingTimer = null;
 let workflows = [];
+let workflowStepTemplates = [];
 let activeWorkflowId = "";
 let activeWorkflowDetail = null;
 let activeWorkflowRunId = "";
@@ -580,6 +589,7 @@ function displayPriority(priority) {
 
 async function loadWorkflowAdmin() {
   workflowAdminStatus.textContent = "Workflows werden geladen.";
+  await loadWorkflowStepTemplates();
   const payload = await getJson(appPath(activeAppId, "workflows"));
   workflows = payload.workflows || [];
   renderWorkflowList(workflows);
@@ -590,6 +600,48 @@ async function loadWorkflowAdmin() {
   } else if (activeWorkflowId) {
     await openWorkflow(activeWorkflowId);
   }
+}
+
+async function loadWorkflowStepTemplates() {
+  const payload = await getJson(appPath(activeAppId, "step-templates"));
+  workflowStepTemplates = payload.templates || [];
+  renderWorkflowStepTemplateOptions();
+}
+
+function renderWorkflowStepTemplateOptions() {
+  workflowStepTemplate.replaceChildren();
+  workflowStepTemplateCount.textContent = `${workflowStepTemplates.length} Templates`;
+
+  workflowStepTemplates.forEach((template) => {
+    const option = document.createElement("option");
+    option.value = template.id;
+    option.textContent = `${template.name} · ${template.step_type}`;
+    workflowStepTemplate.append(option);
+  });
+
+  renderSelectedWorkflowStepTemplate();
+}
+
+function selectedWorkflowStepTemplate() {
+  return workflowStepTemplates.find((template) => template.id === workflowStepTemplate.value) || null;
+}
+
+function renderSelectedWorkflowStepTemplate() {
+  const template = selectedWorkflowStepTemplate();
+
+  if (!template) {
+    workflowStepTemplateDescription.textContent = "Keine Step-Templates geladen.";
+    workflowStepName.value = "";
+    workflowStepOutputKey.value = "";
+    workflowStepAgent.value = "";
+    return;
+  }
+
+  const defaults = template.defaults || {};
+  workflowStepTemplateDescription.textContent = template.description || "";
+  workflowStepName.value = defaults.name || template.name || "";
+  workflowStepOutputKey.value = defaults.output_key || "";
+  workflowStepAgent.value = defaults.agent || "";
 }
 
 function prepareNewWorkflowDraft() {
@@ -614,6 +666,7 @@ function prepareNewWorkflowDraft() {
   workflowValidationBadge.dataset.tone = "neutral";
   workflowDetailMeta.replaceChildren();
   workflowStepCount.textContent = "0";
+  addWorkflowStepButton.disabled = true;
   workflowStepList.replaceChildren(createElement("li", "empty-state", "Noch keine Steps konfiguriert."));
   workflowStepDetail.textContent = "Speichere den Workflow zuerst. Danach koennen Steps konfiguriert werden.";
   workflowRunList.replaceChildren(createElement("li", "empty-state", "Noch keine Runs."));
@@ -732,6 +785,9 @@ function renderWorkflowDetail(payload) {
   const selectedStep = steps.find((step) => step.step_key === activeWorkflowStepKey) || steps[0];
   if (selectedStep) {
     renderWorkflowStepDetail(selectedStep);
+  } else {
+    activeWorkflowStepKey = "";
+    workflowStepDetail.textContent = "Noch kein Step konfiguriert.";
   }
 }
 
@@ -747,6 +803,7 @@ function renderWorkflowEditor(workflow) {
   workflowEditorId.disabled = !workflow.is_new;
   saveWorkflowButton.disabled = published;
   deleteWorkflowButton.disabled = workflow.is_new || published;
+  addWorkflowStepButton.disabled = workflow.is_new || published || !workflow.id;
 }
 
 function workflowEditorPayload() {
@@ -802,6 +859,45 @@ async function deleteWorkflowDraft() {
     await loadWorkflowAdmin();
   } finally {
     deleteWorkflowButton.disabled = false;
+  }
+}
+
+async function addWorkflowStepFromTemplate() {
+  if (!activeWorkflowId) {
+    workflowAdminStatus.textContent = "Bitte zuerst einen Workflow speichern oder auswaehlen.";
+    return;
+  }
+
+  const template = selectedWorkflowStepTemplate();
+  if (!template) {
+    workflowAdminStatus.textContent = "Bitte zuerst ein Step-Template auswaehlen.";
+    return;
+  }
+
+  const payload = {
+    template_id: template.id,
+    step_key: workflowStepKey.value.trim(),
+    name: workflowStepName.value.trim(),
+    output_key: workflowStepOutputKey.value.trim(),
+  };
+
+  if ((template.step_type || "").toUpperCase() === "AGENT") {
+    payload.agent = workflowStepAgent.value.trim();
+  }
+
+  addWorkflowStepButton.disabled = true;
+  workflowAdminStatus.textContent = "Step wird hinzugefuegt.";
+
+  try {
+    const response = await postJson(appPath(activeAppId, "workflows", activeWorkflowId, "steps"), payload);
+    activeWorkflowDetail = response.workflow;
+    activeWorkflowStepKey = (response.workflow.steps || []).slice(-1)[0]?.step_key || "";
+    workflowStepKey.value = "";
+    workflowAdminStatus.textContent = `Step wurde zu ${response.workflow_id} hinzugefuegt.`;
+    await loadWorkflowAdmin();
+  } finally {
+    const workflowVersion = activeWorkflowDetail || {};
+    addWorkflowStepButton.disabled = (workflowVersion.status || "") === "published";
   }
 }
 
@@ -1497,6 +1593,18 @@ deleteWorkflowButton.addEventListener("click", async () => {
   try {
     await deleteWorkflowDraft();
     setRuntimeStatus("Workflow geloescht", "ok");
+  } catch (error) {
+    workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+workflowStepTemplate.addEventListener("change", renderSelectedWorkflowStepTemplate);
+
+addWorkflowStepButton.addEventListener("click", async () => {
+  try {
+    await addWorkflowStepFromTemplate();
+    setRuntimeStatus("Step hinzugefuegt", "ok");
   } catch (error) {
     workflowAdminStatus.textContent = error.message;
     setRuntimeStatus(error.message, "error");

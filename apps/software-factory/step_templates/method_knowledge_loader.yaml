@@ -1,0 +1,16 @@
+id: method_knowledge_loader
+name: Method Knowledge Loader
+category: TASK
+description: Laedt methodisches Wissen aus einer definierten Collection.
+step_type: TASK
+defaults:
+  name: Methodenwissen laden
+  step_key_prefix: load_method_sources
+  output_key: method_sources
+  task:
+    task_type: echo
+  input_mapping:
+    collection:
+      source: static
+      value: architecture-method
+  configuration: {}

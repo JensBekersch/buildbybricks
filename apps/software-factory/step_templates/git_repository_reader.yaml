@@ -1,0 +1,24 @@
+id: git_repository_reader
+name: Git Repository Reader
+category: TASK
+description: Liest spaeter Repo-Struktur, Dateien und Metadaten als deterministischen Task.
+step_type: TASK
+defaults:
+  name: Git Repository lesen
+  step_key_prefix: read_git_repository
+  output_key: repository_snapshot
+  task:
+    task_type: git_repository_reader
+  input_mapping:
+    repository_url:
+      source: workflow_input
+      path: repository_url
+  configuration:
+    include_patterns:
+      - "**/*.py"
+      - "pyproject.toml"
+      - "requirements*.txt"
+    exclude_patterns:
+      - ".git/**"
+      - ".venv/**"
+      - "__pycache__/**"

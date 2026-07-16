@@ -1,0 +1,18 @@
+id: artifact_publisher
+name: Artifact Publisher
+category: TASK
+description: Markiert oder speichert ein validiertes Artefakt als finales Workflow-Ergebnis.
+step_type: TASK
+defaults:
+  name: Artefakt finalisieren
+  step_key_prefix: publish_artifact
+  output_key: published_artifact
+  task:
+    task_type: echo
+  input_mapping:
+    artifact:
+      source: step_output
+      step_key: source_step
+      path: validated_output
+  configuration:
+    publish_as_final_output: true

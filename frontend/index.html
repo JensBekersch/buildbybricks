@@ -76,6 +76,30 @@
             <h2>Steps & Agenten</h2>
             <span id="workflow-step-count">0</span>
           </div>
+          <section class="workflow-step-editor" aria-label="Step hinzufuegen">
+            <div class="section-heading">
+              <h3>Step hinzufuegen</h3>
+              <span id="workflow-step-template-count">0 Templates</span>
+            </div>
+
+            <label for="workflow-step-template">Template</label>
+            <select id="workflow-step-template"></select>
+
+            <label for="workflow-step-key">Step Key</label>
+            <input id="workflow-step-key" type="text" autocomplete="off" placeholder="wird aus Template erzeugt">
+
+            <label for="workflow-step-name">Name</label>
+            <input id="workflow-step-name" type="text" autocomplete="off">
+
+            <label for="workflow-step-output-key">Output Key</label>
+            <input id="workflow-step-output-key" type="text" autocomplete="off">
+
+            <label for="workflow-step-agent">Agent ID</label>
+            <input id="workflow-step-agent" type="text" autocomplete="off" placeholder="nur fuer Agent Steps">
+
+            <button id="add-workflow-step" type="button">Step hinzufuegen</button>
+            <p id="workflow-step-template-description" class="muted-text"></p>
+          </section>
           <ol id="workflow-step-list" class="admin-list step-definition-list"></ol>
 
           <section class="viewer-section">

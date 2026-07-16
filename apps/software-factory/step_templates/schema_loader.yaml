@@ -1,0 +1,16 @@
+id: schema_loader
+name: Schema Loader
+category: TASK
+description: Laedt ein Schema oder eine Vertragsdefinition als Workflow-Artefakt.
+step_type: TASK
+defaults:
+  name: Schema laden
+  step_key_prefix: load_schema
+  output_key: schema
+  task:
+    task_type: echo
+  input_mapping:
+    schema:
+      source: static
+      value: schema.json
+  configuration: {}
