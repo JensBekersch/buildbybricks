@@ -2,8 +2,10 @@ const appDescription = document.querySelector("#app-description");
 const runtimeStatus = document.querySelector("#runtime-status");
 const showGeneratorViewButton = document.querySelector("#show-generator-view");
 const showAdminViewButton = document.querySelector("#show-admin-view");
+const showLlmViewButton = document.querySelector("#show-llm-view");
 const architectureView = document.querySelector("#architecture-view");
 const workflowAdminView = document.querySelector("#workflow-admin-view");
+const llmConfigView = document.querySelector("#llm-config-view");
 
 const architectureForm = document.querySelector("#architecture-form");
 const architectureDescription = document.querySelector("#architecture-description");
@@ -87,6 +89,25 @@ const workflowRunList = document.querySelector("#workflow-run-list");
 const workflowArtifactList = document.querySelector("#workflow-artifact-list");
 const workflowArtifactTitle = document.querySelector("#workflow-artifact-title");
 const workflowArtifactViewer = document.querySelector("#workflow-artifact-viewer");
+const createLlmProfileButton = document.querySelector("#create-llm-profile");
+const refreshLlmProfilesButton = document.querySelector("#refresh-llm-profiles");
+const llmProfileList = document.querySelector("#llm-profile-list");
+const llmProfileTitle = document.querySelector("#llm-profile-title");
+const llmProfileBadge = document.querySelector("#llm-profile-badge");
+const llmProfileId = document.querySelector("#llm-profile-id");
+const llmProfileName = document.querySelector("#llm-profile-name");
+const llmProfileProvider = document.querySelector("#llm-profile-provider");
+const llmProfileModel = document.querySelector("#llm-profile-model");
+const llmProfileApiBaseUrl = document.querySelector("#llm-profile-api-base-url");
+const llmProfileApiKey = document.querySelector("#llm-profile-api-key");
+const llmProfileTimeout = document.querySelector("#llm-profile-timeout");
+const llmProfileMaxTokens = document.querySelector("#llm-profile-max-tokens");
+const llmProfileResponseFormat = document.querySelector("#llm-profile-response-format");
+const llmProfileDescription = document.querySelector("#llm-profile-description");
+const llmProfileParameters = document.querySelector("#llm-profile-parameters");
+const saveLlmProfileButton = document.querySelector("#save-llm-profile");
+const deleteLlmProfileButton = document.querySelector("#delete-llm-profile");
+const llmProfileStatus = document.querySelector("#llm-profile-status");
 
 let applications = [];
 let runtimeConfig = null;
@@ -99,6 +120,7 @@ let architecturePollingTimer = null;
 let workflows = [];
 let workflowStepTemplates = [];
 let llmProfiles = [];
+let activeLlmProfileId = "";
 let activeWorkflowId = "";
 let activeWorkflowDetail = null;
 let activeWorkflowRunId = "";
@@ -196,13 +218,19 @@ function renderApplicationDescription() {
 
 function switchView(viewName) {
   const adminActive = viewName === "admin";
+  const llmActive = viewName === "llm";
   workflowAdminView.hidden = !adminActive;
-  architectureView.hidden = adminActive;
+  llmConfigView.hidden = !llmActive;
+  architectureView.hidden = adminActive || llmActive;
   showAdminViewButton.dataset.active = adminActive ? "true" : "false";
-  showGeneratorViewButton.dataset.active = adminActive ? "false" : "true";
+  showLlmViewButton.dataset.active = llmActive ? "true" : "false";
+  showGeneratorViewButton.dataset.active = adminActive || llmActive ? "false" : "true";
 
   if (adminActive && workflows.length === 0) {
     loadWorkflowAdmin().catch((error) => setRuntimeStatus(error.message, "error"));
+  }
+  if (llmActive) {
+    loadLlmProfileAdmin().catch((error) => setRuntimeStatus(error.message, "error"));
   }
 }
 
@@ -621,6 +649,160 @@ async function loadLlmProfiles() {
   const payload = await getJson(appPath(activeAppId, "llm-profiles"));
   llmProfiles = payload.profiles || [];
   renderLlmProfileOptions();
+}
+
+async function loadLlmProfileAdmin() {
+  llmProfileStatus.textContent = "LLM-Profile werden geladen.";
+  await loadLlmProfiles();
+  renderLlmProfileList();
+  llmProfileStatus.textContent = `${llmProfiles.length} LLM-Profil(e) geladen.`;
+
+  if (activeLlmProfileId) {
+    renderLlmProfileEditor(llmProfiles.find((profile) => profile.id === activeLlmProfileId) || null);
+  } else if (llmProfiles.length > 0) {
+    openLlmProfile(llmProfiles[0].id);
+  } else {
+    prepareNewLlmProfile();
+  }
+}
+
+function renderLlmProfileList() {
+  llmProfileList.replaceChildren();
+
+  if (llmProfiles.length === 0) {
+    llmProfileList.append(createElement("li", "empty-state", "Keine LLM-Profile konfiguriert."));
+    return;
+  }
+
+  llmProfiles.forEach((profile) => {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "admin-list-button";
+    button.dataset.active = profile.id === activeLlmProfileId ? "true" : "false";
+    button.append(
+      createElement("strong", "", profile.name || profile.id),
+      createElement("span", "", [profile.provider, profile.model, profile.api_key_configured ? "API Key" : ""].filter(Boolean).join(" · "))
+    );
+    button.addEventListener("click", () => openLlmProfile(profile.id));
+    item.append(button);
+    llmProfileList.append(item);
+  });
+}
+
+function openLlmProfile(profileId) {
+  activeLlmProfileId = profileId;
+  renderLlmProfileList();
+  renderLlmProfileEditor(llmProfiles.find((profile) => profile.id === profileId) || null);
+}
+
+function prepareNewLlmProfile() {
+  activeLlmProfileId = "";
+  renderLlmProfileList();
+  renderLlmProfileEditor({
+    id: "",
+    name: "",
+    provider: "ollama",
+    model: "",
+    api_base_url: "http://ollama:11434",
+    timeout_seconds: 3600,
+    max_tokens: 4096,
+    response_format: "json",
+    description: "",
+    parameters: { temperature: 0.1 },
+    is_new: true,
+  });
+  llmProfileStatus.textContent = "Neues LLM-Profil vorbereitet.";
+}
+
+function renderLlmProfileEditor(profile) {
+  const current = profile || {};
+  llmProfileTitle.textContent = current.name || current.id || "Neues LLM-Profil";
+  llmProfileBadge.textContent = current.provider ? `${current.provider}/${current.model || "-"}` : "-";
+  llmProfileId.value = current.id || "";
+  llmProfileId.disabled = !current.is_new && Boolean(current.id);
+  llmProfileName.value = current.name || "";
+  llmProfileProvider.value = current.provider || "ollama";
+  llmProfileModel.value = current.model || "";
+  llmProfileApiBaseUrl.value = current.api_base_url || "";
+  llmProfileApiKey.value = "";
+  llmProfileTimeout.value = current.timeout_seconds ? String(current.timeout_seconds) : "";
+  llmProfileMaxTokens.value = current.max_tokens ? String(current.max_tokens) : "";
+  llmProfileResponseFormat.value = current.response_format || "json";
+  llmProfileDescription.value = current.description || "";
+  llmProfileParameters.value = renderJson(current.parameters || {});
+  deleteLlmProfileButton.disabled = !current.id || current.is_new;
+}
+
+function llmProfilePayload() {
+  return {
+    id: llmProfileId.value.trim(),
+    name: llmProfileName.value.trim(),
+    provider: llmProfileProvider.value,
+    model: llmProfileModel.value.trim(),
+    api_base_url: llmProfileApiBaseUrl.value.trim(),
+    api_key: llmProfileApiKey.value.trim(),
+    timeout_seconds: Number(llmProfileTimeout.value || 0),
+    max_tokens: Number(llmProfileMaxTokens.value || 0),
+    response_format: llmProfileResponseFormat.value.trim() || "json",
+    description: llmProfileDescription.value.trim(),
+    parameters: parseJsonEditor(llmProfileParameters),
+  };
+}
+
+async function saveLlmProfile() {
+  let payload;
+  try {
+    payload = llmProfilePayload();
+  } catch (error) {
+    llmProfileStatus.textContent = `Parameter JSON ist ungueltig: ${error.message}`;
+    return;
+  }
+
+  if (!payload.id) {
+    llmProfileStatus.textContent = "Profil-ID ist erforderlich.";
+    llmProfileId.focus();
+    return;
+  }
+
+  saveLlmProfileButton.disabled = true;
+  llmProfileStatus.textContent = activeLlmProfileId ? "LLM-Profil wird gespeichert." : "LLM-Profil wird angelegt.";
+  try {
+    const response = activeLlmProfileId
+      ? await putJson(appPath(activeAppId, "llm-profiles", activeLlmProfileId), payload)
+      : await postJson(appPath(activeAppId, "llm-profiles"), payload);
+    llmProfiles = response.profiles || [];
+    activeLlmProfileId = response.profile.id;
+    renderLlmProfileOptions();
+    renderLlmProfileList();
+    renderLlmProfileEditor(response.profile);
+    llmProfileStatus.textContent = `LLM-Profil ${response.profile.id} wurde gespeichert.`;
+  } finally {
+    saveLlmProfileButton.disabled = false;
+  }
+}
+
+async function deleteLlmProfile() {
+  if (!activeLlmProfileId) {
+    return;
+  }
+  deleteLlmProfileButton.disabled = true;
+  llmProfileStatus.textContent = "LLM-Profil wird geloescht.";
+  try {
+    const response = await deleteJson(appPath(activeAppId, "llm-profiles", activeLlmProfileId));
+    llmProfiles = response.profiles || [];
+    activeLlmProfileId = "";
+    renderLlmProfileOptions();
+    renderLlmProfileList();
+    if (llmProfiles.length > 0) {
+      openLlmProfile(llmProfiles[0].id);
+    } else {
+      prepareNewLlmProfile();
+    }
+    llmProfileStatus.textContent = "LLM-Profil wurde geloescht.";
+  } finally {
+    deleteLlmProfileButton.disabled = false;
+  }
 }
 
 function renderLlmProfileOptions() {
@@ -1726,12 +1908,49 @@ showGeneratorViewButton.addEventListener("click", () => switchView("generator"))
 
 showAdminViewButton.addEventListener("click", () => switchView("admin"));
 
+showLlmViewButton.addEventListener("click", () => switchView("llm"));
+
 refreshWorkflowsButton.addEventListener("click", async () => {
   try {
     await loadWorkflowAdmin();
     setRuntimeStatus("Workflows aktualisiert", "ok");
   } catch (error) {
     workflowAdminStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+refreshLlmProfilesButton.addEventListener("click", async () => {
+  try {
+    await loadLlmProfileAdmin();
+    setRuntimeStatus("LLM-Profile aktualisiert", "ok");
+  } catch (error) {
+    llmProfileStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+createLlmProfileButton.addEventListener("click", () => {
+  prepareNewLlmProfile();
+  setRuntimeStatus("LLM-Profil vorbereitet", "ok");
+});
+
+saveLlmProfileButton.addEventListener("click", async () => {
+  try {
+    await saveLlmProfile();
+    setRuntimeStatus("LLM-Profil gespeichert", "ok");
+  } catch (error) {
+    llmProfileStatus.textContent = error.message;
+    setRuntimeStatus(error.message, "error");
+  }
+});
+
+deleteLlmProfileButton.addEventListener("click", async () => {
+  try {
+    await deleteLlmProfile();
+    setRuntimeStatus("LLM-Profil geloescht", "ok");
+  } catch (error) {
+    llmProfileStatus.textContent = error.message;
     setRuntimeStatus(error.message, "error");
   }
 });

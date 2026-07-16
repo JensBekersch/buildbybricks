@@ -60,6 +60,64 @@ def list_llm_profiles(application: ApplicationInstance) -> List[Dict[str, Any]]:
     return result
 
 
+def load_llm_profiles_config(application: ApplicationInstance) -> Dict[str, Any]:
+    """Load raw LLM profile configuration."""
+    path = llm_profiles_path(application)
+    if not path.is_file():
+        return {"profiles": []}
+    return _load_yaml(path)
+
+
+def save_llm_profiles_config(application: ApplicationInstance, config: Dict[str, Any]) -> None:
+    """Persist raw LLM profile configuration."""
+    try:
+        llm_profiles_path(application).write_text(
+            yaml.safe_dump(config, sort_keys=False, allow_unicode=False),
+            encoding="utf-8",
+        )
+    except OSError as error:
+        raise WorkflowBlueprintError(f"LLM profiles cannot be saved: {error}") from error
+
+
+def upsert_llm_profile(application: ApplicationInstance, profile_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Create or update one LLM profile."""
+    config = load_llm_profiles_config(application)
+    profiles = config.get("profiles", [])
+    if not isinstance(profiles, list):
+        raise WorkflowBlueprintError("LLM profiles must be a list")
+
+    existing_index = next(
+        (index for index, profile in enumerate(profiles) if isinstance(profile, dict) and profile.get("id") == profile_id),
+        -1,
+    )
+    existing = dict(profiles[existing_index]) if existing_index >= 0 else {"id": profile_id}
+    updated = _llm_profile_from_payload(existing, profile_id, payload)
+
+    if existing_index >= 0:
+        profiles[existing_index] = updated
+    else:
+        profiles.append(updated)
+    config["profiles"] = profiles
+    save_llm_profiles_config(application, config)
+    return _llm_profile_to_dict(updated)
+
+
+def delete_llm_profile(application: ApplicationInstance, profile_id: str) -> None:
+    """Delete one LLM profile."""
+    config = load_llm_profiles_config(application)
+    profiles = config.get("profiles", [])
+    if not isinstance(profiles, list):
+        raise WorkflowBlueprintError("LLM profiles must be a list")
+
+    remaining = [
+        profile for profile in profiles if not (isinstance(profile, dict) and str(profile.get("id", "")) == profile_id)
+    ]
+    if len(remaining) == len(profiles):
+        raise WorkflowBlueprintError(f"LLM profile is missing: {profile_id}")
+    config["profiles"] = remaining
+    save_llm_profiles_config(application, config)
+
+
 def find_llm_profile(application: ApplicationInstance, profile_id: str) -> Dict[str, Any]:
     """Find one configured LLM profile."""
     for profile in list_llm_profiles(application):
@@ -500,6 +558,40 @@ def _llm_profile_to_dict(profile: Dict[str, Any]) -> Dict[str, Any]:
         "parameters": dict(profile.get("parameters", {})),
         "description": str(profile.get("description", "")),
     }
+
+
+def _llm_profile_from_payload(existing: Dict[str, Any], profile_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    updated = dict(existing)
+    updated["id"] = profile_id
+    for field in (
+        "name",
+        "provider",
+        "model",
+        "api_base_url",
+        "description",
+        "response_format",
+    ):
+        if field in payload:
+            updated[field] = str(payload.get(field, "")).strip()
+
+    if "api_key" in payload and str(payload.get("api_key", "")).strip():
+        updated["api_key"] = str(payload.get("api_key", "")).strip()
+
+    if "timeout_seconds" in payload:
+        updated["timeout_seconds"] = int(payload.get("timeout_seconds") or 0)
+    if "max_tokens" in payload:
+        updated["max_tokens"] = int(payload.get("max_tokens") or 0)
+    if "parameters" in payload:
+        parameters = payload.get("parameters") or {}
+        if not isinstance(parameters, dict):
+            raise WorkflowBlueprintError("parameters must be an object")
+        updated["parameters"] = parameters
+
+    if not updated.get("provider"):
+        raise WorkflowBlueprintError("provider is required")
+    if not updated.get("model"):
+        raise WorkflowBlueprintError("model is required")
+    return updated
 
 
 def _workflow_config_from_payload(existing: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]:

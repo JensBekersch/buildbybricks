@@ -24,6 +24,7 @@ from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, 
 from agentic_rag_template.software_factory.workflow_blueprints import (
     WorkflowBlueprintError,
     add_step_from_template,
+    delete_llm_profile,
     delete_software_factory_workflow_config,
     delete_step_from_workflow,
     find_llm_profile,
@@ -34,6 +35,7 @@ from agentic_rag_template.software_factory.workflow_blueprints import (
     load_step_template,
     new_workflow_config,
     save_software_factory_workflow_config,
+    upsert_llm_profile,
     update_step_in_workflow,
     update_workflow_config,
 )
@@ -230,6 +232,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             self._send_workflow_created_response(application)
             return
 
+        if app_route and app_route["remainder"] == "/llm-profiles":
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_llm_profile_saved_response(application)
+            return
+
         if app_route and app_route["remainder"] == "/chat":
             application = self._find_application(app_route["app_id"])
 
@@ -314,6 +325,16 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         app_route = self._parse_app_route(parsed_url.path)
 
         if app_route:
+            llm_profile_id = self._parse_llm_profile_detail_route(app_route["remainder"])
+            if llm_profile_id is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                self._send_llm_profile_saved_response(application, llm_profile_id)
+                return
+
             workflow_step_route = self._parse_workflow_step_detail_route(app_route["remainder"])
             if workflow_step_route is not None:
                 application = self._find_application(app_route["app_id"])
@@ -345,6 +366,16 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         app_route = self._parse_app_route(parsed_url.path)
 
         if app_route:
+            llm_profile_id = self._parse_llm_profile_detail_route(app_route["remainder"])
+            if llm_profile_id is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                self._send_llm_profile_deleted_response(application, llm_profile_id)
+                return
+
             workflow_step_route = self._parse_workflow_step_detail_route(app_route["remainder"])
             if workflow_step_route is not None:
                 application = self._find_application(app_route["app_id"])
@@ -887,6 +918,55 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         return {"app_id": application.id, "profiles": profiles}
 
+    def _send_llm_profile_saved_response(
+        self,
+        application: ApplicationInstance,
+        profile_id: str = "",
+    ) -> None:
+        payload = self._read_json_body()
+        resolved_profile_id = profile_id or str(payload.get("id", "")).strip()
+        if not resolved_profile_id:
+            self._send_json({"error": "profile id is required"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if not self._is_safe_workflow_id(resolved_profile_id):
+            self._send_json({"error": "profile id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            profile = upsert_llm_profile(application, resolved_profile_id, payload)
+        except (ValueError, WorkflowBlueprintError) as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "profile": profile,
+                "profiles": list_llm_profiles(application),
+            },
+            status=HTTPStatus.CREATED if not profile_id else HTTPStatus.OK,
+        )
+
+    def _send_llm_profile_deleted_response(self, application: ApplicationInstance, profile_id: str) -> None:
+        if not self._is_safe_workflow_id(profile_id):
+            self._send_json({"error": "profile id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            delete_llm_profile(application, profile_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "profile_id": profile_id,
+                "deleted": True,
+                "profiles": list_llm_profiles(application),
+            }
+        )
+
     def _send_workflow_detail_response(self, application: ApplicationInstance, workflow_id: str) -> None:
         workflow_version = self._load_workflow_or_404(application, workflow_id)
         if workflow_version is None:
@@ -1398,6 +1478,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         parts = remainder.strip("/").split("/")
 
         if len(parts) == 2 and parts[0] == "workflows" and parts[1]:
+            return parts[1]
+
+        return None
+
+    def _parse_llm_profile_detail_route(self, remainder: str) -> Optional[str]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 2 and parts[0] == "llm-profiles" and parts[1]:
             return parts[1]
 
         return None
