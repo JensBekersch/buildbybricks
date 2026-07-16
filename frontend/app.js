@@ -91,13 +91,7 @@ function appPath(appId, ...segments) {
 
 async function getJson(url) {
   const response = await fetch(url);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
-  }
-
-  return payload;
+  return parseJsonResponse(response);
 }
 
 async function postJson(url, body) {
@@ -108,13 +102,7 @@ async function postJson(url, body) {
     },
     body: JSON.stringify(body),
   });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
-  }
-
-  return payload;
+  return parseJsonResponse(response);
 }
 
 async function putJson(url, body) {
@@ -125,23 +113,30 @@ async function putJson(url, body) {
     },
     body: JSON.stringify(body),
   });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
-  }
-
-  return payload;
+  return parseJsonResponse(response);
 }
 
 async function deleteJson(url) {
   const response = await fetch(url, {
     method: "DELETE",
   });
-  const payload = await response.json();
+  return parseJsonResponse(response);
+}
+
+async function parseJsonResponse(response) {
+  const rawBody = await response.text();
+  let payload = {};
+
+  if (rawBody) {
+    try {
+      payload = JSON.parse(rawBody);
+    } catch (error) {
+      payload = { error: rawBody };
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(payload.error || "Die Anfrage konnte nicht verarbeitet werden.");
+    throw new Error(payload.error || `Die Anfrage ist mit Status ${response.status} fehlgeschlagen.`);
   }
 
   return payload;
