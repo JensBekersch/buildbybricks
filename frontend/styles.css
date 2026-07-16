@@ -295,6 +295,37 @@ textarea {
   background: #ffffff;
 }
 
+.step-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.icon-danger-button {
+  min-width: 34px;
+  min-height: 34px;
+  border-color: #d6a4a4;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  color: #8f2f2f;
+  background: #fff7f7;
+}
+
+.icon-danger-button:hover {
+  border-color: #a44848;
+  color: #ffffff;
+  background: #a44848;
+}
+
+.icon-danger-button:disabled {
+  border-color: #d7dde5;
+  color: #98a2b3;
+  background: #f3f5f7;
+}
+
 .admin-list-button:hover,
 .admin-list-button[data-active="true"] {
   border-color: #83b9b2;

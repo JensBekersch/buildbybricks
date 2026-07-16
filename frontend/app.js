@@ -753,10 +753,13 @@ function renderWorkflowDetail(payload) {
   if (steps.length === 0) {
     workflowStepList.append(createElement("li", "empty-state", "Keine Steps konfiguriert."));
   }
+  const workflowIsPublished = workflowVersion.status === "published";
 
   steps.forEach((step) => {
     const item = document.createElement("li");
     const button = document.createElement("button");
+    const deleteButton = document.createElement("button");
+    const row = document.createElement("div");
     const agent = step.agent_version ? step.agent_version.agent || {} : null;
     const title = createElement("strong", "", step.name || step.step_key);
     const meta = createElement(
@@ -778,7 +781,23 @@ function renderWorkflowDetail(payload) {
     button.dataset.active = step.step_key === activeWorkflowStepKey ? "true" : "false";
     button.append(title, meta);
     button.addEventListener("click", () => renderWorkflowStepDetail(step));
-    item.append(button);
+
+    deleteButton.type = "button";
+    deleteButton.className = "icon-danger-button";
+    deleteButton.textContent = "x";
+    deleteButton.title = "Step loeschen";
+    deleteButton.disabled = workflowIsPublished;
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteWorkflowStep(step.step_key).catch((error) => {
+        workflowAdminStatus.textContent = error.message;
+        setRuntimeStatus(error.message, "error");
+      });
+    });
+
+    row.className = "step-list-row";
+    row.append(button, deleteButton);
+    item.append(row);
     workflowStepList.append(item);
   });
 
@@ -899,6 +918,21 @@ async function addWorkflowStepFromTemplate() {
     const workflowVersion = activeWorkflowDetail || {};
     addWorkflowStepButton.disabled = (workflowVersion.status || "") === "published";
   }
+}
+
+async function deleteWorkflowStep(stepKey) {
+  if (!activeWorkflowId || !stepKey) {
+    return;
+  }
+
+  workflowAdminStatus.textContent = `Step ${stepKey} wird geloescht.`;
+  const response = await deleteJson(appPath(activeAppId, "workflows", activeWorkflowId, "steps", stepKey));
+  activeWorkflowDetail = response.workflow;
+  const remainingSteps = response.workflow.steps || [];
+  activeWorkflowStepKey = remainingSteps[0]?.step_key || "";
+  workflowAdminStatus.textContent = `Step ${stepKey} wurde geloescht.`;
+  await loadWorkflowAdmin();
+  setRuntimeStatus("Step geloescht", "ok");
 }
 
 function appendMeta(container, label, value) {

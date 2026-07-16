@@ -25,6 +25,7 @@ from agentic_rag_template.software_factory.workflow_blueprints import (
     WorkflowBlueprintError,
     add_step_from_template,
     delete_software_factory_workflow_config,
+    delete_step_from_workflow,
     list_step_templates,
     load_software_factory_workflow,
     load_software_factory_workflow_config,
@@ -323,6 +324,20 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         app_route = self._parse_app_route(parsed_url.path)
 
         if app_route:
+            workflow_step_route = self._parse_workflow_step_detail_route(app_route["remainder"])
+            if workflow_step_route is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                self._send_workflow_step_deleted_response(
+                    application,
+                    workflow_step_route["workflow_id"],
+                    workflow_step_route["step_key"],
+                )
+                return
+
             workflow_id = self._parse_workflow_detail_route(app_route["remainder"])
             if workflow_id is not None:
                 application = self._find_application(app_route["app_id"])
@@ -1006,6 +1021,52 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             status=HTTPStatus.CREATED,
         )
 
+    def _send_workflow_step_deleted_response(
+        self,
+        application: ApplicationInstance,
+        workflow_id: str,
+        step_key: str,
+    ) -> None:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if not self._is_safe_workflow_id(step_key):
+            self._send_json({"error": "step_key contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            workflow_config = load_software_factory_workflow_config(application, workflow_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        if str(workflow_config.get("status", "")) == VERSION_STATUS_PUBLISHED:
+            self._send_json(
+                {"error": "published workflow versions are immutable"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+
+        try:
+            updated_config = delete_step_from_workflow(workflow_config, step_key)
+            save_software_factory_workflow_config(application, workflow_id, updated_config)
+            workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+        except WorkflowBlueprintError as error:
+            status = HTTPStatus.CONFLICT if "still referenced" in str(error) else HTTPStatus.BAD_REQUEST
+            self._send_json({"error": str(error)}, status=status)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "step_key": step_key,
+                "deleted": True,
+                "workflow": workflow_version.to_dict(),
+                "validation": self._validate_workflow_version(workflow_version),
+            }
+        )
+
     def _send_workflow_action_response(
         self,
         application: ApplicationInstance,
@@ -1262,6 +1323,14 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
 
         if len(parts) == 3 and parts[0] == "workflows" and parts[1] and parts[2] == "steps":
             return {"workflow_id": parts[1]}
+
+        return None
+
+    def _parse_workflow_step_detail_route(self, remainder: str) -> Optional[Dict[str, str]]:
+        parts = remainder.strip("/").split("/")
+
+        if len(parts) == 4 and parts[0] == "workflows" and parts[1] and parts[2] == "steps" and parts[3]:
+            return {"workflow_id": parts[1], "step_key": parts[3]}
 
         return None
 

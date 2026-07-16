@@ -333,6 +333,17 @@ def test_workflow_admin_api_rejects_published_workflow_mutation(tmp_path) -> Non
             assert http_error.code == 409
         else:
             raise AssertionError("Published workflow step mutation must fail")
+
+        delete_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/published_workflow/steps/any_step",
+            method="DELETE",
+        )
+        try:
+            request.urlopen(delete_step_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+        else:
+            raise AssertionError("Published workflow step delete must fail")
     finally:
         server.shutdown()
         server.server_close()
@@ -392,6 +403,55 @@ def test_workflow_admin_api_lists_templates_and_adds_step_to_draft(tmp_path) -> 
         assert updated["workflow"]["steps"][0]["step_type"] == "TASK"
         assert updated["workflow"]["steps"][0]["output_key"] == "validated_description"
         assert updated["workflow"]["steps"][0]["task_definition"] == {"task_type": "echo"}
+
+        add_referencing_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps",
+            data=json.dumps(
+                {
+                    "template_id": "input_guard",
+                    "step_key": "consume_description",
+                    "name": "Beschreibung nutzen",
+                    "output_key": "consumed_description",
+                    "input_mapping": {
+                        "description": {
+                            "source": "step_output",
+                            "step_key": "validate_description",
+                            "path": "validated_output.description",
+                        }
+                    },
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(add_referencing_step_request, timeout=15) as response:
+            assert response.status == 201
+
+        blocked_delete_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/validate_description",
+            method="DELETE",
+        )
+        try:
+            request.urlopen(blocked_delete_request, timeout=15)
+        except error.HTTPError as http_error:
+            assert http_error.code == 409
+            payload = json.loads(http_error.read().decode("utf-8"))
+            assert payload["error"] == "Workflow step is still referenced by: consume_description"
+        else:
+            raise AssertionError("Referenced workflow step delete must fail")
+
+        delete_step_request = request.Request(
+            f"http://{host}:{port}/apps/software-factory/workflows/step_demo/steps/consume_description",
+            method="DELETE",
+        )
+        with request.urlopen(delete_step_request, timeout=15) as response:
+            assert response.status == 200
+            deleted = json.loads(response.read().decode("utf-8"))
+
+        assert deleted["deleted"] is True
+        assert deleted["step_key"] == "consume_description"
+        assert [step["step_key"] for step in deleted["workflow"]["steps"]] == ["validate_description"]
+        assert deleted["workflow"]["steps"][0]["position"] == 1
     finally:
         server.shutdown()
         server.server_close()
