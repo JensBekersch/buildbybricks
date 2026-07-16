@@ -23,7 +23,12 @@ from agentic_rag_template.observability import render_prometheus_metrics
 from agentic_rag_template.retrieval import InMemoryVectorStore, RetrievalQuery, Retriever
 from agentic_rag_template.software_factory.workflow_blueprints import (
     WorkflowBlueprintError,
+    delete_software_factory_workflow_config,
     load_software_factory_workflow,
+    load_software_factory_workflow_config,
+    new_workflow_config,
+    save_software_factory_workflow_config,
+    update_workflow_config,
 )
 from agentic_rag_template.software_factory import (
     ArchitectureGenerationJob,
@@ -36,7 +41,7 @@ from agentic_rag_template.software_factory import (
     PostgresArchitectureGenerationJobStore,
 )
 from agentic_rag_template.template_config import load_application_profile
-from agentic_rag_template.workflows.models import WorkflowRun, WorkflowVersion
+from agentic_rag_template.workflows.models import VERSION_STATUS_PUBLISHED, WorkflowRun, WorkflowVersion
 from agentic_rag_template.workflows.providers import FakeLLMProviderAdapter
 from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStoreError
 from agentic_rag_template.workflows.workflow_execution import LinearWorkflowEngine
@@ -201,6 +206,15 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         app_route = self._parse_app_route(parsed_url.path)
 
+        if app_route and app_route["remainder"] == "/workflows":
+            application = self._find_application(app_route["app_id"])
+
+            if application is None:
+                return
+
+            self._send_workflow_created_response(application)
+            return
+
         if app_route and app_route["remainder"] == "/chat":
             application = self._find_application(app_route["app_id"])
 
@@ -269,6 +283,40 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
             return
 
         self._send_chat_response(self._default_application())
+
+    def do_PUT(self) -> None:
+        parsed_url = urlparse(self.path)
+        app_route = self._parse_app_route(parsed_url.path)
+
+        if app_route:
+            workflow_id = self._parse_workflow_detail_route(app_route["remainder"])
+            if workflow_id is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                self._send_workflow_updated_response(application, workflow_id)
+                return
+
+        self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
+
+    def do_DELETE(self) -> None:
+        parsed_url = urlparse(self.path)
+        app_route = self._parse_app_route(parsed_url.path)
+
+        if app_route:
+            workflow_id = self._parse_workflow_detail_route(app_route["remainder"])
+            if workflow_id is not None:
+                application = self._find_application(app_route["app_id"])
+
+                if application is None:
+                    return
+
+                self._send_workflow_deleted_response(application, workflow_id)
+                return
+
+        self.send_error(HTTPStatus.NOT_FOUND, "Endpoint not found")
 
     def _send_architecture_job_created_response(self, application: ApplicationInstance) -> None:
         if application.id != "software-factory":
@@ -782,6 +830,110 @@ class AgenticRagRequestHandler(SimpleHTTPRequestHandler):
                 "validation": self._validate_workflow_version(workflow_version),
             }
         )
+
+    def _send_workflow_created_response(self, application: ApplicationInstance) -> None:
+        payload = self._read_json_body()
+        workflow_id = str(payload.get("id", "")).strip()
+
+        if not workflow_id:
+            self._send_json({"error": "workflow id is required"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+        if payload.get("status") == VERSION_STATUS_PUBLISHED:
+            self._send_json({"error": "new workflows must start as draft"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            load_software_factory_workflow_config(application, workflow_id)
+        except WorkflowBlueprintError:
+            pass
+        else:
+            self._send_json({"error": "workflow already exists"}, status=HTTPStatus.CONFLICT)
+            return
+
+        try:
+            workflow_config = new_workflow_config(workflow_id, payload)
+            save_software_factory_workflow_config(application, workflow_id, workflow_config)
+            workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+        except (ValueError, WorkflowBlueprintError) as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "workflow": workflow_version.to_dict(),
+                "validation": self._validate_workflow_version(workflow_version),
+            },
+            status=HTTPStatus.CREATED,
+        )
+
+    def _send_workflow_updated_response(self, application: ApplicationInstance, workflow_id: str) -> None:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            existing_config = load_software_factory_workflow_config(application, workflow_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        if str(existing_config.get("status", "")) == VERSION_STATUS_PUBLISHED:
+            self._send_json(
+                {"error": "published workflow versions are immutable"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+
+        payload = self._read_json_body()
+        if payload.get("status") == VERSION_STATUS_PUBLISHED:
+            self._send_json(
+                {"error": "publishing workflows is not available through this draft editor"},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        try:
+            workflow_config = update_workflow_config(existing_config, payload)
+            save_software_factory_workflow_config(application, workflow_id, workflow_config)
+            workflow_version = load_software_factory_workflow(application, workflow_id=workflow_id)
+        except (ValueError, WorkflowBlueprintError) as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_json(
+            {
+                "app_id": application.id,
+                "workflow_id": workflow_id,
+                "workflow": workflow_version.to_dict(),
+                "validation": self._validate_workflow_version(workflow_version),
+            }
+        )
+
+    def _send_workflow_deleted_response(self, application: ApplicationInstance, workflow_id: str) -> None:
+        if not self._is_safe_workflow_id(workflow_id):
+            self._send_json({"error": "workflow_id contains unsupported characters"}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        try:
+            workflow_config = load_software_factory_workflow_config(application, workflow_id)
+        except WorkflowBlueprintError as error:
+            self._send_json({"error": str(error)}, status=HTTPStatus.NOT_FOUND)
+            return
+
+        if str(workflow_config.get("status", "")) == VERSION_STATUS_PUBLISHED:
+            self._send_json(
+                {"error": "published workflow versions are immutable"},
+                status=HTTPStatus.CONFLICT,
+            )
+            return
+
+        delete_software_factory_workflow_config(application, workflow_id)
+        self._send_json({"app_id": application.id, "workflow_id": workflow_id, "deleted": True})
 
     def _send_workflow_action_response(
         self,

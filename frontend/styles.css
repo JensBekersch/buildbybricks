@@ -55,6 +55,15 @@ button:disabled {
   background: #f3f7fb;
 }
 
+.danger-button {
+  border-color: #9f2d2d;
+  background: #9f2d2d;
+}
+
+.danger-button:hover {
+  background: #7c2222;
+}
+
 label {
   display: block;
   margin: 0 0 6px;
@@ -245,6 +254,13 @@ textarea {
   gap: 8px;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .admin-list {
   display: grid;
   gap: 8px;
@@ -331,6 +347,45 @@ textarea {
   margin: 0;
   overflow-wrap: anywhere;
   color: #263241;
+}
+
+.workflow-editor {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d5dde7;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.workflow-editor .section-heading {
+  margin-bottom: 2px;
+}
+
+.workflow-editor textarea {
+  min-height: 96px;
+}
+
+#workflow-editor-mode {
+  border: 1px solid #c8d4df;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  background: #ffffff;
+}
+
+#workflow-editor-mode[data-tone="draft"] {
+  border-color: #8ab9b3;
+  color: #18534d;
+  background: #f0faf8;
+}
+
+#workflow-editor-mode[data-tone="locked"] {
+  border-color: #c9a46d;
+  color: #7a4a12;
+  background: #fff8eb;
 }
 
 #workflow-test-payload {

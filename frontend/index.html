@@ -28,7 +28,10 @@
               <p class="panel-kicker">Admin</p>
               <h2>Workflows</h2>
             </div>
-            <button id="refresh-workflows" class="ghost-button" type="button">Aktualisieren</button>
+            <div class="button-row">
+              <button id="create-workflow-draft" class="ghost-button" type="button">Neu</button>
+              <button id="refresh-workflows" class="ghost-button" type="button">Aktualisieren</button>
+            </div>
           </div>
           <ol id="workflow-list" class="admin-list"></ol>
         </aside>
@@ -42,6 +45,32 @@
             <span id="workflow-validation-badge">-</span>
           </div>
           <dl id="workflow-detail-meta" class="admin-meta"></dl>
+
+          <section class="workflow-editor" aria-label="Workflow bearbeiten">
+            <div class="section-heading">
+              <h2>Workflow bearbeiten</h2>
+              <span id="workflow-editor-mode">Draft</span>
+            </div>
+            <label for="workflow-editor-id">ID</label>
+            <input id="workflow-editor-id" type="text" autocomplete="off" placeholder="mein_workflow">
+
+            <label for="workflow-editor-name">Name</label>
+            <input id="workflow-editor-name" type="text" autocomplete="off" placeholder="Mein Workflow">
+
+            <label for="workflow-editor-slug">Slug</label>
+            <input id="workflow-editor-slug" type="text" autocomplete="off" placeholder="mein-workflow">
+
+            <label for="workflow-editor-description">Beschreibung</label>
+            <textarea id="workflow-editor-description" rows="4" spellcheck="false"></textarea>
+
+            <label for="workflow-editor-final-output">Final Output Key</label>
+            <input id="workflow-editor-final-output" type="text" autocomplete="off" placeholder="architecture_sheet">
+
+            <div class="admin-actions">
+              <button id="save-workflow" type="button">Speichern</button>
+              <button id="delete-workflow" class="danger-button" type="button">Loeschen</button>
+            </div>
+          </section>
 
           <div class="section-heading">
             <h2>Steps & Agenten</h2>
