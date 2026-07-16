@@ -1,3 +1,5 @@
+import pytest
+
 from agentic_rag_template.workflows.models import (
     RUN_STATUS_SUCCEEDED,
     STEP_STATUS_SUCCEEDED,
@@ -13,7 +15,8 @@ from agentic_rag_template.workflows.models import (
     WorkflowStep,
     WorkflowVersion,
 )
-from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStore
+
+from agentic_rag_template.workflows.store import PostgresWorkflowStore, WorkflowStore, WorkflowStoreError
 
 
 class FakeCursor:
@@ -172,6 +175,24 @@ def test_postgres_workflow_store_initializes_schema() -> None:
     assert any("CREATE TABLE IF NOT EXISTS workflow_artifacts" in statement for statement in statements)
 
 
+def test_postgres_workflow_store_sql_guards_published_version_updates() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+
+    store.save_workflow_version(_workflow_version())
+    store.save_agent_version(_agent_version())
+
+    statements = [" ".join(statement.split()) for statement, _params in connection.statements]
+    assert any(
+        "WHERE workflow_versions.status <> 'published' OR workflow_versions.payload = EXCLUDED.payload" in statement
+        for statement in statements
+    )
+    assert any(
+        "WHERE agent_versions.status <> 'published' OR agent_versions.payload = EXCLUDED.payload" in statement
+        for statement in statements
+    )
+
+
 def test_postgres_workflow_store_implements_workflow_store_contract() -> None:
     assert isinstance(_store(FakeConnection()), WorkflowStore)
 
@@ -203,6 +224,53 @@ def test_postgres_workflow_store_saves_and_loads_workflow_version() -> None:
     assert loaded.steps[0].agent_version is not None
     assert loaded.steps[0].agent_version.agent.slug == "requirement-analyst"
     assert loaded.steps[1].task_definition["task_type"] == "echo"
+
+
+def test_postgres_workflow_store_allows_idempotent_published_workflow_save() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+    version = _workflow_version()
+
+    store.save_workflow_version(version)
+    store.save_workflow_version(version)
+
+    loaded = store.get_workflow_version("django-machine", 1)
+    assert loaded is not None
+    assert loaded.final_output_key == "final"
+
+
+def test_postgres_workflow_store_rejects_published_workflow_version_mutation() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+    version = _workflow_version()
+    store.save_workflow_version(version)
+
+    changed_version = _workflow_version()
+    changed_version.final_output_key = "changed-final"
+
+    with pytest.raises(WorkflowStoreError, match="published workflow version django-machine v1 is immutable"):
+        store.save_workflow_version(changed_version)
+
+    loaded = store.get_workflow_version("django-machine", 1)
+    assert loaded is not None
+    assert loaded.final_output_key == "final"
+
+
+def test_postgres_workflow_store_rejects_published_agent_version_mutation() -> None:
+    connection = FakeConnection()
+    store = _store(connection)
+    agent_version = _agent_version()
+    store.save_agent_version(agent_version)
+
+    changed_agent = _agent_version()
+    changed_agent.system_prompt = "Changed system prompt"
+
+    with pytest.raises(WorkflowStoreError, match="published agent version requirement-analyst v1 is immutable"):
+        store.save_agent_version(changed_agent)
+
+    loaded = store.get_agent_version("requirement-analyst", 1)
+    assert loaded is not None
+    assert loaded.system_prompt == "System"
 
 
 def test_postgres_workflow_store_saves_and_loads_run_snapshot_and_artifacts() -> None:

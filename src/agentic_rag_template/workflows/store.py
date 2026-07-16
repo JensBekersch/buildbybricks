@@ -1,9 +1,11 @@
 """Postgres-backed persistence for configurable workflows."""
 
+import json
 from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
 
 from agentic_rag_template.workflows.models import (
     AgentVersion,
+    VERSION_STATUS_PUBLISHED,
     WorkflowArtifact,
     WorkflowRun,
     WorkflowVersion,
@@ -168,6 +170,15 @@ class PostgresWorkflowStore:
 
     def save_workflow_version(self, workflow_version: WorkflowVersion) -> None:
         payload = workflow_version.to_dict()
+        existing_version = self.get_workflow_version(
+            workflow_version.workflow.slug,
+            workflow_version.version_number,
+        )
+        _assert_published_snapshot_is_unchanged(
+            existing_version.to_dict() if existing_version else None,
+            payload,
+            f"workflow version {workflow_version.workflow.slug} v{workflow_version.version_number}",
+        )
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -225,6 +236,8 @@ class PostgresWorkflowStore:
                         status = EXCLUDED.status,
                         payload = EXCLUDED.payload,
                         published_at = EXCLUDED.published_at
+                    WHERE workflow_versions.status <> 'published'
+                    OR workflow_versions.payload = EXCLUDED.payload
                     """,
                     {
                         "workflow_slug": workflow_version.workflow.slug,
@@ -270,6 +283,15 @@ class PostgresWorkflowStore:
 
     def save_agent_version(self, agent_version: AgentVersion) -> None:
         payload = agent_version.to_dict()
+        existing_version = self.get_agent_version(
+            agent_version.agent.slug,
+            agent_version.version_number,
+        )
+        _assert_published_snapshot_is_unchanged(
+            existing_version.to_dict() if existing_version else None,
+            payload,
+            f"agent version {agent_version.agent.slug} v{agent_version.version_number}",
+        )
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -327,6 +349,8 @@ class PostgresWorkflowStore:
                         status = EXCLUDED.status,
                         payload = EXCLUDED.payload,
                         published_at = EXCLUDED.published_at
+                    WHERE agent_versions.status <> 'published'
+                    OR agent_versions.payload = EXCLUDED.payload
                     """,
                     {
                         "agent_slug": agent_version.agent.slug,
@@ -505,3 +529,19 @@ class PostgresWorkflowStore:
 def _row_payload(row: Any) -> Dict[str, Any]:
     payload = row[0] if not isinstance(row, dict) else row["payload"]
     return dict(payload)
+
+
+def _assert_published_snapshot_is_unchanged(
+    existing_payload: Optional[Dict[str, Any]],
+    incoming_payload: Dict[str, Any],
+    label: str,
+) -> None:
+    if not existing_payload or existing_payload.get("status") != VERSION_STATUS_PUBLISHED:
+        return
+    if _canonical_payload(existing_payload) == _canonical_payload(incoming_payload):
+        return
+    raise WorkflowStoreError(f"published {label} is immutable")
+
+
+def _canonical_payload(payload: Dict[str, Any]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
